@@ -1,0 +1,5 @@
+[
+  {"type":"text","key":"svc.menu","value":"[{\"id\":\"aave-v3-arbitrum-lending\",\"schema\":\"lending/3.1.0\"},{\"id\":\"uniswap-v3-arbitrum-dex\",\"schema\":\"dex-amm/4.0.1\"}]"},
+  {"type":"text","key":"svc.price","value":"0.10 USDC/query"},
+  {"type":"text","key":"svc.sla","value":"{\"maxBlockLag\":50,\"maxLatencyMs\":2000}"}
+]

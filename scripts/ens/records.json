@@ -1,0 +1,12 @@
+[
+  {"type":"text","key":"svc.menu","value":"[{\"id\":\"aave-v3-arbitrum-lending\",\"schema\":\"lending/3.1.0\"},{\"id\":\"uniswap-v3-arbitrum-dex\",\"schema\":\"dex-amm/4.0.1\"}]"},
+  {"type":"text","key":"svc.price","value":"0.10 USDC/query"},
+  {"type":"text","key":"svc.sla","value":"{\"maxBlockLag\":50,\"maxLatencyMs\":2000}"},
+  {"type":"text","key":"svc.payee","value":"CHANGEME:POLICY_WALLET_ADDR"},
+  {"type":"text","key":"svc.operator","value":"CHANGEME:AGENT_ADDR"},
+  {"type":"text","key":"svc.pnl","value":"openbook/openbook-pnl"},
+  {"type":"text","key":"agent-context","value":"OpenBook: autonomous agent selling freshness-guaranteed onchain data. Every payment carries an SLA; missed SLA = automatic onchain refund. ERC-8004 agent CHANGEME:AGENT_ID on Arc."},
+  {"type":"text","key":"agent-endpoint[mcp]","value":"CHANGEME:MCP_HOST/mcp"},
+  {"type":"text","key":"agent-endpoint[web]","value":"CHANGEME:FRONTEND_URL"},
+  {"type":"text","key":"agent-registration[0x00010000034cef52148004a818bfb912233c491871b3d84c89a494bd9e][CHANGEME:AGENT_ID]","value":"1"}
+]
