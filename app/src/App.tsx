@@ -523,7 +523,7 @@ export default function App() {
       <p className="envline">
         trust model: SLA committed onchain at payment · verdict is deterministic open code ·
         timeout defaults to the buyer (claimRefund) —{" "}
-        <a href="https://github.com/serag/ETHGlobal-Online/blob/main/docs/architecture.md" target="_blank" rel="noreferrer">
+        <a href="https://github.com/Aliserag/ethonline2026-openbook/blob/main/docs/architecture.md" target="_blank" rel="noreferrer">
           architecture
         </a>
       </p>
