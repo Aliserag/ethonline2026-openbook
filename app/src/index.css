@@ -1,0 +1,479 @@
+/* OpenBook — ledger page for the machine economy.
+   Subject: an autonomous data-seller's storefront. The page reads like the
+   agent's own ledger: warm paper, ink type, hairline rules, mono numerics.
+   One signature element — the freshness ruler (a timeline bar in the
+   delivery panel) — carries the whole pitch: how old is this data, and
+   what happens when it breaks the SLA. */
+
+:root {
+  --paper: #f3efe6;
+  --panel: #faf7ef;
+  --ink: #1b1a15;
+  --muted: #6d6757;
+  --line: #d9d2bf;
+  --fresh: #0f7a5a;
+  --fresh-bg: #e4efe8;
+  --stale: #a63d2f;
+  --stale-bg: #f5e6e2;
+  --hint: #8a8371;
+  --link: #34507f;
+  --serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --mono: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Menlo, Consolas, monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 15px;
+  line-height: 1.45;
+}
+
+#root {
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 32px 24px 64px;
+}
+
+/* ---- masthead ---------------------------------------------------------- */
+
+.masthead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  border-bottom: 2px solid var(--ink);
+  padding-bottom: 14px;
+}
+
+.masthead h1 {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.masthead .tagline {
+  font-size: 13px;
+  color: var(--muted);
+  margin-top: 3px;
+}
+
+.chainbadges {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.chainbadges span {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  padding: 4px 8px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.envline {
+  margin: 10px 0 0;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--hint);
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.envline .yes {
+  color: var(--fresh);
+}
+
+.envline .no {
+  color: var(--stale);
+}
+
+/* ---- process strip ------------------------------------------------------ */
+
+.process {
+  display: flex;
+  gap: 0;
+  list-style: none;
+  margin: 22px 0 26px;
+  padding: 0;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  overflow: hidden;
+}
+
+.process li {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+  border-right: 1px solid var(--line);
+}
+
+.process li:last-child {
+  border-right: 0;
+}
+
+.process .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--line);
+  flex: none;
+}
+
+.process li.done .dot {
+  background: var(--fresh);
+}
+
+.process li.live .dot {
+  background: var(--stale);
+  box-shadow: 0 0 0 3px var(--stale-bg);
+}
+
+.process li.done {
+  color: var(--ink);
+}
+
+/* ---- panels -------------------------------------------------------------- */
+
+.panel {
+  border: 1px solid var(--line);
+  background: var(--panel);
+  margin: 0 0 22px;
+}
+
+.panel > header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.panel > header h2 {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.panel > header .sub {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.panel .body {
+  padding: 16px 18px;
+}
+
+.tworow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 22px;
+}
+
+@media (max-width: 760px) {
+  .tworow {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ---- ledger rows (ENS storefront) -------------------------------------- */
+
+.ledger {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.ledger th {
+  text-align: left;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 500;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.ledger td {
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+
+.ledger tr:last-child td {
+  border-bottom: 0;
+}
+
+.ledger td.key {
+  font-family: var(--mono);
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+.ledger td.val {
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.ledger td.ok {
+  color: var(--fresh);
+}
+
+.ledger td.missing {
+  color: var(--stale);
+}
+
+/* ---- buttons, inputs ------------------------------------------------------- */
+
+button {
+  font: inherit;
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 16px;
+  border: 1px solid var(--ink);
+  background: var(--panel);
+  color: var(--ink);
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+button:hover:not(:disabled) {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+button:disabled {
+  border-color: var(--line);
+  color: var(--hint);
+  background: transparent;
+  cursor: not-allowed;
+}
+
+button.primary {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+button.primary:hover:not(:disabled) {
+  background: var(--fresh);
+  border-color: var(--fresh);
+  color: var(--paper);
+}
+
+button.danger {
+  border-color: var(--stale);
+  color: var(--stale);
+}
+
+button.danger:hover:not(:disabled) {
+  background: var(--stale);
+  border-color: var(--stale);
+  color: var(--paper);
+}
+
+select,
+textarea {
+  font: inherit;
+  font-family: var(--mono);
+  font-size: 12px;
+  padding: 7px 9px;
+  border: 1px solid var(--line);
+  background: var(--paper);
+  color: var(--ink);
+  width: 100%;
+}
+
+textarea {
+  min-height: 64px;
+  resize: vertical;
+}
+
+.field {
+  margin-bottom: 12px;
+}
+
+.field label {
+  display: block;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 5px;
+}
+
+/* ---- notices --------------------------------------------------------------- */
+
+.notice {
+  border-left: 3px solid var(--line);
+  padding: 10px 14px;
+  font-size: 13px;
+  background: var(--panel);
+  margin: 8px 0;
+}
+
+.notice.error {
+  border-left-color: var(--stale);
+  color: var(--stale);
+}
+
+.notice.error strong {
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.notice.hardfail {
+  border-left-color: var(--stale);
+  background: var(--stale-bg);
+  color: var(--stale);
+}
+
+.notice.ok {
+  border-left-color: var(--fresh);
+  background: var(--fresh-bg);
+  color: var(--fresh);
+}
+
+.notice .mono {
+  font-family: var(--mono);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+b.step {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--hint);
+}
+
+/* ---- freshness ruler (the signature) -------------------------------------- */
+
+.ruler {
+  position: relative;
+  margin: 26px 4px 10px;
+  height: 44px;
+  border-top: 1px solid var(--muted);
+  border-bottom: 1px solid var(--line);
+  background: linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent 17px,
+    var(--line) 17px,
+    var(--line) 18px,
+    transparent 18px
+  );
+}
+
+.ruler .mark {
+  position: absolute;
+  top: 2px;
+  height: 12px;
+  border-left: 1px solid var(--muted);
+  padding-left: 4px;
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.ruler .mark.minblock {
+  border-left-color: var(--ink);
+  color: var(--ink);
+}
+
+.ruler .needle {
+  position: absolute;
+  top: 10px;
+  width: 2px;
+  height: 24px;
+}
+
+.ruler .needle.meta {
+  background: var(--stale);
+}
+
+.ruler .needle.meta.fresh {
+  background: var(--fresh);
+}
+
+.ruler .needle.head {
+  background: var(--ink);
+}
+
+.ruler .needle .lbl {
+  position: absolute;
+  top: 26px;
+  left: 4px;
+  font-family: var(--mono);
+  font-size: 9px;
+  white-space: nowrap;
+}
+
+.ruler .needle.meta .lbl {
+  color: var(--stale);
+}
+
+.ruler .needle.meta.fresh .lbl {
+  color: var(--fresh);
+}
+
+.ruler .needle.head .lbl {
+  color: var(--ink);
+}
+
+.ruler .windowbar {
+  position: absolute;
+  top: 14px;
+  height: 8px;
+  background: var(--fresh-bg);
+  border: 1px solid var(--fresh);
+  opacity: 0.8;
+}
+
+/* focus / reduced motion ---------------------------------------------------- */
+
+:focus-visible {
+  outline: 2px solid var(--link);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+  }
+}

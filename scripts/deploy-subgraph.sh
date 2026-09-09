@@ -12,11 +12,16 @@
 #
 # Usage:
 #   GRAPH_STUDIO_DEPLOY_KEY=<key> bash scripts/deploy-subgraph.sh
+# Mainnet (Arc Sep 16+): copy the mainnet manifest over subgraph.yaml, then
+#   NETWORK=arc GRAPH_STUDIO_DEPLOY_KEY=<key> bash scripts/deploy-subgraph.sh
+# (graph codegen/build/deploy always read ./subgraph.yaml, so the swap is the
+# switch — keep subgraph-mainnet.yaml committed for the audit trail.)
 set -uo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SUBGRAPH_DIR="$REPO_ROOT/subgraph"
 SUBGRAPH_NAME="${SUBGRAPH_NAME:-openbook-pnl}"
+NETWORK="${NETWORK:-arc-testnet}"
 GRAPH_BIN="$(command -v graph || true)"
 
 if [ -z "$GRAPH_BIN" ]; then
@@ -27,9 +32,9 @@ fi
 echo "== [1/4] local checks (keyless) =="
 cd "$SUBGRAPH_DIR"
 [ -f subgraph.yaml ] || { echo "FATAL: $SUBGRAPH_DIR/subgraph.yaml missing"; exit 1; }
-grep -qE '^[[:space:]]*network:[[:space:]]*arc-testnet' subgraph.yaml \
-  || { echo "FAIL: manifest network must be arc-testnet"; exit 1; }
-echo "manifest: network arc-testnet OK"
+grep -qE "^[[:space:]]*network:[[:space:]]*$NETWORK" subgraph.yaml \
+  || { echo "FAIL: manifest network must be $NETWORK"; exit 1; }
+echo "manifest: network $NETWORK OK"
 
 echo "== [2/4] codegen + build (keyless) =="
 "$GRAPH_BIN" codegen || { echo "FAIL: graph codegen errored"; exit 1; }

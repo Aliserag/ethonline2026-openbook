@@ -60,6 +60,19 @@ export function appendMeta(query: string): string {
   return `${trimmed.slice(0, closing).trimEnd()} ${META_FRAGMENT} }`;
 }
 
+/**
+ * Copy of the gateway data WITHOUT the `_meta` selection — the deliverable
+ * payload whose keccak256 becomes the job's payloadHash. Single source of
+ * truth shared by the MCP server, seller/buyer agents and the app: key order
+ * is preserved (object iteration order) so identical payloads hash identically.
+ */
+export function stripMeta(data: unknown): unknown {
+  if (typeof data !== "object" || data === null) return data;
+  const copy: Record<string, unknown> = { ...(data as Record<string, unknown>) };
+  delete copy["_meta"];
+  return copy;
+}
+
 /** Extract the freshness view from a gateway payload (nulls when _meta absent). */
 export function extractMeta(data: unknown): GatewayMeta {
   if (typeof data !== "object" || data === null) {

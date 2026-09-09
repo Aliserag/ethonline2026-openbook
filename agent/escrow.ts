@@ -233,7 +233,7 @@ export async function createJobWithSla(
   const { buyer, provider, evaluator, sla, amount6dec } = params;
   const hook = params.hook ?? ZERO_ADDRESS;
   const expirySeconds = params.expirySeconds ?? 3600;
-  const buyerAccount = requireAccount(buyer);
+  requireAccount(buyer); // early validation: the buyer signs createJob/approve/fund
   const providerAccount = requireAccount(provider);
 
   const { timestamp } = await publicClient.getBlock();

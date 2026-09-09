@@ -6,6 +6,9 @@
   "scripts": {
     "test:agent": "bun test agent",
     "test:mcp": "bun test mcp",
-    "build:mcp": "cd mcp && bun run build"
+    "test:scripts": "bun test scripts/stale-proxy.test.ts",
+    "build:mcp": "cd mcp && bun run build",
+    "build:app": "cd app && bun run build",
+    "dev:app": "cd app && bun run dev"
   }
 }
