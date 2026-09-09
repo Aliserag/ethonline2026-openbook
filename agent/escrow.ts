@@ -25,7 +25,6 @@
  */
 
 import {
-  http,
   keccak256,
   toBytes,
   type Abi,
@@ -72,6 +71,16 @@ export const USDC_ABI = [
     stateMutability: "view",
     inputs: [{ name: "owner", type: "address" }],
     outputs: [{ name: "", type: "uint256" }],
+  },
+  {
+    name: "transfer",
+    type: "function",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "to", type: "address" },
+      { name: "amount", type: "uint256" },
+    ],
+    outputs: [{ name: "", type: "bool" }],
   },
 ] as const satisfies Abi;
 
@@ -124,10 +133,11 @@ export function parseSla(description: string): Sla {
   if (
     typeof p.minBlock !== "number" ||
     typeof p.schemaHash !== "string" ||
+    !/^0x[0-9a-fA-F]{64}$/.test(p.schemaHash) ||
     typeof p.maxLatencyMs !== "number"
   ) {
     throw new Error(
-      "invalid SLA description: expected {minBlock: number, schemaHash: string, maxLatencyMs: number}",
+      "invalid SLA description: expected {minBlock: number, schemaHash: 0x + 64 hex, maxLatencyMs: number}",
     );
   }
   return {
@@ -178,7 +188,20 @@ export async function getJob(publicClient: PublicClient, jobId: bigint): Promise
 }
 
 export interface CreateJobParams {
-  provider: Address;
+  /**
+   * Buyer's wallet client. Signs createJob, the USDC approve and fund — the
+   * BUYER pays the escrow. Its attached account is the job's client.
+   */
+  buyer: WalletClient;
+  /**
+   * Provider's wallet client. Signs setBudget — the reference impl only lets
+   * the PROVIDER quote the budget (verified Task 0), so it cannot be signed by
+   * the buyer's key. Its attached account is the job's provider. To run
+   * single-key (one key plays buyer + provider + evaluator, legal per spec),
+   * pass the SAME wallet client for buyer and provider.
+   */
+  provider: WalletClient;
+  /** Evaluator address — settles via complete/reject; may equal buyer or provider. */
   evaluator: Address;
   sla: Sla;
   /** escrow amount in 6-decimal USDC units — NEVER the 18-decimal gas view */
@@ -194,31 +217,34 @@ export interface CreateJobParams {
 }
 
 /**
- * Full job-funding sequence: createJob(packed SLA) → setBudget (provider quote)
- * → approve(USDC) → fund (client). Returns the fresh jobId parsed from our own
- * JobCreated log (no jobCounter race). All four writes use the same
- * `walletClient` — pass a client whose account plays client/provider (single
- * funded key covering all roles is legal per the verified spec).
+ * Full job-funding sequence with the buyer-paid role split:
+ *   buyer    createJob(packed SLA) → approve(USDC) → fund
+ *   provider setBudget (provider-only in the reference — MUST be their key)
+ * Returns the fresh jobId parsed from our own JobCreated log (no jobCounter
+ * race). Pass the same wallet client as buyer and provider for single-key
+ * operation (one key playing buyer + provider + evaluator is legal per the
+ * verified spec). Consumed by Tasks 5/6: buyer = the paying agent's wallet,
+ * provider = the OpenBook seller key.
  */
 export async function createJobWithSla(
   publicClient: PublicClient,
-  walletClient: WalletClient,
   params: CreateJobParams,
 ): Promise<bigint> {
-  const { provider, evaluator, sla, amount6dec } = params;
+  const { buyer, provider, evaluator, sla, amount6dec } = params;
   const hook = params.hook ?? ZERO_ADDRESS;
   const expirySeconds = params.expirySeconds ?? 3600;
-  const account = requireAccount(walletClient);
+  const buyerAccount = requireAccount(buyer);
+  const providerAccount = requireAccount(provider);
 
   const { timestamp } = await publicClient.getBlock();
   const expiredAt = timestamp + BigInt(expirySeconds);
 
-  // 1. createJob — description carries the packed SLA
-  const createHash = await write(walletClient, {
+  // 1. BUYER creates the job — description carries the packed SLA
+  const createHash = await write(buyer, {
     address: ERC8183,
     abi: ERC8183_ABI,
     functionName: "createJob",
-    args: [provider, evaluator, expiredAt, packSla(sla), hook],
+    args: [providerAccount, evaluator, expiredAt, packSla(sla), hook],
   });
   const createReceipt = await publicClient.waitForTransactionReceipt({
     hash: createHash,
@@ -233,22 +259,22 @@ export async function createJobWithSla(
   }
   const jobId = BigInt(jobLog.topics[1]);
 
-  // 2. setBudget — the reference impl expects the PROVIDER to quote the budget
-  await write(walletClient, {
+  // 2. PROVIDER quotes the budget — provider-only in the reference impl
+  await write(provider, {
     address: ERC8183,
     abi: ERC8183_ABI,
     functionName: "setBudget",
     args: [jobId, amount6dec, "0x"],
   });
-  // 3. approve USDC — 6 decimals, never 18 (verified Task 0)
-  await write(walletClient, {
+  // 3. BUYER approves USDC — 6 decimals, never 18 (verified Task 0)
+  await write(buyer, {
     address: USDC,
     abi: USDC_ABI,
     functionName: "approve",
     args: [ERC8183, amount6dec],
   });
-  // 4. fund — job moves to Funded (status 1)
-  await write(walletClient, {
+  // 4. BUYER funds — job moves to Funded (status 1)
+  await write(buyer, {
     address: ERC8183,
     abi: ERC8183_ABI,
     functionName: "fund",

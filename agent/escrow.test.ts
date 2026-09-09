@@ -25,6 +25,7 @@ import {
   ERC8183,
   USDC,
   USDC_ABI,
+  ARC_GAS,
   packSla,
   parseSla,
   createJobWithSla,
@@ -57,10 +58,13 @@ loadDotEnv();
 
 const RPC_URL = process.env.ARC_TESTNET_RPC ?? ARC_RPC_URL;
 const AMOUNT = 10000n; // 0.01 USDC in 6-dec units — matches the Task 0 spike
-const MIN_BALANCE = 100000n; // 0.1 USDC: escrow amount + gas buffer (~6 writes)
+const PROVIDER_SEED = 50000n; // 0.05 USDC sent buyer→provider for their gas (setBudget + submit)
+// buyer needs: escrow amount + provider seed + gas for ~6 writes (~0.1 USDC)
+const MIN_BALANCE = 150000n; // 0.15 USDC
 const EXPIRY_SECONDS = 3600;
 
-const pk = process.env.ARC_TESTNET_PK as `0x${string}` | undefined;
+const buyerPk = process.env.ARC_TESTNET_PK as `0x${string}` | undefined;
+const providerPk = process.env.ARC_RECIPIENT_PK as `0x${string}` | undefined;
 
 describe("packSla", () => {
   it("packs SLA terms deterministically (exact JSON, full hash preserved)", () => {
@@ -91,17 +95,30 @@ describe("packSla", () => {
     expect(() => parseSla("not-json")).toThrow();
     expect(() => parseSla('{"minBlock":"100"}')).toThrow(); // wrong types
     expect(() => parseSla("{}")).toThrow();
+    expect(() =>
+      parseSla(
+        '{"minBlock":1,"schemaHash":"0x1234","maxLatencyMs":500}',
+      ),
+    ).toThrow(); // schemaHash must be 0x + 64 hex
+    expect(() =>
+      parseSla(
+        `{"minBlock":1,"schemaHash":"0x${"ab".repeat(32).replace("b", "g")}","maxLatencyMs":500}`,
+      ),
+    ).toThrow(); // non-hex chars rejected
   });
 });
 
 // --- funded-lifecycle readiness probe --------------------------------------------
-// ARC_TESTNET_PK exists in .env from Task 0 but the wallet may be unfunded; the
-// lifecycle needs real USDC (escrow + gas), so gate on balance, not key presence.
+// The lifecycle runs with two distinct funded-capable keys: ARC_TESTNET_PK is
+// the buyer (faucet target 0xAC54…54De) and ARC_RECIPIENT_PK is the provider
+// (0x64A7…). Both keys already exist in .env from Task 0; only the BUYER needs
+// a faucet drip (the test seeds the provider's gas from the buyer). Skip until
+// both keys exist AND the buyer holds >= MIN_BALANCE.
 let lifecycleReady = false;
 let probedAddress: Address | undefined;
-if (pk) {
+if (buyerPk && providerPk) {
   try {
-    const account = privateKeyToAccount(pk);
+    const account = privateKeyToAccount(buyerPk);
     probedAddress = account.address;
     const publicClient = createPublicClient({
       chain: arcTestnet,
@@ -116,43 +133,68 @@ if (pk) {
     lifecycleReady = balance >= MIN_BALANCE;
     if (!lifecycleReady) {
       console.warn(
-        `SKIP lifecycle test: wallet ${account.address} holds ${balance} (6-dec) USDC — need >= ${MIN_BALANCE}. Fund via faucet.circle.com (docs/keys-needed.md §2) then re-run.`,
+        `SKIP lifecycle test: buyer ${account.address} holds ${balance} (6-dec) USDC — need >= ${MIN_BALANCE}. Fund via faucet.circle.com (docs/keys-needed.md §2) then re-run.`,
       );
     }
   } catch (err) {
     console.warn(`SKIP lifecycle test: RPC probe failed (${(err as Error).message})`);
   }
 } else {
-  console.warn("SKIP lifecycle test: ARC_TESTNET_PK not set (docs/keys-needed.md §3).");
+  console.warn(
+    "SKIP lifecycle test: ARC_TESTNET_PK and/or ARC_RECIPIENT_PK not set (docs/keys-needed.md §3).",
+  );
 }
 
 it.skipIf(!lifecycleReady)(
-  "funded lifecycle: createJob → setBudget → approve → fund → submit → complete",
+  "funded lifecycle (split-key buyer≠provider): createJob → setBudget → approve → fund → submit → complete",
   async () => {
-    if (!pk) throw new Error("unreachable: test skipped without a funded key");
-    const account = privateKeyToAccount(pk);
+    if (!buyerPk || !providerPk) throw new Error("unreachable: test skipped without funded keys");
+    const buyerAccount = privateKeyToAccount(buyerPk);
+    const providerAccount = privateKeyToAccount(providerPk);
+    expect(buyerAccount.address).not.toBe(providerAccount.address); // genuinely two wallets
     const publicClient = createPublicClient({
       chain: arcTestnet,
       transport: http(RPC_URL),
     });
-    const walletClient = createWalletClient({
-      account,
+    const buyerWallet = createWalletClient({
+      account: buyerAccount,
+      chain: arcTestnet,
+      transport: http(RPC_URL),
+    });
+    const providerWallet = createWalletClient({
+      account: providerAccount,
       chain: arcTestnet,
       transport: http(RPC_URL),
     });
 
-    // single funded key plays client = provider = evaluator (legal per the
-    // verified spec; the Task 0 smoke used the same roles)
-    const provider = account.address;
+    // seed the provider's gas (tutorial pattern: client funds the provider) and
+    // baseline their balance AFTER the seed so the escrow payout is isolated
+    await buyerWallet.writeContract({
+      address: USDC,
+      abi: USDC_ABI,
+      functionName: "transfer",
+      args: [providerAccount.address, PROVIDER_SEED],
+      account: buyerAccount,
+      ...ARC_GAS,
+    });
+    const providerBefore = (await publicClient.readContract({
+      address: USDC,
+      abi: USDC_ABI,
+      functionName: "balanceOf",
+      args: [providerAccount.address],
+    })) as bigint;
+
     const sla: Sla = {
       minBlock: Number(await publicClient.getBlockNumber()),
       schemaHash: keccak256(toBytes("openbook-test-schema-v1")),
       maxLatencyMs: 500,
     };
 
-    const jobId = await createJobWithSla(publicClient, walletClient, {
-      provider,
-      evaluator: provider,
+    // buyer signs createJob/approve/fund; provider signs setBudget (provider-only)
+    const jobId = await createJobWithSla(publicClient, {
+      buyer: buyerWallet,
+      provider: providerWallet,
+      evaluator: buyerAccount.address,
       expirySeconds: EXPIRY_SECONDS,
       sla,
       amount6dec: AMOUNT,
@@ -160,20 +202,23 @@ it.skipIf(!lifecycleReady)(
     expect(typeof jobId).toBe("bigint");
     expect(jobId).toBeGreaterThan(0n);
 
-    // job is Funded (1) with the packed SLA onchain
+    // job is Funded (1) with the packed SLA onchain, quote = AMOUNT
     const job = await getJob(publicClient, jobId);
     expect(job.id).toBe(jobId);
     expect(job.status).toBe(1); // Funded
     expect(job.budget).toBe(AMOUNT);
     expect(job.description).toBe(packSla(sla));
+    expect(job.client).toBe(buyerAccount.address);
+    expect(job.provider).toBe(providerAccount.address);
+    expect(job.evaluator).toBe(buyerAccount.address);
 
-    // provider submits the deliverable → Submitted (2)
+    // PROVIDER signs the submission → Submitted (2)
     const deliverableHash = keccak256(toBytes(`openbook-deliverable-${jobId}`));
-    await submitDeliverable(publicClient, walletClient, jobId, deliverableHash);
+    await submitDeliverable(publicClient, providerWallet, jobId, deliverableHash);
     expect((await getJob(publicClient, jobId)).status).toBe(2); // Submitted
 
-    // evaluator completes → Completed (3) + PaymentReleased(amount) onchain
-    const receipt = await complete(publicClient, walletClient, jobId, deliverableHash);
+    // EVALUATOR (the buyer) settles → Completed (3) + PaymentReleased to provider
+    const receipt = await complete(publicClient, buyerWallet, jobId, deliverableHash);
     expect((await getJob(publicClient, jobId)).status).toBe(3); // Completed
 
     const escrowLogs = receipt.logs.filter(
@@ -195,7 +240,18 @@ it.skipIf(!lifecycleReady)(
     expect(released).toBeDefined();
     const args = released?.args as unknown as { amount?: bigint; provider?: Address };
     expect(args.amount).toBe(AMOUNT);
-    expect(args.provider).toBe(provider);
+    expect(args.provider).toBe(providerAccount.address);
+
+    // provider balance moved by exactly the released amount (minus their gas)
+    const providerAfter = (await publicClient.readContract({
+      address: USDC,
+      abi: USDC_ABI,
+      functionName: "balanceOf",
+      args: [providerAccount.address],
+    })) as bigint;
+    const delta = providerAfter - providerBefore;
+    expect(delta).toBeGreaterThan(AMOUNT - 5000n); // release − gas(2 txs, < 0.005 USDC)
+    expect(delta).toBeLessThanOrEqual(AMOUNT);
   },
   300_000,
 );

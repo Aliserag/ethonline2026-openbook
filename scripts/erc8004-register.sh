@@ -19,7 +19,8 @@
 #      registration can run without any Circle credentials.
 #
 # Usage:
-#   scripts/erc8004-register.sh [METADATA_URI]     # arg 1 wins over AGENT_METADATA_URI
+#   scripts/erc8004-register.sh --metadata-uri <URI>   # or positional <URI> / AGENT_METADATA_URI
+# The URI is REQUIRED and verified (http(s) HEAD / IPFS CID) before any run.
 #
 # Exit codes (repo convention for key-gated scripts):
 #   0  registered (path A) or verified fallback remains for the user
@@ -30,9 +31,66 @@ REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 RPC="${ARC_TESTNET_RPC:-https://rpc.testnet.arc.io}"
 REGISTRY="${ERC8004_IDENTITY_REGISTRY:-0x8004A818BFB912233c491871b3d84c89A494BD9e}"
 
-# --- metadata URI (the JSON pinned at this URI is stored onchain forever as the
-# --- identity NFT's tokenURI — pin day 1; IPFS recommended) --------------------
-METADATA_URI="${1:-${AGENT_METADATA_URI:-ipfs://bafkreibdi6623n3xpf7ymk62ckb4bo75o3qemwkpfvp5i25j66itxvsoei}}"
+usage() {
+  cat <<'EOF'
+Usage: scripts/erc8004-register.sh --metadata-uri <URI>
+       scripts/erc8004-register.sh <URI>            # positional form
+       AGENT_METADATA_URI=<URI> scripts/erc8004-register.sh
+
+  <URI>  http(s):// or ipfs:// URL of the agent's metadata JSON. This URI is
+         stored onchain FOREVER as the identity NFT's tokenURI — pin the JSON
+         at a public endpoint (IPFS preferred) BEFORE registering.
+EOF
+}
+
+# --- metadata URI: REQUIRED (flag > positional > AGENT_METADATA_URI) -------------
+METADATA_URI=""
+POSITIONAL=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --metadata-uri) METADATA_URI="${2:-}"; shift 2 ;;
+    --metadata-uri=*) METADATA_URI="${1#*=}"; shift ;;
+    -h|--help) usage; exit 0 ;;
+    *) POSITIONAL="$1"; shift ;;
+  esac
+done
+METADATA_URI="${METADATA_URI:-${POSITIONAL:-${AGENT_METADATA_URI:-}}}"
+if [ -z "$METADATA_URI" ]; then
+  usage
+  echo "ERROR: a metadata URI is required (--metadata-uri <URI> or AGENT_METADATA_URI)."
+  exit 3
+fi
+
+# --- verify the URI resolves before any funded run --------------------------------
+check_metadata_uri() {
+  local uri="$1"
+  case "$uri" in
+    http://*|https://*)
+      local code
+      code="$(curl -sIL -m 15 -o /dev/null -w '%{http_code}' "$uri" 2>/dev/null || echo 000)"
+      case "$code" in
+        2*|3*) echo "OK: metadata URI resolves (HTTP $code): $uri"; return 0 ;;
+        *) echo "ERROR: metadata URI does not resolve (HTTP $code): $uri"; return 1 ;;
+      esac ;;
+    ipfs://*)
+      local cid="${uri#ipfs://}"
+      if ! [[ "$cid" =~ ^(Qm[1-9A-HJ-NP-Za-km-z]{44}|b[a-z2-7]{58,59})$ ]]; then
+        echo "ERROR: invalid IPFS CID: $cid"; return 1
+      fi
+      # best-effort public gateway check — public gateways are rate-flaky, so a
+      # failure here only warns (a private pin may serve fine)
+      local gcode
+      gcode="$(curl -sIL -m 15 -o /dev/null -w '%{http_code}' "https://ipfs.io/ipfs/$cid" 2>/dev/null || echo 000)"
+      case "$gcode" in
+        2*|3*) echo "OK: metadata resolves via IPFS gateway (HTTP $gcode): $uri" ;;
+        *) echo "WARN: public gateway check failed (HTTP $gcode) — confirm your pin, then continue" ;;
+      esac
+      return 0 ;;
+    *)
+      echo "ERROR: unsupported metadata URI scheme (use http(s):// or ipfs://): $uri"; return 1 ;;
+  esac
+}
+check_metadata_uri "$METADATA_URI" || exit 3
 
 get_env() { sed -nE "s/^$1=(.*)$/\1/p" "$REPO_ROOT/.env" 2>/dev/null | tail -1 | tr -d '"'; }
 CIRCLE_API_KEY="${CIRCLE_API_KEY:-$(get_env CIRCLE_API_KEY)}"
