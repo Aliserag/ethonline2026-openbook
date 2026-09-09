@@ -72,6 +72,42 @@ interface SettleState {
 const SERVICE_KEYS = ["svc.menu", "svc.price", "svc.sla", "svc.payee", "svc.operator", "svc.pnl"];
 const HARD_FAIL_KEYS = ["svc.price", "svc.sla", "svc.payee"];
 
+export interface StepState {
+  quote: QuoteView | null;
+  job: JobState | null;
+  paying: boolean;
+  delivery: DeliveryState | null;
+  querying: boolean;
+  settling: boolean;
+  settle: SettleState | null;
+}
+
+export type StepKind = "done" | "live" | "failed" | "";
+
+/** Step kind → chip css class. A failed step must never read as in-flight. */
+export function chipClass(kind: StepKind): string {
+  return kind === "" ? "" : kind;
+}
+
+/**
+ * Journal step states (resolve → quote → pay → deliver → settle).
+ * Failures get their own state: a settled hard-fail must never read as
+ * in-flight ("live" is reserved for work actually in progress).
+ */
+export function deriveSteps(
+  ensDone: boolean,
+  ensLoading: boolean,
+  s: StepState,
+): Record<"resolve" | "quote" | "pay" | "deliver" | "settle", StepKind> {
+  return {
+    resolve: ensDone ? "done" : ensLoading ? "" : "failed",
+    quote: s.quote !== null ? "done" : "",
+    pay: s.job !== null ? "done" : s.paying ? "live" : s.quote !== null ? "live" : "",
+    deliver: s.delivery !== null ? "done" : s.querying ? "live" : "",
+    settle: s.settle !== null ? "done" : s.settling ? "live" : "",
+  };
+}
+
 function resolveStorefront(readEnsText: EnsTextReader): Promise<StorefrontState> {
   return Promise.all(SERVICE_KEYS.map((key) => readEnsText(CONFIG.ens, key))).then((values) => {
     const records = SERVICE_KEYS.map((key, index) => ({ key, value: values[index] ?? null }));
@@ -275,13 +311,15 @@ export default function App() {
   };
 
   const ensDone = ens !== null && ens.hardFail === null;
-  const step = {
-    resolve: ensDone ? "done" : ensLoading ? "" : "live",
-    quote: quote !== null ? "done" : "",
-    pay: job !== null ? "done" : paying ? "live" : quote !== null ? "live" : "",
-    deliver: delivery !== null ? "done" : querying ? "live" : "",
-    settle: settle !== null ? "done" : settling ? "live" : "",
-  } as const;
+  const step = deriveSteps(ensDone, ensLoading, {
+    quote,
+    job,
+    paying,
+    delivery,
+    querying,
+    settling,
+    settle,
+  });
 
   // ---- THE TAPE events (signature): print what actually happened ---------
   const tapeEvents: { text: string; kind: "settled" | "refunded" | "stale" | "idle" }[] = [];
@@ -337,7 +375,7 @@ export default function App() {
       <div className="book">
         <div className="journal">
           <ol className="process">
-            <li className={step.resolve === "done" ? "done" : step.resolve === "live" ? "live" : ""}>resolve</li>
+            <li className={chipClass(step.resolve)}>resolve</li>
             <li className={step.quote === "done" ? "done" : ""}>quote</li>
             <li className={step.pay === "done" ? "done" : step.pay === "live" ? "live" : ""}>pay</li>
             <li className={step.deliver === "done" ? "done" : step.deliver === "live" ? "live" : ""}>deliver</li>

@@ -216,6 +216,16 @@ body {
   color: var(--settled);
 }
 
+.process li.failed {
+  color: var(--refunded);
+  background: var(--refunded-bg);
+  border-color: var(--refunded);
+}
+
+.process li.failed::before {
+  color: var(--refunded);
+}
+
 /* ---- panels --------------------------------------------------------------- */
 
 .panel {
