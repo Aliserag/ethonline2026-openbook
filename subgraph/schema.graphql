@@ -1,0 +1,63 @@
+# OpenBook P&L subgraph — schema (Task 4).
+#
+# Semantic entities model the freshness-ledger economics on Arc testnet:
+#   revenue  <- QueryPaid  (client pays for a query; JobFunded)
+#   revenue  <- Settled    (payment released to provider; PaymentReleased)
+#   refunds  <- RefundIssued (Refunded)
+#   costs    <- CostPaid   (PolicyWallet WithdrawalExecuted)
+# blocked intents are surfaced via PolicyBlocked (no P&L impact).
+# DailyPnL is the day-bucketed (block.number / 21600) running aggregate.
+#
+# NOTE: raw USDC Transfer events are NEVER indexed (EIP-7708 double-count trap);
+# Dollar figures are carried in the semantic events above.
+
+type QueryPaid @entity(immutable: true) {
+  id: Bytes!
+  jobId: BigInt!
+  buyer: Bytes!
+  seller: Bytes!
+  amount: BigInt!
+  minBlock: BigInt!
+  deadline: BigInt!
+  blockNumber: BigInt!
+  timestamp: BigInt!
+}
+
+type Fulfilled @entity(immutable: true) {
+  id: Bytes!
+  jobId: BigInt!
+  payloadHash: Bytes!
+  metaBlock: BigInt!
+}
+
+type Settled @entity(immutable: true) {
+  id: Bytes!
+  jobId: BigInt!
+  seller: Bytes!
+  amount: BigInt!
+}
+
+type RefundIssued @entity(immutable: true) {
+  id: Bytes!
+  jobId: BigInt!
+  reason: String!
+}
+
+type CostPaid @entity(immutable: true) {
+  id: Bytes!
+  to: Bytes!
+  amount: BigInt!
+}
+
+type PolicyBlocked @entity(immutable: true) {
+  id: Bytes!
+  reason: String!
+}
+
+type DailyPnL @entity(immutable: false) {
+  id: ID!
+  revenue: BigInt!
+  costs: BigInt!
+  refunds: BigInt!
+  net: BigInt!
+}

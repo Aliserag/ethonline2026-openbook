@@ -1,0 +1,70 @@
+# OpenBook P&L subgraph — Task 4.
+# Network: arc-testnet (Arc chain id 5042002). Consumes ERC-8183 commerce events
+# and PolicyWallet withdrawal/policy events; produces the P&L freshness ledger.
+# NOTE: the trading currency is native USDC (6 decimals); all amounts are BigInt
+# raw units. We deliberately do NOT index USDC Transfer events (EIP-7708
+# double-count trap) — dollar figures are carried by the semantic events below.
+specVersion: 1.2.0
+description: "OpenBook P&L — ERC-8183 commerce + PolicyWallet economics on Arc Testnet"
+schema:
+  file: ./schema.graphql
+dataSources:
+  # ---- ERC-8183 open-commerce reference (already deployed on Arc testnet) ----
+  - kind: ethereum/contract
+    name: ERC8183
+    network: arc-testnet
+    source:
+      # ERC-8183 open-commerce reference contract on Arc testnet
+      # (verified in Task 0: proxy 0x0747…4583 -> impl 0xa316fd…351a)
+      address: "0x0747EEf0706327138c69792bF28Cd525089e4583"
+      abi: ERC8183
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - QueryPaid
+        - Fulfilled
+        - Settled
+        - RefundIssued
+        - DailyPnL
+      abis:
+        - name: ERC8183
+          file: ./abis/erc8183.json
+      eventHandlers:
+        - event: JobFunded(indexed uint256,indexed address,uint256)
+          handler: handleQueryPaid
+        - event: JobSubmitted(indexed uint256,indexed address,bytes32)
+          handler: handleFulfilled
+        - event: PaymentReleased(indexed uint256,indexed address,uint256)
+          handler: handleSettled
+        - event: Refunded(indexed uint256,indexed address,uint256)
+          handler: handleRefund
+      file: ./src/mapping.ts
+  # ---- PolicyWallet (Task 2) — withdrawn costs + policy blocks ----
+  - kind: ethereum/contract
+    name: PolicyWallet
+    network: arc-testnet
+    source:
+      # TODO(deploy): replace placeholder with the deployed PolicyWallet address
+      # once Task 2 lands (POLICY_WALLET_ADDR in .env). Structure is
+      # address-parameterized so only this line changes at deploy time.
+      address: "0x00000000000000000000000000000000000000DE"
+      abi: PolicyWallet
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - CostPaid
+        - PolicyBlocked
+        - DailyPnL
+      abis:
+        - name: PolicyWallet
+          file: ./abis/PolicyWallet.json
+      eventHandlers:
+        - event: WithdrawalExecuted(indexed address,uint256)
+          handler: handleCostPaid
+        - event: PolicyBlocked(string)
+          handler: handlePolicyBlocked
+      file: ./src/mapping.ts

@@ -1,0 +1,17 @@
+{
+  "name": "openbook-pnl",
+  "private": true,
+  "version": "0.1.0",
+  "description": "OpenBook P&L subgraph (network: arc-testnet) — ERC-8183 commerce + PolicyWallet economics",
+  "scripts": {
+    "codegen": "graph codegen",
+    "build": "graph build",
+    "test": "graph test",
+    "deploy:studio": "../scripts/deploy-subgraph.sh"
+  },
+  "devDependencies": {
+    "@graphprotocol/graph-ts": "0.31.0",
+    "assemblyscript": "0.19.20",
+    "matchstick-as": "0.6.0"
+  }
+}

@@ -1,0 +1,4 @@
+{
+  "extends": "./node_modules/matchstick-as/assembly/tsconfig.json",
+  "include": ["tests"]
+}

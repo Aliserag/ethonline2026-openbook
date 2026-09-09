@@ -1,0 +1,28 @@
+[
+  {
+    "type": "event",
+    "name": "WithdrawalExecuted",
+    "anonymous": false,
+    "inputs": [
+      { "type": "address", "name": "to", "indexed": true },
+      { "type": "uint256", "name": "amount", "indexed": false }
+    ]
+  },
+  {
+    "type": "event",
+    "name": "PolicyBlocked",
+    "anonymous": false,
+    "inputs": [
+      { "type": "string", "name": "reason", "indexed": false }
+    ]
+  },
+  {
+    "type": "event",
+    "name": "PolicySet",
+    "anonymous": false,
+    "inputs": [
+      { "type": "uint256", "name": "perTxCap", "indexed": false },
+      { "type": "uint256", "name": "dailyCap", "indexed": false }
+    ]
+  }
+]
