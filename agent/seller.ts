@@ -58,6 +58,7 @@ import {
   type DatasetConfig,
   type OpenBookConfig,
 } from "../mcp/src/datasets";
+import { defaultQueryFor } from "./src/queries";
 
 /** Events the loop keys on (exact signatures from the verified 71-entry ABI). */
 const JOB_FUNDED = parseAbiItem(
@@ -69,17 +70,6 @@ const PAYMENT_RELEASED = parseAbiItem(
 const REFUNDED = parseAbiItem(
   "event Refunded(uint256 indexed jobId, address indexed client, uint256 amount)",
 );
-
-/** Default per-schema demo queries (both serve against the pinned Messari pins). */
-const DEFAULT_QUERIES: Record<string, string> = {
-  "lending/3.1.0": "{ markets(first: 3) { id } }",
-  "dex-amm/4.0.1": "{ pools(first: 3) { id } }",
-};
-
-/** Deterministic default query for a dataset (falls back to a shape query). */
-export function defaultQueryFor(dataset: DatasetConfig): string {
-  return DEFAULT_QUERIES[dataset.schema] ?? "{ __typename }";
-}
 
 /**
  * Match the job's SLA schemaHash to a configured dataset. The buyer packs
@@ -116,6 +106,20 @@ export interface SellerServices {
 
 function defaultLog(line: string): void {
   console.log(`[seller] ${line}`);
+}
+
+/**
+ * True when the job's provider is not the seller — i.e. a foreign job on the
+ * SHARED ERC-8183 reference contract (other ETHOnline agents). Unresolvable
+ * jobs count as foreign: the tally must never book money it cannot attribute.
+ */
+async function isForeignJob(publicClient: PublicClient, jobId: bigint, sellerAddress: string): Promise<boolean> {
+  try {
+    const job = await getJob(publicClient, jobId);
+    return job.provider.toLowerCase() !== sellerAddress;
+  } catch {
+    return true;
+  }
 }
 
 const STATUS_FUNDED = 1;
@@ -182,9 +186,19 @@ export async function serveFundedJobs(
   });
 
   // 4+5. revenue/refund tally across the same window (before the serve loop so
-  // totals reflect everything the window saw, served or not)
+  // totals reflect everything the window saw, served or not). The reference
+  // contract is SHARED with other ETHOnline agents, so both tallies are scoped
+  // to the seller's own jobs: PaymentReleased filters on the indexed provider;
+  // Refunded (no indexed provider) is resolved via getJob per entry.
+  const sellerAddress = (walletClient.account?.address ?? privateKeyToAccount(operatorKey).address).toLowerCase();
   const [releasedLogs, refundedLogs] = await Promise.all([
-    publicClient.getLogs({ address: ERC8183, event: PAYMENT_RELEASED, fromBlock, toBlock: head }),
+    publicClient.getLogs({
+      address: ERC8183,
+      event: PAYMENT_RELEASED,
+      args: { provider: sellerAddress },
+      fromBlock,
+      toBlock: head,
+    }),
     publicClient.getLogs({ address: ERC8183, event: REFUNDED, fromBlock, toBlock: head }),
   ]);
   for (const logEntry of releasedLogs) {
@@ -195,6 +209,12 @@ export async function serveFundedJobs(
     );
   }
   for (const logEntry of refundedLogs) {
+    const jobId = logEntry.args.jobId;
+    if (jobId === undefined) continue;
+    if (await isForeignJob(publicClient, jobId, sellerAddress)) {
+      log(`SKIP refund job=${jobId}: provider is not ${sellerAddress} — foreign job on the shared contract`);
+      continue;
+    }
     stats.refunded6dec += logEntry.args.amount ?? 0n;
     stats.refundCount++;
     log(

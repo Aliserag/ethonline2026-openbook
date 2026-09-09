@@ -50,7 +50,7 @@ echo "PASS: codegen + build OK — spike subgraph compiles to WASM without any A
 
 echo "== [5/5] deploy (awaits Subgraph Studio API key — user action) =="
 cat <<'EOF'
-From repo root, after adding GRAPH_STUDIO_KEY to .env (from https://thegraph.com/studio):
+From repo root, after adding GRAPH_STUDIO_DEPLOY_KEY to .env (from https://thegraph.com/studio):
   cd subgraph/spike
   graph auth --studio <YOUR_SUBGRAPH_STUDIO_API_KEY>
   graph deploy --studio openbook-spike

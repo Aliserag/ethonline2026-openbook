@@ -1,17 +1,23 @@
 import { describe, test, assert, clearStore, newMockEvent } from "matchstick-as/assembly/index";
 import { Address, BigInt, Bytes, ethereum } from "@graphprotocol/graph-ts";
-import { JobCreated, JobFunded, PaymentReleased } from "../generated/ERC8183/ERC8183";
+import { JobCreated, JobFunded, PaymentReleased, Refunded } from "../generated/ERC8183/ERC8183";
 import { WithdrawalExecuted, PolicySet } from "../generated/PolicyWallet/PolicyWallet";
 import {
   handleJobCreated,
   handleQueryPaid,
   handleSettled,
+  handleRefund,
   handleCostPaid,
   handlePolicySet,
+  SELLER,
 } from "../src/mapping";
 
 const CLIENT = "0x8BA1f109551bD432803012645Ac136ddd64DBA72";
-const PROVIDER = "0x64A78b6d5e99274d01D1d0A70B180A73AAEb8d21";
+// "ours" = the provider the mapping books for (SELLER placeholder; the deploy
+// script substitutes the real operator address — tests follow the constant).
+const PROVIDER = SELLER;
+// a foreign provider on the SHARED reference contract (another ETHOnline agent)
+const FOREIGN = "0x64A78b6d5e99274d01D1d0A70B180A73AAEb8d21";
 
 function createJobCreatedEvent(
   jobId: BigInt,
@@ -78,6 +84,25 @@ function createPaymentReleasedEvent(
   return event;
 }
 
+function createRefundedEvent(
+  jobId: BigInt,
+  client: Address,
+  amount: BigInt,
+  blockNumber: BigInt,
+): Refunded {
+  let event = changetype<Refunded>(newMockEvent());
+  event.parameters = new Array();
+  event.parameters.push(new ethereum.EventParam("jobId", ethereum.Value.fromUnsignedBigInt(jobId)));
+  event.parameters.push(new ethereum.EventParam("client", ethereum.Value.fromAddress(client)));
+  event.parameters.push(new ethereum.EventParam("amount", ethereum.Value.fromUnsignedBigInt(amount)));
+  event.block.number = blockNumber;
+  event.block.timestamp = BigInt.fromI32(1_700_000_000);
+  event.transaction.hash = Bytes.fromHexString(
+    "0xddde00000000000000000000000000000000000000000000000000000000000000",
+  );
+  return event;
+}
+
 function createWithdrawalExecutedEvent(
   to: Address,
   amount: BigInt,
@@ -125,7 +150,7 @@ describe("handleJobCreated + handleQueryPaid", () => {
 
     assert.entityCount("QueryPaid", 1);
     // Real seller (provider) + deadline (expiredAt); store key = bytes hex of "qp-7"
-    assert.fieldEquals("QueryPaid", "0x71702d37", "seller", "0x64a78b6d5e99274d01d1d0a70b180a73aaeb8d21");
+    assert.fieldEquals("QueryPaid", "0x71702d37", "seller", SELLER);
     assert.fieldEquals("QueryPaid", "0x71702d37", "buyer", "0x8ba1f109551bd432803012645ac136ddd64dba72");
     assert.fieldEquals("QueryPaid", "0x71702d37", "deadline", "999999");
     assert.fieldEquals("QueryPaid", "0x71702d37", "minBlock", "21500");
@@ -155,6 +180,55 @@ describe("handleJobCreated + handleQueryPaid", () => {
     assert.fieldEquals("DailyPnL", "day-1", "revenue", "1000000");
     assert.fieldEquals("DailyPnL", "day-1", "net", "1000000");
     assert.entityCount("DailyPnL", 1);
+  });
+
+  test("foreign-provider JobFunded/Settled pair books NO P&L (provider-scoped)", () => {
+    clearStore();
+    let client = Address.fromString(CLIENT);
+    let foreign = Address.fromString(FOREIGN);
+
+    // foreign JobCreated → no QueryPaid row (skipped)
+    handleJobCreated(
+      createJobCreatedEvent(BigInt.fromI32(9), client, foreign, BigInt.fromI32(999_999), BigInt.fromI32(21_500)),
+    );
+    assert.entityCount("QueryPaid", 0);
+    // foreign funding finds no scoped row → dropped, not invented
+    handleQueryPaid(
+      createJobFundedEvent(BigInt.fromI32(9), client, BigInt.fromString("1000000"), BigInt.fromI32(23_000)),
+    );
+    assert.entityCount("QueryPaid", 0);
+    // foreign settlement → NO revenue on DailyPnL
+    handleSettled(
+      createPaymentReleasedEvent(BigInt.fromI32(9), foreign, BigInt.fromString("1000000"), BigInt.fromI32(23_100)),
+    );
+    assert.entityCount("DailyPnL", 0);
+    assert.entityCount("Settled", 0);
+  });
+
+  test("own refund books refunds; foreign refund without a scoped job books nothing", () => {
+    clearStore();
+    let client = Address.fromString(CLIENT);
+    let provider = Address.fromString(PROVIDER);
+    let foreign = Address.fromString(FOREIGN);
+
+    // ours: JobCreated → Refunded → refunds + negative net, exactly once
+    handleJobCreated(
+      createJobCreatedEvent(BigInt.fromI32(5), client, provider, BigInt.fromI32(999_999), BigInt.fromI32(21_500)),
+    );
+    handleRefund(
+      createRefundedEvent(BigInt.fromI32(5), client, BigInt.fromString("250000"), BigInt.fromI32(22_000)),
+    );
+    assert.entityCount("RefundIssued", 1);
+    assert.fieldEquals("DailyPnL", "day-1", "refunds", "250000");
+    assert.fieldEquals("DailyPnL", "day-1", "net", "-250000");
+
+    // foreign: no scoped job row → the refund books nothing
+    clearStore();
+    handleRefund(
+      createRefundedEvent(BigInt.fromI32(99), client, BigInt.fromString("500000"), BigInt.fromI32(22_000)),
+    );
+    assert.entityCount("RefundIssued", 0);
+    assert.entityCount("DailyPnL", 0);
   });
 
   test("buckets revenue across days from settlements", () => {

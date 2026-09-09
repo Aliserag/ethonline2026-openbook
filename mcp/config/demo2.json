@@ -2,7 +2,7 @@
   "name": "openbook-demo2",
   "ens": "openbook.eth",
   "escrow": "0x0747EEf0706327138c69792bF28Cd525089e4583",
-  "payee": "0x0000000000000000000000000000000000000000",
+  "payee": "",
   "operatorKey": "OPERATOR_PRIVATE_KEY",
   "gateway": {
     "keyEnv": "GRAPH_GATEWAY_KEY",

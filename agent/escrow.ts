@@ -86,11 +86,14 @@ export const USDC_ABI = [
 
 /**
  * Arc mempool fee floor (Task 0-verified): transactions with maxFeePerGas below
- * 20 Gwei are silently dropped. EIP-1559 is active and the base fee is pinned
- * at exactly 20 Gwei, so cap at 20 Gwei + 1 Gwei tip is valid and includes.
+ * 20 Gwei are silently dropped, and EIP-1559's base fee is pinned at exactly
+ * 20 Gwei. Cap is floor + 1 Gwei (21 Gwei): capping AT the floor would make the
+ * effective priority fee maxPriorityFeePerGas − (maxFeePerGas − baseFee) = 0
+ * and leave no headroom — 21 Gwei is the minimum that keeps the 1 Gwei tip
+ * effective.
  */
 export const ARC_GAS = {
-  maxFeePerGas: 20_000_000_000n,
+  maxFeePerGas: 21_000_000_000n,
   maxPriorityFeePerGas: 1_000_000_000n,
 } as const;
 

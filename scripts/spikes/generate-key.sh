@@ -18,7 +18,7 @@ read -r RADDR RPK < <(gen_keypair)  # spare recipient (transfer target)
 
 ENV_FILE=".env"
 touch "$ENV_FILE"
-# strip existing ARC_* lines, preserving any other vars (e.g. GRAPH_STUDIO_KEY)
+# strip existing ARC_* lines, preserving any other vars (e.g. GRAPH_STUDIO_DEPLOY_KEY)
 grep -v '^ARC_' "$ENV_FILE" > "$ENV_FILE.tmp" 2>/dev/null || true
 mv "$ENV_FILE.tmp" "$ENV_FILE"
 

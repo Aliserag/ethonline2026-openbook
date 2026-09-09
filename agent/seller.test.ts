@@ -9,10 +9,12 @@
  */
 import { describe, expect, it } from "bun:test";
 import { keccak256, toBytes, type Address, type PublicClient, type WalletClient } from "viem";
+import { privateKeyToAccount } from "viem/accounts";
 import * as path from "node:path";
 import { loadConfigFile, type OpenBookConfig } from "../mcp/src/datasets";
 import { packSla } from "./escrow";
-import { defaultQueryFor, findDatasetForSla, serveFundedJobs, type SellerStats } from "./seller";
+import { findDatasetForSla, serveFundedJobs, type SellerStats } from "./seller";
+import { defaultQueryFor } from "./src/queries";
 
 const CONFIG: OpenBookConfig = loadConfigFile(
   path.join(import.meta.dir, "..", "mcp", "config", "openbook.json"),
@@ -223,5 +225,85 @@ describe("serveFundedJobs — schema-mismatch skip (no misdelivery)", () => {
     expect(stats.served).toBe(0);
     expect(stats.staleSkipped).toBe(1);
     expect(logLines.some((line) => line.includes("SKIP job=8") && line.includes("stale"))).toBe(true);
+  });
+});
+
+describe("serveFundedJobs — provider-scoped tally on the SHARED reference contract", () => {
+  /** Seller address derived from the TEST_KEY fixture (same derivation as seller.ts). */
+  const SELLER = privateKeyToAccount(TEST_KEY).address.toLowerCase();
+  const FOREIGN = "0x64a78b6d5e99274d01d1d0a70b180a73aaeb8d21";
+
+  /** JobView array with a caller-chosen provider. */
+  function jobViewFor(provider: string, status = 3): unknown[] {
+    return [
+      42n, // id
+      ADDR1, // client
+      provider,
+      ADDR1, // evaluator
+      packSla({ minBlock: 10, schemaHash: keccak256(toBytes("lending/3.1.0")), maxLatencyMs: 500 }),
+      100000n, // budget
+      BigInt(Math.floor(Date.now() / 1000)) + 3600n, // expiredAt
+      BigInt(status), // status
+      ZERO, // hook
+    ];
+  }
+
+  it("counts revenue ONLY from own-provider PaymentReleased; refunds from own jobs only", async () => {
+    const publicClient = {
+      getBlockNumber: async (): Promise<bigint> => 1000n,
+      getLogs: async (params: {
+        event: { name: string };
+        args?: { provider?: string };
+      }): Promise<unknown[]> => {
+        if (params.event.name === "JobFunded") return [];
+        if (params.event.name === "PaymentReleased") {
+          // node-side semantics: the indexed provider topic filter applies,
+          // so the mock only hands back what the filter would return
+          const own = { args: { jobId: 1n, provider: SELLER, amount: 1000000n }, transactionHash: `0x${"a".repeat(64)}` };
+          const foreign = {
+            args: { jobId: 99n, provider: FOREIGN, amount: 5000000n },
+            transactionHash: `0x${"b".repeat(64)}`,
+          };
+          return params.args?.provider === SELLER ? [own] : [foreign];
+        }
+        if (params.event.name === "Refunded") {
+          return [
+            { args: { jobId: 2n, amount: 250000n }, transactionHash: `0x${"c".repeat(64)}` }, // own job (getJob: provider = SELLER)
+            { args: { jobId: 200n, amount: 900000n }, transactionHash: `0x${"d".repeat(64)}` }, // foreign job
+          ];
+        }
+        return [];
+      },
+      readContract: async (params: { functionName: string; args?: unknown[] }): Promise<unknown> => {
+        if (params.functionName === "getJob") {
+          const jobId = (params.args as unknown[])[0] as bigint;
+          // job 2 is the seller's; job 200 belongs to a foreign provider
+          return jobId === 2n ? jobViewFor(SELLER) : jobViewFor(FOREIGN);
+        }
+        throw new Error(`unexpected readContract: ${params.functionName}`);
+      },
+    } as unknown as PublicClient;
+    const walletClient = {} as unknown as WalletClient;
+    const logLines: string[] = [];
+    const stats = await serveFundedJobs(
+      {
+        config: CONFIG,
+        env: { ARC_TESTNET_PK: TEST_KEY, GRAPH_GATEWAY_KEY: "test-key" },
+        publicClient,
+        walletClient,
+        fetchImpl: async (): Promise<Response> => {
+          throw new Error("unexpected gateway fetch — no funded jobs to serve");
+        },
+        log: (line) => logLines.push(line),
+      },
+      { lookback: 100n },
+    );
+    // foreign PaymentReleased (5,000,000) is not in the tally; own is counted once
+    expect(stats.revenue6dec).toBe(1000000n);
+    expect(stats.completedCount).toBe(1);
+    // own refund counted; foreign refund (no matching provider) skipped
+    expect(stats.refunded6dec).toBe(250000n);
+    expect(stats.refundCount).toBe(1);
+    expect(logLines).toContain("SKIP refund job=200: provider is not " + SELLER + " — foreign job on the shared contract");
   });
 });

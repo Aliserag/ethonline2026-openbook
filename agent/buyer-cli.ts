@@ -60,12 +60,12 @@ import {
   resolveServiceRecords,
   type EnsTextReader,
 } from "../mcp/src/ens";
+import { defaultQueryFor } from "./src/queries";
 import { verifyDelivery } from "../mcp/src/escrow";
 import {
   loadConfigFile,
   resolveGatewayKey,
   resolveOperatorKey,
-  type DatasetConfig,
   type OpenBookConfig,
 } from "../mcp/src/datasets";
 
@@ -187,15 +187,6 @@ export async function deliverQuery(
     freshness,
     via: options.stale ? "stale-proxy" : "gateway",
   };
-}
-
-/** Deterministic default query for a dataset (mirrors agent/seller.ts). */
-export function defaultQueryFor(dataset: DatasetConfig): string {
-  const queries: Record<string, string> = {
-    "lending/3.1.0": "{ markets(first: 3) { id } }",
-    "dex-amm/4.0.1": "{ pools(first: 3) { id } }",
-  };
-  return queries[dataset.schema] ?? "{ __typename }";
 }
 
 export function requiredEnv(env: Record<string, string | undefined>, key: string): `0x${string}` {

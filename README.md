@@ -52,4 +52,4 @@ for the full task-by-task build plan. Copy `.env.example` → `.env` and fill ke
 
 ## Status
 
-🔨 In active development for ETHOnline 2026. Submissions close Sep 13, 12:00 PM EDT.
+Submission-ready build for ETHOnline 2026 (Sep 4–16); deployed pieces live on Arc testnet and Sepolia (see [RUNBOOK.md](RUNBOOK.md)).

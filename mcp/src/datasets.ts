@@ -63,8 +63,8 @@ export interface OpenBookConfig {
   ens: string;
   /** ERC-8183 AgenticCommerce address on Arc testnet */
   escrow: `0x${string}`;
-  /** seller payout address (display/fallback; get_quote resolves svc.payee) */
-  payee: `0x${string}`;
+  /** seller payout address — DISPLAY-ONLY fallback; get_quote resolves svc.payee LIVE from ENSv2, so "" (unset) is valid */
+  payee: string;
   operatorKey: string;
   gateway: GatewayConfig;
   pnl: PnlConfig;
@@ -85,6 +85,20 @@ function requireAddress(value: unknown, field: string): `0x${string}` {
     throw new Error(`mcp config: ${field} must be a 0x-prefixed 40-hex address`);
   }
   return value as `0x${string}`;
+}
+
+/**
+ * Optional address: "" means unset. Config payee is display-only — get_quote
+ * resolves svc.payee LIVE from the ENS records, so a zero-address placeholder
+ * is worse than absent (it reads as a real payout target).
+ */
+function requireAddressOrEmpty(value: unknown, field: string): string {
+  if (typeof value !== "string" || (value.length !== 0 && !ADDRESS_RE.test(value))) {
+    throw new Error(
+      `mcp config: ${field} must be a 0x-prefixed 40-hex address or "" (unset — display-only; get_quote resolves svc.payee live)`,
+    );
+  }
+  return value;
 }
 
 function requirePositiveInt(value: unknown, field: string): number {
@@ -158,7 +172,7 @@ export function loadConfigFile(configPath: string): OpenBookConfig {
     name: requireText(raw["name"], "name"),
     ens: requireText(raw["ens"], "ens"),
     escrow: requireAddress(raw["escrow"], "escrow"),
-    payee: requireAddress(raw["payee"], "payee"),
+    payee: requireAddressOrEmpty(raw["payee"], "payee"),
     operatorKey: requireText(raw["operatorKey"], "operatorKey"),
     gateway: {
       keyEnv: requireText(gateway?.["keyEnv"] ?? DEFAULT_KEY_ENV, "gateway.keyEnv"),

@@ -10,7 +10,8 @@
 import { describe, expect, it } from "bun:test";
 import { keccak256, toBytes } from "viem";
 import { loadConfigFile, type OpenBookConfig } from "../mcp/src/datasets";
-import { deliverQuery, defaultQueryFor, runBuyerFlow } from "./buyer-cli";
+import { deliverQuery, runBuyerFlow } from "./buyer-cli";
+import { defaultQueryFor } from "./src/queries";
 import * as path from "node:path";
 
 const CONFIG: OpenBookConfig = loadConfigFile(

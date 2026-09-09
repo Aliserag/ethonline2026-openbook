@@ -15,7 +15,7 @@
 // Amounts arrive as raw 6-dec BigInt units via the semantic events. Net =
 // revenue - refunds - costs, all BigInt, day-bucket = block.number / 21600.
 
-import { BigInt, Bytes } from "@graphprotocol/graph-ts";
+import { Address, BigInt, Bytes } from "@graphprotocol/graph-ts";
 
 import {
   JobCreated as JobCreatedEvent,
@@ -43,6 +43,23 @@ import {
 // Arc testnet produces ~1 block/2s (6-dec USDC gas token); 21600 blocks ≈ one
 // day bucket, matching the plan's aggregation interval.
 const DAY_BLOCKS = BigInt.fromI32(21600);
+
+// SELLER — the operator/seller address whose P&L this subgraph books. The
+// ERC-8183 reference contract (0x0747…4583) is SHARED with other ETHOnline
+// agents, so every job-scoped handler must skip foreign providers — otherwise
+// their jobs would land in OpenBook's DailyPnL (consumed by get_pnl and the
+// frontend P&L panel). The seller address is the ERC-8004-registered operator,
+// config-pinned.
+// TODO(deploy): deploy-subgraph.sh substitutes $SELLER_ADDRESS for this
+// placeholder before codegen (see scripts/deploy-subgraph.sh + docs/keys-needed.md).
+// The zero address = index nothing: keyless-safe default, but a deploy that
+// skips substitution books NO P&L.
+export const SELLER = "0x0000000000000000000000000000000000000000";
+
+/** True when the job's provider is the OpenBook seller (scopes all job events). */
+function isSeller(provider: Address): boolean {
+  return provider.toHexString().toLowerCase() == SELLER.toLowerCase();
+}
 
 function logIndexId(hash: Bytes, logIndex: i32): Bytes {
   return hash.concatI32(logIndex);
@@ -86,6 +103,10 @@ function addCost(day: DailyPnL, amount: BigInt): void {
 // (seller) and expiredAt (deadline) exist ONLY here, so we create the QueryPaid
 // row at creation time with real values; jobId is its stable id.
 export function handleJobCreated(event: JobCreatedEvent): void {
+  // Shared reference contract — skip foreign jobs (their provider isn't SELLER).
+  if (!isSeller(event.params.provider)) {
+    return;
+  }
   let id = Bytes.fromUTF8("qp-" + event.params.jobId.toString());
   let queryPaid = QueryPaid.load(id);
   if (queryPaid == null) {
@@ -109,14 +130,11 @@ export function handleQueryPaid(event: JobFundedEvent): void {
   let id = Bytes.fromUTF8("qp-" + event.params.jobId.toString());
   let queryPaid = QueryPaid.load(id);
   if (queryPaid == null) {
-    // Funding without a prior JobCreated (shouldn't happen) — fall back to
-    // event-derived values rather than dropping the funding.
-    queryPaid = new QueryPaid(id);
-    queryPaid.jobId = event.params.jobId;
-    queryPaid.buyer = event.params.client;
-    queryPaid.seller = event.params.client;
-    queryPaid.minBlock = event.block.number;
-    queryPaid.deadline = event.block.number;
+    // No scoped JobCreated row ⇒ the job is not one of SELLER's (shared
+    // contract; JobFunded carries no provider) or it predates the index start
+    // — never book foreign funding. JobCreated always precedes JobFunded on
+    // the reference contract, so a missing row means "not ours".
+    return;
   }
   queryPaid.amount = event.params.amount;
   queryPaid.blockNumber = event.block.number;
@@ -126,6 +144,9 @@ export function handleQueryPaid(event: JobFundedEvent): void {
 
 // JobSubmitted(jobId, provider, deliverable) — provider fulfills the job.
 export function handleFulfilled(event: JobSubmittedEvent): void {
+  if (!isSeller(event.params.provider)) {
+    return;
+  }
   let id = logIndexId(event.transaction.hash, event.logIndex.toI32());
   let fulfilled = new Fulfilled(id);
   fulfilled.jobId = event.params.jobId;
@@ -137,6 +158,11 @@ export function handleFulfilled(event: JobSubmittedEvent): void {
 // PaymentReleased(jobId, provider, amount) — escrow settlement to seller. This
 // is the sole revenue event: a funded+settled job books its amount exactly once.
 export function handleSettled(event: PaymentReleasedEvent): void {
+  // THE revenue line — must be SELLER-scoped or foreign settlements inflate
+  // OpenBook's DailyPnL on the shared reference contract.
+  if (!isSeller(event.params.provider)) {
+    return;
+  }
   let id = logIndexId(event.transaction.hash, event.logIndex.toI32());
   let settled = new Settled(id);
   settled.jobId = event.params.jobId;
@@ -151,6 +177,12 @@ export function handleSettled(event: PaymentReleasedEvent): void {
 
 // Refunded(jobId, client, amount) — money returned to the client.
 export function handleRefund(event: RefundedEvent): void {
+  // Refunded(jobId, client, amount) carries no provider — resolve the job row
+  // (created only by scoped handleJobCreated) so foreign refunds are skipped.
+  let queryPaid = QueryPaid.load(Bytes.fromUTF8("qp-" + event.params.jobId.toString()));
+  if (queryPaid == null) {
+    return;
+  }
   let id = logIndexId(event.transaction.hash, event.logIndex.toI32());
   let refund = new RefundIssued(id);
   refund.jobId = event.params.jobId;
