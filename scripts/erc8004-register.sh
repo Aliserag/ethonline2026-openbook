@@ -48,7 +48,13 @@ METADATA_URI=""
 POSITIONAL=""
 while [ "$#" -gt 0 ]; do
   case "$1" in
-    --metadata-uri) METADATA_URI="${2:-}"; shift 2 ;;
+    --metadata-uri)
+      if [ "$#" -lt 2 ]; then
+        usage
+        echo "ERROR: --metadata-uri requires a value (use --metadata-uri <URI> or AGENT_METADATA_URI)."
+        exit 3
+      fi
+      METADATA_URI="$2"; shift 2 ;;
     --metadata-uri=*) METADATA_URI="${1#*=}"; shift ;;
     -h|--help) usage; exit 0 ;;
     *) POSITIONAL="$1"; shift ;;
