@@ -1,0 +1,30 @@
+# OpenBook Task 0 spike subgraph — Go/No-Go probe for the Graph arc-testnet path.
+# Indexes USDC ERC-20 Transfer events (native USDC ERC-20 view, 6 decimals) on Arc Testnet.
+# No-op handler: proves codegen -> build -> deploy -> sync only. Real entities land in Task 4.
+specVersion: 1.2.0
+description: "OpenBook spike — USDC Transfer events on Arc Testnet (network: arc-testnet)"
+schema:
+  file: ./schema.graphql
+dataSources:
+  - kind: ethereum/contract
+    name: ArcUSDC
+    network: arc-testnet
+    source:
+      # Native USDC ERC-20 interface on Arc Testnet (verified: resources/arc/README.md)
+      address: "0x3600000000000000000000000000000000000000"
+      abi: ERC20
+      # startBlock just below the block observed while writing the spike (61291399) — keeps sync short
+      startBlock: 61291300
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - Transfer
+      abis:
+        - name: ERC20
+          file: ./abis/ERC20.json
+      eventHandlers:
+        - event: Transfer(indexed address,indexed address,uint256)
+          handler: handleTransfer
+      file: ./src/mapping.ts

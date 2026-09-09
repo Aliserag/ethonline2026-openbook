@@ -1,0 +1,15 @@
+{
+  "name": "openbook-spike",
+  "private": true,
+  "version": "0.0.1",
+  "description": "OpenBook Task 0 spike subgraph (network: arc-testnet) — no-op index pipeline probe",
+  "scripts": {
+    "codegen": "graph codegen",
+    "build": "graph build",
+    "auth:studio": "graph auth --studio ${GRAPH_STUDIO_KEY}",
+    "deploy:studio": "graph deploy --studio openbook-spike"
+  },
+  "devDependencies": {
+    "@graphprotocol/graph-ts": "^0.38.2"
+  }
+}

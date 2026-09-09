@@ -1,0 +1,9 @@
+# OpenBook spike schema — intentionally minimal.
+# Task 0 only gates the index/build/deploy/sync pipeline. The no-op handler never writes
+# these entities; Task 4 replaces this schema with the real freshness-ledger entities.
+type Transfer @entity(immutable: true) {
+  id: ID!
+  from: Bytes!
+  to: Bytes!
+  value: BigInt!
+}
