@@ -1,11 +1,44 @@
 import { describe, test, assert, clearStore, newMockEvent } from "matchstick-as/assembly/index";
 import { Address, BigInt, Bytes, ethereum } from "@graphprotocol/graph-ts";
-import { JobFunded } from "../generated/ERC8183/ERC8183";
-import { WithdrawalExecuted } from "../generated/PolicyWallet/PolicyWallet";
+import { JobCreated, JobFunded, PaymentReleased } from "../generated/ERC8183/ERC8183";
+import { WithdrawalExecuted, PolicySet } from "../generated/PolicyWallet/PolicyWallet";
 import {
+  handleJobCreated,
   handleQueryPaid,
+  handleSettled,
   handleCostPaid,
+  handlePolicySet,
 } from "../src/mapping";
+
+const CLIENT = "0x8BA1f109551bD432803012645Ac136ddd64DBA72";
+const PROVIDER = "0x64A78b6d5e99274d01D1d0A70B180A73AAEb8d21";
+
+function createJobCreatedEvent(
+  jobId: BigInt,
+  client: Address,
+  provider: Address,
+  expiredAt: BigInt,
+  blockNumber: BigInt,
+): JobCreated {
+  let event = changetype<JobCreated>(newMockEvent());
+  event.parameters = new Array();
+  event.parameters.push(
+    new ethereum.EventParam("jobId", ethereum.Value.fromUnsignedBigInt(jobId)),
+  );
+  event.parameters.push(new ethereum.EventParam("client", ethereum.Value.fromAddress(client)));
+  event.parameters.push(new ethereum.EventParam("provider", ethereum.Value.fromAddress(provider)));
+  event.parameters.push(
+    new ethereum.EventParam("evaluator", ethereum.Value.fromAddress(Address.zero())),
+  );
+  event.parameters.push(new ethereum.EventParam("expiredAt", ethereum.Value.fromUnsignedBigInt(expiredAt)));
+  event.parameters.push(new ethereum.EventParam("hook", ethereum.Value.fromAddress(Address.zero())));
+  event.block.number = blockNumber;
+  event.block.timestamp = BigInt.fromI32(1_700_000_000);
+  event.transaction.hash = Bytes.fromHexString(
+    "0xaaaa00000000000000000000000000000000000000000000000000000000000001",
+  );
+  return event;
+}
 
 function createJobFundedEvent(
   jobId: BigInt,
@@ -15,19 +48,32 @@ function createJobFundedEvent(
 ): JobFunded {
   let event = changetype<JobFunded>(newMockEvent());
   event.parameters = new Array();
-  event.parameters.push(
-    new ethereum.EventParam("jobId", ethereum.Value.fromUnsignedBigInt(jobId)),
-  );
-  event.parameters.push(
-    new ethereum.EventParam("client", ethereum.Value.fromAddress(client)),
-  );
-  event.parameters.push(
-    new ethereum.EventParam("amount", ethereum.Value.fromUnsignedBigInt(amount)),
-  );
+  event.parameters.push(new ethereum.EventParam("jobId", ethereum.Value.fromUnsignedBigInt(jobId)));
+  event.parameters.push(new ethereum.EventParam("client", ethereum.Value.fromAddress(client)));
+  event.parameters.push(new ethereum.EventParam("amount", ethereum.Value.fromUnsignedBigInt(amount)));
   event.block.number = blockNumber;
   event.block.timestamp = BigInt.fromI32(1_700_000_000);
   event.transaction.hash = Bytes.fromHexString(
-    "0xaaaa00000000000000000000000000000000000000000000000000000000000001",
+    "0xbbbb00000000000000000000000000000000000000000000000000000000000002",
+  );
+  return event;
+}
+
+function createPaymentReleasedEvent(
+  jobId: BigInt,
+  provider: Address,
+  amount: BigInt,
+  blockNumber: BigInt,
+): PaymentReleased {
+  let event = changetype<PaymentReleased>(newMockEvent());
+  event.parameters = new Array();
+  event.parameters.push(new ethereum.EventParam("jobId", ethereum.Value.fromUnsignedBigInt(jobId)));
+  event.parameters.push(new ethereum.EventParam("provider", ethereum.Value.fromAddress(provider)));
+  event.parameters.push(new ethereum.EventParam("amount", ethereum.Value.fromUnsignedBigInt(amount)));
+  event.block.number = blockNumber;
+  event.block.timestamp = BigInt.fromI32(1_700_000_000);
+  event.transaction.hash = Bytes.fromHexString(
+    "0xcccc00000000000000000000000000000000000000000000000000000000000003",
   );
   return event;
 }
@@ -39,61 +85,96 @@ function createWithdrawalExecutedEvent(
 ): WithdrawalExecuted {
   let event = changetype<WithdrawalExecuted>(newMockEvent());
   event.parameters = new Array();
-  event.parameters.push(
-    new ethereum.EventParam("to", ethereum.Value.fromAddress(to)),
-  );
-  event.parameters.push(
-    new ethereum.EventParam("amount", ethereum.Value.fromUnsignedBigInt(amount)),
-  );
+  event.parameters.push(new ethereum.EventParam("to", ethereum.Value.fromAddress(to)));
+  event.parameters.push(new ethereum.EventParam("amount", ethereum.Value.fromUnsignedBigInt(amount)));
   event.block.number = blockNumber;
   event.block.timestamp = BigInt.fromI32(1_700_000_000);
   event.transaction.hash = Bytes.fromHexString(
-    "0xbbbb00000000000000000000000000000000000000000000000000000000000002",
+    "0xdddd00000000000000000000000000000000000000000000000000000000000004",
   );
   return event;
 }
 
-describe("handleQueryPaid", () => {
+function createPolicySetEvent(perTxCap: BigInt, dailyCap: BigInt): PolicySet {
+  let event = changetype<PolicySet>(newMockEvent());
+  event.parameters = new Array();
+  event.parameters.push(new ethereum.EventParam("perTxCap", ethereum.Value.fromUnsignedBigInt(perTxCap)));
+  event.parameters.push(new ethereum.EventParam("dailyCap", ethereum.Value.fromUnsignedBigInt(dailyCap)));
+  event.block.number = BigInt.fromI32(21_700);
+  event.block.timestamp = BigInt.fromI32(1_700_000_000);
+  event.transaction.hash = Bytes.fromHexString(
+    "0xeeee00000000000000000000000000000000000000000000000000000000000005",
+  );
+  return event;
+}
 
-  test("creates QueryPaid entity and buckets revenue into DailyPnL", () => {
-    let client = Address.fromString("0x8BA1f109551bD432803012645Ac136ddd64DBA72");
-    // block 21600 belongs to day-1 (21600/21600); 43000 -> day-1 as well
-    let event = createJobFundedEvent(
-      BigInt.fromI32(7),
-      client,
-      BigInt.fromString("1000000"), // 1.0 USDC (6-dec)
-      BigInt.fromI32(23_000),
-    );
+describe("handleJobCreated + handleQueryPaid", () => {
+  test("JobCreated stores real seller/deadline; JobFunded adds amount without P&L", () => {
     clearStore();
-    handleQueryPaid(event);
+    let client = Address.fromString(CLIENT);
+    let provider = Address.fromString(PROVIDER);
 
-    // QueryPaid row captured (jobId 7, buyer == client, amount)
+    // JobCreated: seller = provider, deadline = expiredAt, minBlock = creation block
+    handleJobCreated(
+      createJobCreatedEvent(BigInt.fromI32(7), client, provider, BigInt.fromI32(999_999), BigInt.fromI32(21_500)),
+    );
+    // JobFunded: amount recorded, but books NO revenue yet (commitment, not earnings)
+    handleQueryPaid(
+      createJobFundedEvent(BigInt.fromI32(7), client, BigInt.fromString("1000000"), BigInt.fromI32(23_000)),
+    );
+
     assert.entityCount("QueryPaid", 1);
+    // Real seller (provider) + deadline (expiredAt); store key = bytes hex of "qp-7"
+    assert.fieldEquals("QueryPaid", "0x71702d37", "seller", "0x64a78b6d5e99274d01d1d0a70b180a73aaeb8d21");
+    assert.fieldEquals("QueryPaid", "0x71702d37", "buyer", "0x8ba1f109551bd432803012645ac136ddd64dba72");
+    assert.fieldEquals("QueryPaid", "0x71702d37", "deadline", "999999");
+    assert.fieldEquals("QueryPaid", "0x71702d37", "minBlock", "21500");
+    assert.fieldEquals("QueryPaid", "0x71702d37", "amount", "1000000");
 
-    // DailyPnL day bucket aggregates revenue, net == revenue
-    assert.entityCount("DailyPnL", 1);
-    assert.fieldEquals("DailyPnL", "day-1", "revenue", "1000000");
-    assert.fieldEquals("DailyPnL", "day-1", "refunds", "0");
-    assert.fieldEquals("DailyPnL", "day-1", "costs", "0");
-    assert.fieldEquals("DailyPnL", "day-1", "net", "1000000");
+    // No DailyPnL written by funding alone
+    assert.entityCount("DailyPnL", 0);
   });
 
-  test("buckets two QueryPaid events in the same day and different days", () => {
-    let client = Address.fromString("0x8BA1f109551bD432803012645Ac136ddd64DBA72");
+  test("funded + settled job books its amount exactly once", () => {
     clearStore();
-    handleQueryPaid(
-      createJobFundedEvent(BigInt.fromI32(1), client, BigInt.fromString("500000"), BigInt.fromI32(21_600)),
+    let client = Address.fromString(CLIENT);
+    let provider = Address.fromString(PROVIDER);
+
+    handleJobCreated(
+      createJobCreatedEvent(BigInt.fromI32(1), client, provider, BigInt.fromI32(999_999), BigInt.fromI32(21_500)),
     );
     handleQueryPaid(
-      createJobFundedEvent(BigInt.fromI32(2), client, BigInt.fromString("250000"), BigInt.fromI32(22_000)),
+      createJobFundedEvent(BigInt.fromI32(1), client, BigInt.fromString("1000000"), BigInt.fromI32(23_000)),
     );
-    // both land in day-1 -> 750000 revenue
+    // Settlement = the single revenue event
+    handleSettled(
+      createPaymentReleasedEvent(BigInt.fromI32(1), provider, BigInt.fromString("1000000"), BigInt.fromI32(23_100)),
+    );
+
+    // day-1 (23100/21600): revenue == 1000000 exactly once, not 2000000.
+    assert.fieldEquals("DailyPnL", "day-1", "revenue", "1000000");
+    assert.fieldEquals("DailyPnL", "day-1", "net", "1000000");
+    assert.entityCount("DailyPnL", 1);
+  });
+
+  test("buckets revenue across days from settlements", () => {
+    clearStore();
+    let client = Address.fromString(CLIENT);
+    let provider = Address.fromString(PROVIDER);
+
+    handleSettled(
+      createPaymentReleasedEvent(BigInt.fromI32(1), provider, BigInt.fromString("500000"), BigInt.fromI32(21_600)),
+    );
+    handleSettled(
+      createPaymentReleasedEvent(BigInt.fromI32(2), provider, BigInt.fromString("250000"), BigInt.fromI32(22_000)),
+    );
+    // both in day-1
     assert.fieldEquals("DailyPnL", "day-1", "revenue", "750000");
     assert.entityCount("DailyPnL", 1);
 
-    // a later day (43200 -> day-2)
-    handleQueryPaid(
-      createJobFundedEvent(BigInt.fromI32(3), client, BigInt.fromString("100000"), BigInt.fromI32(43_300)),
+    // 43300 -> day-2
+    handleSettled(
+      createPaymentReleasedEvent(BigInt.fromI32(3), provider, BigInt.fromString("100000"), BigInt.fromI32(43_300)),
     );
     assert.entityCount("DailyPnL", 2);
     assert.fieldEquals("DailyPnL", "day-2", "revenue", "100000");
@@ -101,17 +182,25 @@ describe("handleQueryPaid", () => {
   });
 });
 
-describe("handleCostPaid", () => {
-
+describe("handleCostPaid + handlePolicySet", () => {
   test("records CostPaid and deducts costs from day net", () => {
-    let to = Address.fromString("0x00000000000000000000000000000000000000DE");
-    let event = createWithdrawalExecutedEvent(to, BigInt.fromString("300000"), BigInt.fromI32(21_700));
     clearStore();
-    handleCostPaid(event);
+    let to = Address.fromString("0x00000000000000000000000000000000000000DE");
+    handleCostPaid(createWithdrawalExecutedEvent(to, BigInt.fromString("300000"), BigInt.fromI32(21_700)));
 
     assert.entityCount("CostPaid", 1);
     assert.entityCount("DailyPnL", 1);
     assert.fieldEquals("DailyPnL", "day-1", "costs", "300000");
     assert.fieldEquals("DailyPnL", "day-1", "net", "-300000");
+  });
+
+  test("PolicySet records current caps into PolicyConfig", () => {
+    clearStore();
+    handlePolicySet(createPolicySetEvent(BigInt.fromString("1000000"), BigInt.fromString("10000000")));
+    handlePolicySet(createPolicySetEvent(BigInt.fromString("2000000"), BigInt.fromString("20000000")));
+
+    assert.entityCount("PolicyConfig", 1);
+    assert.fieldEquals("PolicyConfig", "current", "perTxCap", "2000000");
+    assert.fieldEquals("PolicyConfig", "current", "dailyCap", "20000000");
   });
 });

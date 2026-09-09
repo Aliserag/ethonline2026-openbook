@@ -11,7 +11,12 @@
 # NOTE: raw USDC Transfer events are NEVER indexed (EIP-7708 double-count trap);
 # Dollar figures are carried in the semantic events above.
 
-type QueryPaid @entity(immutable: true) {
+# NOTE: QueryPaid is created at JobCreated (provider/expiredAt only exist there)
+# and funded at JobFunded (amount) — so it is NOT immutable; id is the stable
+# jobId. Revenue is booked ONLY at PaymentReleased (Seller payouts); JobFunded
+# is a buyer->escrow commitment, never a P&L revenue line.
+
+type QueryPaid @entity(immutable: false) {
   id: Bytes!
   jobId: BigInt!
   buyer: Bytes!
@@ -52,6 +57,14 @@ type CostPaid @entity(immutable: true) {
 type PolicyBlocked @entity(immutable: true) {
   id: Bytes!
   reason: String!
+}
+
+# Latest PolicyWallet caps (perTxCap / dailyCap) — feeds Task 7 admin "current
+# caps" story. Singleton row: `current`. PolicySet fires on every cap change.
+type PolicyConfig @entity(immutable: false) {
+  id: ID!
+  perTxCap: BigInt!
+  dailyCap: BigInt!
 }
 
 type DailyPnL @entity(immutable: false) {
