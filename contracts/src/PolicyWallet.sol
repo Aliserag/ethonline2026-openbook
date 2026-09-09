@@ -53,6 +53,7 @@ contract PolicyWallet {
     /// @notice Attempt a withdrawal to `to`. Fails loud through `PolicyBlocked`
     ///         when a policy is violated; only a clean pass moves USDC.
     function requestWithdrawal(address to, uint256 amount) external onlyAgentOrOwner {
+        require(amount > 0, "zero amount");
         // Arc reverts transfers to address(0); guard before any policy checks.
         require(to != address(0), "to is zero");
 

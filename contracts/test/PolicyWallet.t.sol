@@ -131,6 +131,13 @@ contract PolicyWalletTest is Test {
         assertEq(usdc.balanceOf(spare), 0, "no USDC may move on a fresh wallet");
     }
 
+    /// @dev Zero-amount withdrawals revert outright — no event, no transfer.
+    function testZeroAmountReverts() public {
+        vm.prank(agent);
+        vm.expectRevert(bytes("zero amount"));
+        wallet.requestWithdrawal(spare, 0);
+    }
+
     /// @dev setAllowlist is owner-only; the agent cannot widen it.
     function testOnlyOwnerCanSetAllowlist() public {
         vm.prank(agent);
