@@ -227,9 +227,14 @@ export async function serveFundedJobs(
       stats.errors.push(`job ${jobId}: ${message}`);
       continue;
     }
-    const dataset = findDatasetForSla(config, sla.schemaHash) ?? config.datasets[0];
+    const dataset = findDatasetForSla(config, sla.schemaHash);
     if (dataset === undefined) {
-      stats.errors.push(`job ${jobId}: no dataset configured to serve`);
+      stats.errors.push(
+        `job ${jobId}: schemaHash ${sla.schemaHash} matches no configured dataset — refusing to serve a job with an unrelated payload`,
+      );
+      log(
+        `SKIP job=${jobId}: schemaHash ${sla.schemaHash} matches no configured dataset (committed at pay time) — no misdelivery`,
+      );
       continue;
     }
     let gatewayResult;
