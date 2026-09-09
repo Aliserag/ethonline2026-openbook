@@ -1,0 +1,16 @@
+node_modules/
+dist/
+out/
+cache/
+.env
+.env.local
+.env.*.local
+broadcast/
+.DS_Store
+*.log
+.next/
+.turbo/
+coverage/
+subgraph/build/
+subgraph/generated/
+.forge/
