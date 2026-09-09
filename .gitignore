@@ -16,3 +16,6 @@ subgraph/generated/
 subgraph/spike/build/
 subgraph/spike/generated/
 .forge/
+
+# SDD scratch (gitignored)
+.superpowers/

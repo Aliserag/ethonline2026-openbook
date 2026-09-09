@@ -1,0 +1,11 @@
+{
+  "name": "openbook",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": ["agent", "mcp", "app"],
+  "scripts": {
+    "test:agent": "bun test agent",
+    "test:mcp": "bun test mcp",
+    "build:mcp": "cd mcp && bun run build"
+  }
+}
