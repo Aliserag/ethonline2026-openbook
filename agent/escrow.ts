@@ -1,0 +1,375 @@
+/**
+ * ERC-8183 seller/buyer settlement spine (OpenBook Task 3).
+ *
+ * Thin, verified viem helpers over Arc's official AgenticCommerce reference
+ * deployment (`0x0747…4583`, proxy → verified impl `0xa316…351a`; paymentToken
+ * = native USDC `0x3600…0000`, 6 decimals; platform/evaluator fees 0; hook
+ * address(0) whitelisted — all verified in Task 0).
+ *
+ * Lifecycle (verified selectors + arg shapes from the ERC-8183 tutorial and the
+ * 71-entry arcscan ABI at agent/abi/erc8183.json):
+ *   client     createJob → approve(USDC) → fund
+ *   provider   setBudget → submit(jobId, deliverableHash)
+ *   evaluator  complete / reject                        (auto-refunds client)
+ *   client     claimRefund after expiredAt              (timeout path)
+ *
+ * Arc runtime notes baked in:
+ *  - `expiredAt` is a UNIX TIMESTAMP (verified: the reference impl reverts
+ *    `expiredAt <= now + 5min` with `ExpiryTooShort`). The plan's sketch said
+ *    "block.number + expiryBlocks" — that predates the verification and would
+ *    revert; we therefore take `expirySeconds` from `block.timestamp`.
+ *  - the mempool enforces a 20 Gwei `maxFeePerGas` floor (silently drops lower
+ *    caps; EIP-1559 base fee is pinned at exactly 20 Gwei) → ARC_GAS.
+ *  - USDC amount6dec is ALWAYS the 6-decimal ERC-20 view — never the
+ *    18-decimal native-gas view.
+ */
+
+import {
+  http,
+  keccak256,
+  toBytes,
+  type Abi,
+  type Address,
+  type Hash,
+  type PublicClient,
+  type TransactionReceipt,
+  type WalletClient,
+} from "viem";
+import { arcTestnet } from "viem/chains";
+import erc8183AbiRaw from "./abi/erc8183.json";
+
+/** Full 71-entry verified ABI of the AgenticCommerce reference (copied from scripts/spikes/abi/erc8183.json). */
+export const ERC8183_ABI = erc8183AbiRaw as Abi;
+
+/** ERC-8183 AgenticCommerce reference deployment on Arc testnet (Task 0-verified). */
+export const ERC8183: Address = "0x0747EEf0706327138c69792bF28Cd525089e4583";
+
+/** USDC ERC-20 view on Arc testnet — 6 decimals, same balance as native gas (never sum the two views). */
+export const USDC: Address = "0x3600000000000000000000000000000000000000";
+
+export const ZERO_ADDRESS: Address = "0x0000000000000000000000000000000000000000";
+
+/** Public Arc testnet RPC (chain 5042002). */
+export const ARC_RPC_URL = "https://rpc.testnet.arc.io";
+
+/** viem chain definition (built-in since viem ≥ 2.35). */
+export const ARC_CHAIN = arcTestnet;
+
+export const USDC_ABI = [
+  {
+    name: "approve",
+    type: "function",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "spender", type: "address" },
+      { name: "amount", type: "uint256" },
+    ],
+    outputs: [{ name: "", type: "bool" }],
+  },
+  {
+    name: "balanceOf",
+    type: "function",
+    stateMutability: "view",
+    inputs: [{ name: "owner", type: "address" }],
+    outputs: [{ name: "", type: "uint256" }],
+  },
+] as const satisfies Abi;
+
+/**
+ * Arc mempool fee floor (Task 0-verified): transactions with maxFeePerGas below
+ * 20 Gwei are silently dropped. EIP-1559 is active and the base fee is pinned
+ * at exactly 20 Gwei, so cap at 20 Gwei + 1 Gwei tip is valid and includes.
+ */
+export const ARC_GAS = {
+  maxFeePerGas: 20_000_000_000n,
+  maxPriorityFeePerGas: 1_000_000_000n,
+} as const;
+
+/** SLA freshness terms packed into the job description (consumed by Tasks 5/6). */
+export interface Sla {
+  /** minimum freshness block the deliverable's _meta.block must satisfy */
+  minBlock: number;
+  /** identifier for the dataset schema (full 32-byte hash, 0x-prefixed) */
+  schemaHash: `0x${string}`;
+  /** maximum tolerated latency, ms */
+  maxLatencyMs: number;
+}
+
+/**
+ * Deterministic SLA packing: fixed key order → byte-identical JSON for the same
+ * terms. Keeps the FULL hash (the plan's Step-1 expectation rendered it as
+ * "0xabab…" display shorthand). Format: JSON.stringify({minBlock, schemaHash,
+ * maxLatencyMs}) — the interface shared verbatim by Tasks 5 and 6.
+ */
+export function packSla(sla: Sla): string {
+  return JSON.stringify({
+    minBlock: sla.minBlock,
+    schemaHash: sla.schemaHash,
+    maxLatencyMs: sla.maxLatencyMs,
+  });
+}
+
+/** Inverse of packSla with shape validation (throws on malformed input). */
+export function parseSla(description: string): Sla {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(description);
+  } catch {
+    throw new Error(`invalid SLA description: not JSON (${description})`);
+  }
+  if (typeof parsed !== "object" || parsed === null) {
+    throw new Error("invalid SLA description: expected an object");
+  }
+  const p = parsed as Record<string, unknown>;
+  if (
+    typeof p.minBlock !== "number" ||
+    typeof p.schemaHash !== "string" ||
+    typeof p.maxLatencyMs !== "number"
+  ) {
+    throw new Error(
+      "invalid SLA description: expected {minBlock: number, schemaHash: string, maxLatencyMs: number}",
+    );
+  }
+  return {
+    minBlock: p.minBlock,
+    schemaHash: p.schemaHash as `0x${string}`,
+    maxLatencyMs: p.maxLatencyMs,
+  };
+}
+
+export interface JobView {
+  id: bigint;
+  client: Address;
+  provider: Address;
+  evaluator: Address;
+  description: string;
+  budget: bigint;
+  expiredAt: bigint;
+  status: number;
+  hook: Address;
+}
+
+/** JobStatus enum of the reference impl (getJob().status). */
+export const JOB_STATUS = ["Open", "Funded", "Submitted", "Completed", "Rejected", "Expired"] as const;
+
+/** Onchain view of a job (getJob). Normalizes array vs struct decoding across viem versions. */
+export async function getJob(publicClient: PublicClient, jobId: bigint): Promise<JobView> {
+  const raw = (await publicClient.readContract({
+    address: ERC8183,
+    abi: ERC8183_ABI,
+    functionName: "getJob",
+    args: [jobId],
+  })) as unknown as readonly unknown[] | Record<string, unknown>;
+  const arr = Array.isArray(raw) ? raw : null;
+  const obj = arr ? null : (raw as Record<string, unknown>);
+  const field = (key: string, index: number): unknown =>
+    arr ? arr[index] : obj?.[key];
+  return {
+    id: BigInt(field("id", 0) as bigint),
+    client: field("client", 1) as Address,
+    provider: field("provider", 2) as Address,
+    evaluator: field("evaluator", 3) as Address,
+    description: field("description", 4) as string,
+    budget: BigInt(field("budget", 5) as bigint),
+    expiredAt: BigInt(field("expiredAt", 6) as bigint),
+    status: Number(field("status", 7) as bigint | number),
+    hook: field("hook", 8) as Address,
+  };
+}
+
+export interface CreateJobParams {
+  provider: Address;
+  evaluator: Address;
+  sla: Sla;
+  /** escrow amount in 6-decimal USDC units — NEVER the 18-decimal gas view */
+  amount6dec: bigint;
+  /**
+   * Job deadline as seconds from `now`. Default 3600. The reference impl
+   * compares `expiredAt` against block.timestamp and reverts below now+300s
+   * (ExpiryTooShort, Task 0-verified).
+   */
+  expirySeconds?: number;
+  /** optional ERC-8183 hook; default address(0) (whitelisted, verified) */
+  hook?: Address;
+}
+
+/**
+ * Full job-funding sequence: createJob(packed SLA) → setBudget (provider quote)
+ * → approve(USDC) → fund (client). Returns the fresh jobId parsed from our own
+ * JobCreated log (no jobCounter race). All four writes use the same
+ * `walletClient` — pass a client whose account plays client/provider (single
+ * funded key covering all roles is legal per the verified spec).
+ */
+export async function createJobWithSla(
+  publicClient: PublicClient,
+  walletClient: WalletClient,
+  params: CreateJobParams,
+): Promise<bigint> {
+  const { provider, evaluator, sla, amount6dec } = params;
+  const hook = params.hook ?? ZERO_ADDRESS;
+  const expirySeconds = params.expirySeconds ?? 3600;
+  const account = requireAccount(walletClient);
+
+  const { timestamp } = await publicClient.getBlock();
+  const expiredAt = timestamp + BigInt(expirySeconds);
+
+  // 1. createJob — description carries the packed SLA
+  const createHash = await write(walletClient, {
+    address: ERC8183,
+    abi: ERC8183_ABI,
+    functionName: "createJob",
+    args: [provider, evaluator, expiredAt, packSla(sla), hook],
+  });
+  const createReceipt = await publicClient.waitForTransactionReceipt({
+    hash: createHash,
+  });
+  const jobLog = createReceipt.logs.find(
+    (log) =>
+      log.address.toLowerCase() === ERC8183.toLowerCase() &&
+      log.topics[0] === JOB_CREATED_TOPIC,
+  );
+  if (!jobLog?.topics[1]) {
+    throw new Error("createJob succeeded but JobCreated log is missing from the receipt");
+  }
+  const jobId = BigInt(jobLog.topics[1]);
+
+  // 2. setBudget — the reference impl expects the PROVIDER to quote the budget
+  await write(walletClient, {
+    address: ERC8183,
+    abi: ERC8183_ABI,
+    functionName: "setBudget",
+    args: [jobId, amount6dec, "0x"],
+  });
+  // 3. approve USDC — 6 decimals, never 18 (verified Task 0)
+  await write(walletClient, {
+    address: USDC,
+    abi: USDC_ABI,
+    functionName: "approve",
+    args: [ERC8183, amount6dec],
+  });
+  // 4. fund — job moves to Funded (status 1)
+  await write(walletClient, {
+    address: ERC8183,
+    abi: ERC8183_ABI,
+    functionName: "fund",
+    args: [jobId, "0x"],
+  });
+
+  return jobId;
+}
+
+/** Provider submits the deliverable hash → Submitted (status 2). */
+export async function submitDeliverable(
+  publicClient: PublicClient,
+  walletClient: WalletClient,
+  jobId: bigint,
+  deliverableHash: `0x${string}`,
+): Promise<TransactionReceipt> {
+  const hash = await write(walletClient, {
+    address: ERC8183,
+    abi: ERC8183_ABI,
+    functionName: "submit",
+    args: [jobId, deliverableHash, "0x"],
+  });
+  return publicClient.waitForTransactionReceipt({ hash });
+}
+
+/** Evaluator settles the job → USDC released to the provider; status 3. */
+export async function complete(
+  publicClient: PublicClient,
+  walletClient: WalletClient,
+  jobId: bigint,
+  reasonHash: `0x${string}`,
+): Promise<TransactionReceipt> {
+  const hash = await write(walletClient, {
+    address: ERC8183,
+    abi: ERC8183_ABI,
+    functionName: "complete",
+    args: [jobId, reasonHash, "0x"],
+  });
+  return publicClient.waitForTransactionReceipt({ hash });
+}
+
+/** Evaluator rejects the deliverable → client auto-refunded (Refunded event); status 4. */
+export async function rejectAndRefund(
+  publicClient: PublicClient,
+  walletClient: WalletClient,
+  jobId: bigint,
+  reasonHash: `0x${string}`,
+): Promise<TransactionReceipt> {
+  const hash = await write(walletClient, {
+    address: ERC8183,
+    abi: ERC8183_ABI,
+    functionName: "reject",
+    args: [jobId, reasonHash, "0x"],
+  });
+  return publicClient.waitForTransactionReceipt({ hash });
+}
+
+/** Client reclaims funds after expiredAt passes (JobExpired + Refunded); status 5. */
+export async function claimTimeout(
+  publicClient: PublicClient,
+  walletClient: WalletClient,
+  jobId: bigint,
+): Promise<TransactionReceipt> {
+  const hash = await write(walletClient, {
+    address: ERC8183,
+    abi: ERC8183_ABI,
+    functionName: "claimRefund",
+    args: [jobId],
+  });
+  return publicClient.waitForTransactionReceipt({ hash });
+}
+
+/** topic0 of JobCreated(uint256,address,address,address,uint256,address) — computed once. */
+const JOB_CREATED_TOPIC: Hash = keccak256(
+  toBytes("JobCreated(uint256,address,address,address,uint256,address)"),
+);
+
+interface WriteParams {
+  address: Address;
+  abi: Abi;
+  functionName: string;
+  args: readonly unknown[];
+}
+
+/**
+ * viem's writeContract is a generic overload set instantiated against
+ * ABI-literal types; we pass the verified JSON ABI as runtime data, so the
+ * boundary is a narrowed callable with the request shape we control.
+ */
+type WriteContractFn = (request: {
+  address: Address;
+  abi: Abi;
+  functionName: string;
+  args: readonly unknown[];
+  account: Address;
+  maxFeePerGas: bigint;
+  maxPriorityFeePerGas: bigint;
+}) => Promise<Hash>;
+
+/** Signed write through the caller's wallet client with the Arc fee floor pinned. */
+async function write(
+  walletClient: WalletClient,
+  params: WriteParams,
+): Promise<Hash> {
+  const send = walletClient.writeContract as unknown as WriteContractFn;
+  return send({
+    address: params.address,
+    abi: params.abi,
+    functionName: params.functionName,
+    args: params.args,
+    account: requireAccount(walletClient),
+    ...ARC_GAS,
+  });
+}
+
+function requireAccount(walletClient: WalletClient): Address {
+  const account = walletClient.account;
+  if (!account) {
+    throw new Error(
+      "escrow helpers need a wallet client with an attached account (createWalletClient({ account }))",
+    );
+  }
+  return account.address;
+}
