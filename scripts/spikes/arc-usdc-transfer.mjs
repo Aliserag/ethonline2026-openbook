@@ -83,7 +83,7 @@ async function main() {
   console.log(`transfer = ${usdc(AMOUNT)} -> ${recipient}`);
   const out = cast([
     "send", USDC, "transfer(address,uint256)", recipient, AMOUNT.toString(),
-    "--rpc-url", RPC, `--private-key=${pk}`,
+    "--rpc-url", RPC, `--private-key=${pk}`, "--max-fee-per-gas", "20000000000", // Arc 20 Gwei fee floor trap
   ]);
   const tx = (out.match(/0x[0-9a-fA-F]{64}/) || [])[0];
   if (!tx) {

@@ -49,20 +49,20 @@ doc_mode() {
   ADDR=$(cast wallet address --private-key "$PK")
 
   # ---- JOB A: happy path (create -> setBudget -> approve -> fund -> submit -> complete) ----
-  cast send $ESCROW "createJob(address,address,uint256,string,address)" $ADDR $ADDR $(( $(date +%s) + 3600 )) "test" 0x0000000000000000000000000000000000000000 --rpc-url $RPC --private-key $PK
+  cast send $ESCROW "createJob(address,address,uint256,string,address)" $ADDR $ADDR $(( $(date +%s) + 3600 )) "test" 0x0000000000000000000000000000000000000000 --rpc-url $RPC --private-key $PK --max-fee-per-gas 20000000000
   JOB=$(cast call $ESCROW "jobCounter()(uint256)" --rpc-url $RPC | cut -d' ' -f1)
-  cast send $ESCROW "setBudget(uint256,uint256,bytes)" $JOB 10000 0x --rpc-url $RPC --private-key $PK     # provider
-  cast send $USDC "approve(address,uint256)" $ESCROW 10000 --rpc-url $RPC --private-key $PK             # approve escrow
-  cast send $ESCROW "fund(uint256,bytes)" $JOB 0x --rpc-url $RPC --private-key $PK                      # client funds
-  cast send $ESCROW "submit(uint256,bytes32,bytes)" $JOB 0x80adce4a8a5654de547a0f2333538a0fb9cf51d5a2827dff1bb0c763eb887cc8 0x --rpc-url $RPC --private-key $PK
-  cast send $ESCROW "complete(uint256,bytes32,bytes)" $JOB 0x80adce4a8a5654de547a0f2333538a0fb9cf51d5a2827dff1bb0c763eb887cc8 0x --rpc-url $RPC --private-key $PK  # evaluator
+  cast send $ESCROW "setBudget(uint256,uint256,bytes)" $JOB 10000 0x --rpc-url $RPC --private-key $PK --max-fee-per-gas 20000000000     # provider
+  cast send $USDC "approve(address,uint256)" $ESCROW 10000 --rpc-url $RPC --private-key $PK --max-fee-per-gas 20000000000             # approve escrow
+  cast send $ESCROW "fund(uint256,bytes)" $JOB 0x --rpc-url $RPC --private-key $PK --max-fee-per-gas 20000000000                      # client funds
+  cast send $ESCROW "submit(uint256,bytes32,bytes)" $JOB 0x80adce4a8a5654de547a0f2333538a0fb9cf51d5a2827dff1bb0c763eb887cc8 0x --rpc-url $RPC --private-key $PK --max-fee-per-gas 20000000000
+  cast send $ESCROW "complete(uint256,bytes32,bytes)" $JOB 0x80adce4a8a5654de547a0f2333538a0fb9cf51d5a2827dff1bb0c763eb887cc8 0x --rpc-url $RPC --private-key $PK --max-fee-per-gas 20000000000  # evaluator
   # EXPECT: status 3 (Completed); provider balance +10000 (0.01 USDC); events PaymentReleased(10000)
 
   # ---- JOB B: reject path (create -> setBudget -> fund -> evaluator reject) ----
   # (fresh JOB from jobCounter after the createJob tx)
   # EXPECT: status 4 (Rejected); client refunded; event Refunded(10000)
 
-  # ---- JOB C: expiry path (create expiredAt=now+301 -> setBudget -> fund -> sleep ~310 -> claimRefund) ----
+  # ---- JOB C: expiry path (create expiredAt=now+360 -> setBudget -> fund -> sleep ~370 -> claimRefund) ----
   # NOTE: reference impl reverts expiredAt <= now+5min (ExpiryTooShort), so the shortest wait is ~5-6 min
   # EXPECT: status 5 (Expired); client refunded; event JobExpired + Refunded(10000)
 
@@ -81,7 +81,7 @@ exec_mode() {
     echo "FATAL: wallet $ADDR balance $bal < required $need (3x 0.01 escrow + gas buffer). Fund via faucet first."
     exit 3
   fi
-  local FLAGS=(--rpc-url "$RPC" --private-key "$PK")
+  local FLAGS=(--rpc-url "$RPC" --private-key "$PK" --max-fee-per-gas 20000000000)   # Arc 20 Gwei fee floor trap
   local now job st deliv
   deliv="0x80adce4a8a5654de547a0f2333538a0fb9cf51d5a2827dff1bb0c763eb887cc8"   # keccak("openbook-spike-deliverable-1")
 
@@ -112,13 +112,13 @@ exec_mode() {
 
   echo "== JOB C: expiry path (expect Expired=5) — waiting ~6 min =="
   now="$(date +%s)"
-  cast send "$ESCROW" "createJob(address,address,uint256,string,address)" "$ADDR" "$ADDR" $((now + 301)) "expiry-test" "$ZERO" "${FLAGS[@]}" || { echo "FAIL: createJob (C)"; exit 1; }
+  cast send "$ESCROW" "createJob(address,address,uint256,string,address)" "$ADDR" "$ADDR" $((now + 360)) "expiry-test" "$ZERO" "${FLAGS[@]}" || { echo "FAIL: createJob (C)"; exit 1; }
   job="$(job_counter)"
   cast send "$ESCROW" "setBudget(uint256,uint256,bytes)" "$job" "$AMOUNT" 0x "${FLAGS[@]}" || { echo "FAIL: setBudget (C)"; exit 1; }
   cast send "$USDC" "approve(address,uint256)" "$ESCROW" "$AMOUNT" "${FLAGS[@]}" || { echo "FAIL: approve (C)"; exit 1; }
   cast send "$ESCROW" "fund(uint256,bytes)" "$job" 0x "${FLAGS[@]}" || { echo "FAIL: fund (C)"; exit 1; }
-  echo "(sleeping 315s so expiredAt passes — reference impl enforces expiredAt > now+5min)"
-  sleep 315
+  echo "(sleeping 370s so onchain expiredAt passes — reference impl enforces expiredAt > now+5min)"
+  sleep 370
   cast send "$ESCROW" "claimRefund(uint256)" "$job" "${FLAGS[@]}" || { echo "FAIL: claimRefund (C)"; exit 1; }
   st="$(job_status "$job")"
   echo "JOB C status=$st (${STATUS_NAME[$st]}) — expect 5 (Expired) + client refund"

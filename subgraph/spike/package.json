@@ -6,7 +6,6 @@
   "scripts": {
     "codegen": "graph codegen",
     "build": "graph build",
-    "auth:studio": "graph auth --studio ${GRAPH_STUDIO_KEY}",
     "deploy:studio": "graph deploy --studio openbook-spike"
   },
   "devDependencies": {
