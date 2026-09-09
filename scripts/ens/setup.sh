@@ -310,11 +310,32 @@ stage_mint_approve() {
 }
 
 stage_mint_approve_broadcast() {
-  cast_txhash "mint $MINT_AMOUNT MockUSDC" "$MOCKUSDC" "mint(address,uint256)" >/dev/null \
-    || die "MockUSDC mint failed"
-  cast_txhash "approve $REGISTRAR for $MINT_AMOUNT" "$MOCKUSDC" "approve(address,uint256)" >/dev/null \
-    || die "MockUSDC approve failed"
-  echo "  MockUSDC minted + approved — the reveal can pull the fee"
+  # Idempotent: skip each step already satisfied onchain so a full execute run
+  # (stage 3's wait window + stage 4) broadcasts each exactly once.
+  local bal allow need_mint=1 need_approve=1
+  if command -v cast >/dev/null 2>&1; then
+    bal="$(cast call "$MOCKUSDC" "balanceOf(address)(uint256)" "$TREASURY_EOA" --rpc-url "$SEPOLIA_RPC" 2>/dev/null)"
+    # shellcheck disable=SC2015
+    [ -n "$bal" ] && [ "$bal" -ge "$TOTAL" ] && need_mint=0
+    allow="$(cast call "$MOCKUSDC" "allowance(address,address)(uint256)" "$TREASURY_EOA" "$REGISTRAR" --rpc-url "$SEPOLIA_RPC" 2>/dev/null)"
+    # shellcheck disable=SC2015
+    [ -n "$allow" ] && [ "$allow" -ge "$TOTAL" ] && need_approve=0
+  fi
+  if [ "$need_mint" -eq 1 ]; then
+    cast_txhash "mint $MINT_AMOUNT MockUSDC" "$MOCKUSDC" "mint(address,uint256)" >/dev/null \
+      || die "MockUSDC mint failed"
+    echo "  minted $MINT_AMOUNT MockUSDC to $TREASURY_EOA"
+  else
+    echo "  balance already >= fee total — skipping mint"
+  fi
+  if [ "$need_approve" -eq 1 ]; then
+    cast_txhash "approve $REGISTRAR for $MINT_AMOUNT" "$MOCKUSDC" "approve(address,uint256)" >/dev/null \
+      || die "MockUSDC approve failed"
+    echo "  approved $REGISTRAR for $MINT_AMOUNT"
+  else
+    echo "  allowance already >= fee total — skipping approve"
+  fi
+  echo "  MockUSDC ready — the reveal can pull the fee"
 }
 
 stage_price_quiet() {
@@ -450,6 +471,20 @@ else
   [ -z "$SEPOLIA_PK" ] && [ -z "$SEPOLIA_RPC" ] && echo "  (no SEPOLIA_PK/SEPOLIA_RPC — nothing will be broadcast; exact commands + calldata below)"
 fi
 [ "$PREP_CHANGEME" -gt 0 ] && echo "  WARN: records-prep.json has $PREP_CHANGEME CHANGEME placeholder(s) — only the funded run may set them."
+
+# Execute-mode preflight: refuse to run (before ANY broadcast, incl. commit/reveal)
+# while records.json still carries CHANGEME placeholders. FINAL_CHANGEME was counted
+# at startup, so this is a pure check — no network, no keys touched.
+if [ "$MODE" = "execute" ] && [ "$FINAL_CHANGEME" -gt 0 ]; then
+  cat <<'EOF'
+FATAL: records.json still contains CHANGEME placeholders — refusing to run; no
+broadcast will happen (commit/reveal/resolver-deploy are all held).
+Replace them first (docs/ens-storefront.md § Placeholder checklist), then re-run.
+Remaining placeholders:
+EOF
+  list_changeme "$RECORDS_FINAL" | sed 's/^/    /'
+  exit 3
+fi
 
 run_stage() { # $1 = stage function name — aborts the run on failures in execute mode
   "$1" || {

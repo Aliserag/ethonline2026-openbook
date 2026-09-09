@@ -94,14 +94,19 @@ broadcast commands, exits 0, and never touches a keyed path. With the keys it ex
    → broadcast; **wait ≥ 60 s** (`MIN_COMMITMENT_AGE` — the script uses the window to
    broadcast the resolver deploy and the MockUSDC mint/approve), save the printed **secret**
    (`echo 'ENS_COMMIT_SECRET=<s>' >> .env`).
-4. `cast send 0x768F… "mint(address,uint256)" <EOA> <2×total>` and
+4. MockUSDC funding (idempotent — each step skips when already satisfied onchain):
+   `cast send 0x768F… "mint(address,uint256)" <EOA> <2×total>` and
    `cast send 0x768F… "approve(address,uint256)" 0xa88553… <2×total>` — 2× total is a
    buffer: the fee is USD-denominated and can drift between step 1 and the reveal.
 5. `ens register reveal openbook.eth --secret $ENS_COMMIT_SECRET --resolver <PRED> --payment-token 0x768F… --chain sepolia --json` → broadcast (value = 0; the registrar pulls the fee).
 6. `ens set batch openbook.eth --chain sepolia --resolver <PRED> --data <scripts/ens/records.json>`
-   → broadcast (refuses to run while any `CHANGEME:` placeholder remains).
+   → broadcast.
 7. Verify: `ens get text openbook.eth --chain sepolia --key svc.price` returns
    `0.10 USDC/query` (script asserts this in execute mode).
+
+**CHANGEME preflight:** in execute mode the script validates `records.json` **at startup
+and aborts (exit 3) before any broadcast** — commit, reveal, and resolver-deploy are all
+held while a `CHANGEME:` placeholder remains (stage 6 keeps the same check as a backstop).
 
 ### Broadcast options
 
