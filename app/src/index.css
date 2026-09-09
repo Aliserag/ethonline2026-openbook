@@ -1,25 +1,35 @@
-/* OpenBook — ledger page for the machine economy.
-   Subject: an autonomous data-seller's storefront. The page reads like the
-   agent's own ledger: warm paper, ink type, hairline rules, mono numerics.
-   One signature element — the freshness ruler (a timeline bar in the
-   delivery panel) — carries the whole pitch: how old is this data, and
-   what happens when it breaks the SLA. */
+/* OpenBook — THE LEDGER TERMINAL.
+   The subject is the agent's public book: a live settlement ledger for the
+   machine economy. Bindery ledger paper, printer's ink, one semantic color
+   family for money states (settled / refunded / stale), a sola printer's
+   blue for interactivity. Every figure is set in ledger monotype. The
+   signature is THE TAPE — a receipt-style freshness strip that runs the
+   width of the page and prints every settlement event.
+
+   Display: Space Grotesk (the Arc chain's own UI face — the chain this
+   book runs on). Body: IBM Plex Sans. Data: IBM Plex Mono, always. */
 
 :root {
-  --paper: #f3efe6;
-  --panel: #faf7ef;
-  --ink: #1b1a15;
-  --muted: #6d6757;
-  --line: #d9d2bf;
-  --fresh: #0f7a5a;
-  --fresh-bg: #e4efe8;
-  --stale: #a63d2f;
-  --stale-bg: #f5e6e2;
-  --hint: #8a8371;
-  --link: #34507f;
-  --serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
-  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  --mono: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Menlo, Consolas, monospace;
+  /* paper & ink */
+  --paper: #eceae2;
+  --sheet: #f7f5ef;
+  --ink: #10151c;
+  --muted: #5e6670;
+  --rule: #c9c6ba;
+  --rule-strong: #9a9588;
+  /* money states — the only color that carries meaning */
+  --settled: #0e7a4f;
+  --settled-bg: #e3efe8;
+  --refunded: #b3402e;
+  --refunded-bg: #f6e5e1;
+  --stale: #a97b1c;
+  --stale-bg: #f4ecda;
+  /* interactivity only */
+  --accent: #2a4b8f;
+  /* type */
+  --display: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 }
 
 * {
@@ -37,134 +47,182 @@ body {
   color: var(--ink);
   font-family: var(--sans);
   font-size: 15px;
-  line-height: 1.45;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
 }
 
 #root {
-  max-width: 1040px;
+  max-width: 1120px;
   margin: 0 auto;
-  padding: 32px 24px 64px;
+  padding: 28px 22px 48px;
 }
 
-/* ---- masthead ---------------------------------------------------------- */
+/* ---- identity card (masthead) ------------------------------------------ */
 
 .masthead {
   display: flex;
-  align-items: baseline;
+  align-items: flex-end;
   justify-content: space-between;
-  gap: 16px;
+  gap: 20px;
   flex-wrap: wrap;
-  border-bottom: 2px solid var(--ink);
-  padding-bottom: 14px;
+  padding-bottom: 16px;
+  border-bottom: 3px double var(--ink);
+}
+
+.masthead .nameblock {
+  min-width: 0;
 }
 
 .masthead h1 {
-  margin: 0;
-  font-family: var(--serif);
-  font-size: 30px;
-  font-weight: 700;
-  letter-spacing: -0.01em;
+  margin: 0 0 4px;
+  font-family: var(--display);
+  font-size: 34px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.05;
 }
 
-.masthead .tagline {
-  font-size: 13px;
+.masthead h1 .ledger-no {
+  font-family: var(--mono);
+  font-size: 15px;
+  font-weight: 500;
   color: var(--muted);
-  margin-top: 3px;
+  letter-spacing: 0.04em;
+  margin-left: 10px;
+}
+
+.masthead h1 .ledger-no::before {
+  content: "·";
+  color: var(--rule-strong);
+  margin-right: 10px;
+}
+
+.tagline {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  color: var(--muted);
 }
 
 .chainbadges {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   flex-wrap: wrap;
 }
 
 .chainbadges span {
   font-family: var(--mono);
   font-size: 11px;
-  letter-spacing: 0.04em;
-  padding: 4px 8px;
-  border: 1px solid var(--line);
-  background: var(--panel);
-  color: var(--muted);
-  white-space: nowrap;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border: 1px solid var(--rule-strong);
+  padding: 3px 8px;
+  background: var(--sheet);
 }
 
+/* ---- printer's proof strip (env + wallet) ------------------------------- */
+
 .envline {
-  margin: 10px 0 0;
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--hint);
   display: flex;
   gap: 14px;
   flex-wrap: wrap;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--muted);
+  padding: 8px 0 14px;
+  border-bottom: 1px solid var(--rule);
 }
 
 .envline .yes {
-  color: var(--fresh);
+  color: var(--settled);
 }
 
 .envline .no {
-  color: var(--stale);
+  color: var(--muted);
+  text-decoration: underline dotted var(--rule-strong);
 }
 
-/* ---- process strip ------------------------------------------------------ */
+/* ---- the book: journal left, running balance right ---------------------- */
+
+.book {
+  display: grid;
+  grid-template-columns: minmax(0, 1.65fr) minmax(0, 1fr);
+  gap: 18px;
+  margin-top: 18px;
+}
+
+@media (max-width: 860px) {
+  .book {
+    grid-template-columns: 1fr;
+  }
+}
+
+.journal {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+/* journal entry numbers — this flow is a real sequence (resolve→settle) */
 
 .process {
-  display: flex;
-  gap: 0;
   list-style: none;
-  margin: 22px 0 26px;
+  margin: 0;
   padding: 0;
-  border: 1px solid var(--line);
-  background: var(--panel);
-  overflow: hidden;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  counter-reset: entry;
 }
 
 .process li {
-  flex: 1;
+  counter-increment: entry;
+  flex: 1 1 auto;
+  min-width: 96px;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px 14px;
+  gap: 7px;
   font-family: var(--mono);
   font-size: 11px;
   letter-spacing: 0.05em;
   text-transform: uppercase;
   color: var(--muted);
-  border-right: 1px solid var(--line);
+  padding: 8px 10px;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  background: var(--sheet);
 }
 
-.process li:last-child {
-  border-right: 0;
-}
-
-.process .dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--line);
-  flex: none;
-}
-
-.process li.done .dot {
-  background: var(--fresh);
-}
-
-.process li.live .dot {
-  background: var(--stale);
-  box-shadow: 0 0 0 3px var(--stale-bg);
+.process li::before {
+  content: counter(entry, decimal-leading-zero);
+  font-size: 10px;
+  color: var(--rule-strong);
 }
 
 .process li.done {
   color: var(--ink);
+  background: var(--settled-bg);
+  border-color: var(--settled);
 }
 
-/* ---- panels -------------------------------------------------------------- */
+.process li.live {
+  color: var(--ink);
+  background: var(--stale-bg);
+  border-color: var(--stale);
+}
+
+.process li.done::before {
+  color: var(--settled);
+}
+
+/* ---- panels --------------------------------------------------------------- */
 
 .panel {
-  border: 1px solid var(--line);
-  background: var(--panel);
-  margin: 0 0 22px;
+  border: 1px solid var(--rule-strong);
+  background: var(--sheet);
+  border-radius: 4px;
+  overflow: hidden;
 }
 
 .panel > header {
@@ -172,15 +230,18 @@ body {
   align-items: baseline;
   justify-content: space-between;
   gap: 12px;
-  padding: 12px 18px;
-  border-bottom: 1px solid var(--line);
+  flex-wrap: wrap;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--rule);
+  background: var(--paper);
 }
 
 .panel > header h2 {
   margin: 0;
-  font-family: var(--serif);
-  font-size: 18px;
-  font-weight: 700;
+  font-family: var(--display);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
 }
 
 .panel > header .sub {
@@ -190,46 +251,33 @@ body {
 }
 
 .panel .body {
-  padding: 16px 18px;
+  padding: 16px 18px 18px;
 }
 
-.tworow {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 22px;
-}
-
-@media (max-width: 760px) {
-  .tworow {
-    grid-template-columns: 1fr;
-  }
-}
-
-/* ---- ledger rows (ENS storefront) -------------------------------------- */
+/* ---- ledger tables ------------------------------------------------------- */
 
 .ledger {
   width: 100%;
   border-collapse: collapse;
-  font-size: 13px;
+  font-size: 13.5px;
 }
 
 .ledger th {
-  text-align: left;
   font-family: var(--mono);
-  font-size: 10px;
+  font-size: 10.5px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--muted);
-  font-weight: 500;
-  padding: 6px 10px;
-  border-bottom: 1px solid var(--line);
+  text-align: left;
+  border-bottom: 1px solid var(--rule-strong);
+  padding: 6px 8px;
 }
 
 .ledger td {
-  padding: 7px 10px;
-  border-bottom: 1px solid var(--line);
+  padding: 7px 8px;
+  border-bottom: 1px solid var(--rule);
   vertical-align: top;
-  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .ledger tr:last-child td {
@@ -238,87 +286,86 @@ body {
 
 .ledger td.key {
   font-family: var(--mono);
-  color: var(--ink);
+  font-size: 12px;
   white-space: nowrap;
+}
+
+@media (max-width: 860px) {
+  .ledger td.key {
+    white-space: normal;
+    word-break: break-word;
+  }
 }
 
 .ledger td.val {
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: 12.5px;
 }
 
 .ledger td.ok {
-  color: var(--fresh);
+  color: var(--settled);
 }
 
 .ledger td.missing {
-  color: var(--stale);
+  color: var(--refunded);
 }
 
-/* ---- buttons, inputs ------------------------------------------------------- */
+/* ---- buttons, inputs ----------------------------------------------------- */
 
 button {
-  font: inherit;
   font-family: var(--sans);
-  font-size: 13px;
-  font-weight: 600;
-  padding: 8px 16px;
-  border: 1px solid var(--ink);
-  background: var(--panel);
+  font-size: 13.5px;
+  font-weight: 500;
+  border: 1px solid var(--rule-strong);
+  border-radius: 4px;
+  background: var(--sheet);
   color: var(--ink);
+  padding: 7px 14px;
   cursor: pointer;
-  transition: background 120ms ease, color 120ms ease;
 }
 
 button:hover:not(:disabled) {
-  background: var(--ink);
-  color: var(--paper);
+  border-color: var(--ink);
 }
 
 button:disabled {
-  border-color: var(--line);
-  color: var(--hint);
-  background: transparent;
+  opacity: 0.45;
   cursor: not-allowed;
 }
 
 button.primary {
   background: var(--ink);
-  color: var(--paper);
+  color: var(--sheet);
+  border-color: var(--ink);
 }
 
 button.primary:hover:not(:disabled) {
-  background: var(--fresh);
-  border-color: var(--fresh);
-  color: var(--paper);
+  background: var(--accent);
+  border-color: var(--accent);
 }
 
 button.danger {
-  border-color: var(--stale);
-  color: var(--stale);
-}
-
-button.danger:hover:not(:disabled) {
-  background: var(--stale);
-  border-color: var(--stale);
-  color: var(--paper);
+  background: var(--refunded);
+  border-color: var(--refunded);
+  color: #fff;
 }
 
 select,
 textarea {
-  font: inherit;
   font-family: var(--mono);
-  font-size: 12px;
-  padding: 7px 9px;
-  border: 1px solid var(--line);
-  background: var(--paper);
+  font-size: 12.5px;
+  border: 1px solid var(--rule-strong);
+  border-radius: 4px;
+  background: #fffdfa;
   color: var(--ink);
+  padding: 7px 9px;
   width: 100%;
 }
 
 textarea {
-  min-height: 64px;
+  min-height: 120px;
   resize: vertical;
+  line-height: 1.5;
 }
 
 .field {
@@ -328,99 +375,251 @@ textarea {
 .field label {
   display: block;
   font-family: var(--mono);
-  font-size: 10px;
+  font-size: 10.5px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--muted);
   margin-bottom: 5px;
 }
 
+/* ---- running balance (P&L summary — right column) ----------------------- */
+
+.running {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.running li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 2px;
+  border-bottom: 1px solid var(--rule);
+  font-family: var(--mono);
+  font-size: 13px;
+}
+
+.running li:last-child {
+  border-bottom: 0;
+}
+
+.running .cap {
+  font-family: var(--sans);
+  font-size: 12px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.running .fig {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.running .fig.settled {
+  color: var(--settled);
+}
+
+.running .fig.refunded {
+  color: var(--refunded);
+}
+
+.running .fig.net {
+  color: var(--ink);
+}
+
+.statline {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--muted);
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--rule-strong);
+}
+
 /* ---- notices --------------------------------------------------------------- */
 
 .notice {
-  border-left: 3px solid var(--line);
-  padding: 10px 14px;
-  font-size: 13px;
-  background: var(--panel);
-  margin: 8px 0;
+  border: 1px solid var(--rule);
+  background: var(--paper);
+  border-radius: 4px;
+  padding: 10px 12px;
+  font-size: 13.5px;
+  margin: 0 0 12px;
 }
 
 .notice.error {
-  border-left-color: var(--stale);
-  color: var(--stale);
+  border-color: var(--refunded);
+  background: var(--refunded-bg);
 }
 
 .notice.error strong {
-  font-family: var(--mono);
-  font-size: 12px;
+  color: var(--refunded);
 }
 
 .notice.hardfail {
-  border-left-color: var(--stale);
-  background: var(--stale-bg);
-  color: var(--stale);
+  border-color: var(--refunded);
+  background: var(--refunded-bg);
+}
+
+.notice.hardfail strong {
+  color: var(--refunded);
 }
 
 .notice.ok {
-  border-left-color: var(--fresh);
-  background: var(--fresh-bg);
-  color: var(--fresh);
+  border-color: var(--settled);
+  background: var(--settled-bg);
+}
+
+.notice.ok strong {
+  color: var(--settled);
 }
 
 .notice .mono {
   font-family: var(--mono);
   font-size: 12px;
-  overflow-wrap: anywhere;
+  margin-top: 5px;
+}
+
+.notice a {
+  color: var(--accent);
 }
 
 b.step {
   font-family: var(--mono);
-  font-size: 11px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--hint);
+  font-weight: 600;
 }
 
-/* ---- freshness ruler (the signature) -------------------------------------- */
+/* ---- THE TAPE — the signature ---------------------------------------------
+   A receipt strip, full width, beneath the book. It prints the freshness
+   scale (SLA floor → delivered → chain head) with a needle, then types out
+   the settlement events as they land. Idle: rules only, awaiting activity. */
+
+.tape {
+  margin-top: 18px;
+  border: 1px solid var(--ink);
+  border-radius: 4px;
+  background: var(--sheet);
+  overflow: hidden;
+}
+
+.tape__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 8px 14px;
+  background: var(--ink);
+  color: var(--sheet);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.tape__head .tape__title {
+  font-weight: 600;
+}
+
+.tape__head .tape__status {
+  color: var(--rule);
+}
+
+.tape__body {
+  padding: 14px 14px 10px;
+}
+
+.tape__scale {
+  position: relative;
+  height: 46px;
+  border-bottom: 1px dashed var(--rule-strong);
+  margin-bottom: 10px;
+}
+
+.tape__ticks {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 40px;
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  color: var(--rule-strong);
+  letter-spacing: 0.04em;
+}
+
+.tape__events {
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.9;
+  min-height: 2.2em;
+}
+
+.tape__events .ev {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tape__events .ev.settled {
+  color: var(--settled);
+}
+
+.tape__events .ev.refunded {
+  color: var(--refunded);
+  text-decoration: line-through;
+  text-decoration-thickness: 1.5px;
+}
+
+.tape__events .ev.stale {
+  color: var(--stale);
+}
+
+.tape__events .ev.idle {
+  color: var(--muted);
+}
+
+/* reuse the ruling scale from the old ruler inside the tape */
 
 .ruler {
-  position: relative;
-  margin: 26px 4px 10px;
-  height: 44px;
-  border-top: 1px solid var(--muted);
-  border-bottom: 1px solid var(--line);
-  background: linear-gradient(
-    to bottom,
-    transparent 0,
-    transparent 17px,
-    var(--line) 17px,
-    var(--line) 18px,
-    transparent 18px
-  );
+  position: absolute;
+  inset: 0;
 }
 
 .ruler .mark {
   position: absolute;
   top: 2px;
-  height: 12px;
-  border-left: 1px solid var(--muted);
-  padding-left: 4px;
   font-family: var(--mono);
-  font-size: 9px;
+  font-size: 9.5px;
   color: var(--muted);
   white-space: nowrap;
 }
 
 .ruler .mark.minblock {
-  border-left-color: var(--ink);
-  color: var(--ink);
+  color: var(--stale);
+}
+
+.ruler .windowbar {
+  position: absolute;
+  top: 20px;
+  height: 10px;
+  border: 1px dashed var(--stale);
+  background: var(--stale-bg);
+  opacity: 0.85;
+  min-width: 2px;
 }
 
 .ruler .needle {
   position: absolute;
-  top: 10px;
+  top: 6px;
   width: 2px;
-  height: 24px;
+  height: 30px;
+  background: var(--ink);
 }
 
 .ruler .needle.meta {
@@ -428,20 +627,22 @@ b.step {
 }
 
 .ruler .needle.meta.fresh {
-  background: var(--fresh);
+  background: var(--settled);
 }
 
 .ruler .needle.head {
-  background: var(--ink);
+  background: var(--accent);
 }
 
 .ruler .needle .lbl {
   position: absolute;
-  top: 26px;
-  left: 4px;
-  font-family: var(--mono);
-  font-size: 9px;
+  top: 34px;
+  left: -1px;
+  transform: translateX(-50%);
   white-space: nowrap;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--muted);
 }
 
 .ruler .needle.meta .lbl {
@@ -449,31 +650,43 @@ b.step {
 }
 
 .ruler .needle.meta.fresh .lbl {
-  color: var(--fresh);
+  color: var(--settled);
 }
 
 .ruler .needle.head .lbl {
-  color: var(--ink);
+  color: var(--accent);
 }
 
-.ruler .windowbar {
-  position: absolute;
-  top: 14px;
-  height: 8px;
-  background: var(--fresh-bg);
-  border: 1px solid var(--fresh);
-  opacity: 0.8;
+/* ---- foot ------------------------------------------------------------------ */
+
+.foot {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 16px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.foot a {
+  color: var(--accent);
 }
 
 /* focus / reduced motion ---------------------------------------------------- */
 
 :focus-visible {
-  outline: 2px solid var(--link);
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  * {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
     transition: none !important;
   }
 }
