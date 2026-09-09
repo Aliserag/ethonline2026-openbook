@@ -1,1 +1,20 @@
-{"name":"mcp","version":"0.1.0","private":true,"type":"module"}
+{
+  "name": "sla-subgraph-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Gateway-backed MCP server that sells SLA-guaranteed subgraph queries (OpenBook): freshness gates that never charge for stale data, ENSv2-priced quotes, deterministic verify_delivery settlement, onchain P&L.",
+  "bin": {
+    "sla-subgraph-mcp": "./dist/server.js"
+  },
+  "files": ["dist", "src", "config", "README.md", "SKILL.md"],
+  "scripts": {
+    "build": "bun build ./src/server.ts --outfile ./dist/server.js --target node --banner '#!/usr/bin/env node'",
+    "test": "bun test mcp/test"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.19.0",
+    "viem": "^2.35.0",
+    "zod": "^3.25.0"
+  }
+}

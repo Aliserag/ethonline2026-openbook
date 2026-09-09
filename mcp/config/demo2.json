@@ -1,0 +1,25 @@
+{
+  "name": "openbook-demo2",
+  "ens": "openbook.eth",
+  "escrow": "0x0747EEf0706327138c69792bF28Cd525089e4583",
+  "payee": "0x0000000000000000000000000000000000000000",
+  "operatorKey": "OPERATOR_PRIVATE_KEY",
+  "gateway": {
+    "keyEnv": "GRAPH_GATEWAY_KEY",
+    "baseUrl": "https://gateway.thegraph.com"
+  },
+  "pnl": {
+    "endpoint": "https://api.studio.thegraph.com/query/{GRAPH_GATEWAY_KEY}/openbook-pnl/version/latest",
+    "query": "{ dailyPnLs { id revenue costs refunds net } _meta { block { number } } }"
+  },
+  "datasets": [
+    {
+      "id": "compound-v3-ethereum-lending",
+      "subgraphId": "AwoxEZbiWLvv6e3QdvdMZw4WDURdGbvPfHmZRc8Dpfz9",
+      "schema": "lending/3.1.0",
+      "description": "Compound V3 lending markets on Ethereum (Messari lending/3.1.0 — self-registered dataset; same server, second subgraph)",
+      "freshness": { "maxAge": 50 },
+      "priceUsdc": 100000
+    }
+  ]
+}

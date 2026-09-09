@@ -1,0 +1,33 @@
+{
+  "name": "openbook",
+  "ens": "openbook.eth",
+  "escrow": "0x0747EEf0706327138c69792bF28Cd525089e4583",
+  "payee": "0x0000000000000000000000000000000000000000",
+  "operatorKey": "OPERATOR_PRIVATE_KEY",
+  "gateway": {
+    "keyEnv": "GRAPH_GATEWAY_KEY",
+    "baseUrl": "https://gateway.thegraph.com"
+  },
+  "pnl": {
+    "endpoint": "https://api.studio.thegraph.com/query/{GRAPH_GATEWAY_KEY}/openbook-pnl/version/latest",
+    "query": "{ dailyPnLs { id revenue costs refunds net } _meta { block { number } } }"
+  },
+  "datasets": [
+    {
+      "id": "aave-v3-arbitrum-lending",
+      "subgraphId": "4xyasjQeREe7PxnF6wVdobZvCw5mhoHZq3T7guRpuNPf",
+      "schema": "lending/3.1.0",
+      "description": "Aave V3 lending markets on Arbitrum (Messari lending/3.1.0, Start Fresh pin)",
+      "freshness": { "maxAge": 50 },
+      "priceUsdc": 100000
+    },
+    {
+      "id": "uniswap-v3-arbitrum-dex",
+      "subgraphId": "FQ6JYszEKApsBpAmiHesRsd9Ygc6mzmpNRANeVQFYoVX",
+      "schema": "dex-amm/4.0.1",
+      "description": "Uniswap V3 AMM pools on Arbitrum (Messari dex-amm/4.0.1, Start Fresh pin)",
+      "freshness": { "maxAge": 50 },
+      "priceUsdc": 100000
+    }
+  ]
+}
