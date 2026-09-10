@@ -363,12 +363,9 @@ export function createApp(config: OpenBookConfig, deps: AppDeps = {}): OpenBookA
   };
 
   const getPnl = async (): Promise<GetPnlResult> => {
-    if (!gatewayKey) {
-      throw new Error(
-        "GRAPH_GATEWAY_KEY not set — get_pnl queries the openbook-pnl Studio subgraph (key-gated)",
-      );
-    }
-    const endpoint = config.pnl.endpoint.replace("{GRAPH_GATEWAY_KEY}", gatewayKey);
+    // The Studio query endpoint is account-scoped and public — no key required.
+    // ({GRAPH_GATEWAY_KEY} interpolation kept for configs that still carry it.)
+    const endpoint = config.pnl.endpoint.replace("{GRAPH_GATEWAY_KEY}", gatewayKey ?? "");
     const { data, meta } = await hostedQuery({ url: endpoint, query: config.pnl.query, fetchImpl });
     const rows: PnlRow[] = [];
     if (typeof data === "object" && data !== null) {

@@ -310,13 +310,17 @@ describe("get_pnl", () => {
       refunds: "0",
       net: "800000",
     });
-    // get_pnl queries the Task 4 subgraph endpoint (Studio), not the pinned Gateway id
-    expect(requests[0].url).toContain("/openbook-pnl/");
+    // get_pnl queries the open-book subgraph endpoint (Studio), not the pinned Gateway id
+    expect(requests[0].url).toContain("/open-book/");
   });
 
-  it("hard-fails cleanly without GRAPH_GATEWAY_KEY", async () => {
-    const app = createApp(configOf("openbook.json"), { env: {}, readEnsText: stubEns(ensFixtures) });
-    await expect(app.getPnl()).rejects.toThrow(/GRAPH_GATEWAY_KEY/);
+  it("works without GRAPH_GATEWAY_KEY — the Studio query endpoint is public", async () => {
+    const { fetchImpl, requests } = mockFetch(() => pnlBody);
+    const app = createApp(configOf("openbook.json"), { env: {}, fetchImpl, readEnsText: stubEns(ensFixtures) });
+    const out: GetPnlResult = await app.getPnl();
+    expect(out.metaBlock).toBe(61700000);
+    expect(out.dailyPnLs).toHaveLength(2);
+    expect(requests).toHaveLength(1);
   });
 });
 

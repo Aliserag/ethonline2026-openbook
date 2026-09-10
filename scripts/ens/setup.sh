@@ -180,9 +180,9 @@ broadcast() { # $1 = label, $2 = to, $3 = data
     || die "broadcast failed for: $1 ($2)"
 }
 
-cast_txhash() { # $1 = label, $2 = to, $3 = data — prints the transactionHash
+cast_txhash() { # $1 = label, $2 = to, $3 = data|sig, $4+ = call args — prints the transactionHash
   local out
-  out="$(cast send "$2" "$3" --rpc-url "$SEPOLIA_RPC" --private-key "$SEPOLIA_PK" --json 2>&1)" \
+  out="$(cast send "$2" "$3" "${@:4}" --rpc-url "$SEPOLIA_RPC" --private-key "$SEPOLIA_PK" --json 2>&1)" \
     || die "broadcast failed for: $1 ($2): $out"
   printf '%s' "$out" | jq -r '.transactionHash // empty' \
     || die "broadcast for $1 returned no transactionHash"
@@ -322,14 +322,14 @@ stage_mint_approve_broadcast() {
     [ -n "$allow" ] && [ "$allow" -ge "$TOTAL" ] && need_approve=0
   fi
   if [ "$need_mint" -eq 1 ]; then
-    cast_txhash "mint $MINT_AMOUNT MockUSDC" "$MOCKUSDC" "mint(address,uint256)" >/dev/null \
+    cast_txhash "mint $MINT_AMOUNT MockUSDC" "$MOCKUSDC" "mint(address,uint256)" "$TREASURY_EOA" "$MINT_AMOUNT" >/dev/null \
       || die "MockUSDC mint failed"
     echo "  minted $MINT_AMOUNT MockUSDC to $TREASURY_EOA"
   else
     echo "  balance already >= fee total — skipping mint"
   fi
   if [ "$need_approve" -eq 1 ]; then
-    cast_txhash "approve $REGISTRAR for $MINT_AMOUNT" "$MOCKUSDC" "approve(address,uint256)" >/dev/null \
+    cast_txhash "approve $REGISTRAR for $MINT_AMOUNT" "$MOCKUSDC" "approve(address,uint256)" "$REGISTRAR" "$MINT_AMOUNT" >/dev/null \
       || die "MockUSDC approve failed"
     echo "  approved $REGISTRAR for $MINT_AMOUNT"
   else
