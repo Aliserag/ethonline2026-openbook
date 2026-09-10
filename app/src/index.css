@@ -1115,18 +1115,22 @@ textarea {
 
 /* tooltips: desktop = centered bubble over the chip; masthead chips open
    BELOW (the masthead sits near the viewport top — an above-chip bubble clips
-   the top edge at scrollY 0); ≤1150px the bubble anchors to the viewport */
+   the top edge at scrollY 0); ≤1200px the bubble anchors to the viewport.
+   The masthead flip is desktop-only: its higher specificity must not leak
+   into the anchored regime, where top:130% resolves against the VIEWPORT. */
 
-.masthead .tip::after {
-  bottom: auto;
-  top: 130%;
-}
+@media (min-width: 1201px) {
+  .masthead .tip::after {
+    bottom: auto;
+    top: 130%;
+  }
 
-.masthead .tip::before {
-  bottom: auto;
-  top: 122%;
-  border-top-color: transparent;
-  border-bottom-color: var(--ink);
+  .masthead .tip::before {
+    bottom: auto;
+    top: 122%;
+    border-top-color: transparent;
+    border-bottom-color: var(--ink);
+  }
 }
 
 @media (max-width: 1200px) {
