@@ -50,10 +50,10 @@ dataSources:
     name: PolicyWallet
     network: arc-testnet
     source:
-      # TODO(deploy): replace placeholder with the deployed PolicyWallet address
+      # deployed 2026-09-10 (Arc testnet, tx 0x080aba99…157e9)
       # once Task 2 lands (POLICY_WALLET_ADDR in .env). Structure is
       # address-parameterized so only this line changes at deploy time.
-      address: "0x00000000000000000000000000000000000000DE"
+      address: "0x4e83eB15EE973A49E40D9A79aB2cA89a4Eb4894E"
       abi: PolicyWallet
     mapping:
       kind: ethereum/events

@@ -54,7 +54,7 @@ const DAY_BLOCKS = BigInt.fromI32(21600);
 // placeholder before codegen (see scripts/deploy-subgraph.sh + docs/keys-needed.md).
 // The zero address = index nothing: keyless-safe default, but a deploy that
 // skips substitution books NO P&L.
-export const SELLER = "0x0000000000000000000000000000000000000000";
+export const SELLER = "0x64A78b6d5e99274d01D1d0A70B180A73AAEb8d21";
 
 /** True when the job's provider is the OpenBook seller (scopes all job events). */
 function isSeller(provider: Address): boolean {

@@ -29,7 +29,7 @@ REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SUBGRAPH_DIR="$REPO_ROOT/subgraph"
 SUBGRAPH_NAME="${SUBGRAPH_NAME:-openbook-pnl}"
 NETWORK="${NETWORK:-arc-testnet}"
-GRAPH_BIN="$(command -v graph || true)"
+GRAPH_BIN="${GRAPH_BIN:-$(command -v graph || echo "$HOME/.npm-global/bin/graph")}"
 
 if [ -z "$GRAPH_BIN" ]; then
   echo "FATAL: graph CLI not found. Install: npm install -g @graphprotocol/graph-cli"
@@ -75,8 +75,8 @@ No GRAPH_STUDIO_DEPLOY_KEY set — deploy skipped (clean exit). To deploy:
 3. Run:
 
    cd subgraph
-   graph auth --studio <YOUR_GRAPH_STUDIO_DEPLOY_KEY>
-   graph deploy --studio openbook-pnl
+   graph auth <YOUR_GRAPH_STUDIO_DEPLOY_KEY>
+   graph deploy openbook-pnl --node https://api.studio.thegraph.com/deploy/ --deploy-key <YOUR_GRAPH_STUDIO_DEPLOY_KEY>
 
    SELLER_ADDRESS (provider scoping — REQUIRED when deploying, else the subgraph
    books no P&L): rerun with SELLER_ADDRESS=<operator address> set.
@@ -93,6 +93,6 @@ if grep -q "const SELLER = \"$SELLER_PLACEHOLDER\"" "$SELLER_FILE"; then
     "rerun with SELLER_ADDRESS=<seller address> set (provider-scoped P&L)."
   exit 1
 fi
-"$GRAPH_BIN" auth --studio "$GRAPH_STUDIO_DEPLOY_KEY" || { echo "FAIL: graph auth errored"; exit 1; }
-"$GRAPH_BIN" deploy --studio "$SUBGRAPH_NAME" || { echo "FAIL: graph deploy errored"; exit 1; }
+"$GRAPH_BIN" auth "$GRAPH_STUDIO_DEPLOY_KEY" || { echo "FAIL: graph auth errored"; exit 1; }
+"$GRAPH_BIN" deploy "$SUBGRAPH_NAME" --node https://api.studio.thegraph.com/deploy/ --deploy-key "$GRAPH_STUDIO_DEPLOY_KEY" --version-label "${VERSION_LABEL:-v0.0.1}" < /dev/null || { echo "FAIL: graph deploy errored"; exit 1; }
 echo "PASS: openbook-pnl deployed — see Studio for sync status and the /query/<KEY> URL."
