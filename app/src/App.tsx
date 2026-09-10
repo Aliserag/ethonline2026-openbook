@@ -72,6 +72,13 @@ interface SettleState {
 const SERVICE_KEYS = ["svc.menu", "svc.price", "svc.sla", "svc.payee", "svc.operator", "svc.pnl"];
 const HARD_FAIL_KEYS = ["svc.price", "svc.sla", "svc.payee"];
 
+/** The hard-fail keys whose own record is unset — matched BY NAME, never by
+ *  position: SERVICE_KEYS and HARD_FAIL_KEYS are different orders and a naive
+ *  index filter falsely blames neighbors (F1, adversarial E2E). */
+export function missingHardFailKeys(records: { key: string; value: string | null }[]): string[] {
+  return HARD_FAIL_KEYS.filter((key) => records.find((r) => r.key === key)?.value == null);
+}
+
 export interface StepState {
   quote: QuoteView | null;
   job: JobState | null;
@@ -111,7 +118,7 @@ export function deriveSteps(
 function resolveStorefront(readEnsText: EnsTextReader): Promise<StorefrontState> {
   return Promise.all(SERVICE_KEYS.map((key) => readEnsText(CONFIG.ens, key))).then((values) => {
     const records = SERVICE_KEYS.map((key, index) => ({ key, value: values[index] ?? null }));
-    const missing = HARD_FAIL_KEYS.filter((_, index) => records[index]?.value === null);
+    const missing = missingHardFailKeys(records);
     return {
       records,
       hardFail:

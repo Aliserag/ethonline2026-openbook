@@ -3,7 +3,7 @@
  * a settled hard-fail must read as "failed", never as in-flight "live".
  */
 import { describe, expect, test } from "bun:test";
-import { chipClass, deriveSteps, type StepState } from "./App";
+import { chipClass, deriveSteps, missingHardFailKeys, type StepState } from "./App";
 
 function base(): StepState {
   return {
@@ -78,5 +78,28 @@ describe("chipClass", () => {
     expect(chipClass("")).toBe("");
     expect(chipClass("done")).toBe("done");
     expect(chipClass("live")).toBe("live");
+  });
+});
+
+describe("missingHardFailKeys", () => {
+  const rec = (key: string, value: string | null) => ({ key, value });
+  const all = () => [
+    rec("svc.menu", null), rec("svc.price", null), rec("svc.sla", null),
+    rec("svc.payee", null), rec("svc.operator", null), rec("svc.pnl", null),
+  ];
+  test("all null: exactly price, sla, payee (the HARD_FAIL set)", () => {
+    expect(missingHardFailKeys(all())).toEqual(["svc.price", "svc.sla", "svc.payee"]);
+  });
+  test("price set, menu/sla/payee null: blames sla+payee, never price or menu", () => {
+    const r = all(); r[1] = rec("svc.price", "0.10 USDC/query");
+    expect(missingHardFailKeys(r)).toEqual(["svc.sla", "svc.payee"]);
+  });
+  test("menu set, price/sla/payee null: blames price+sla+payee, never menu", () => {
+    const r = all(); r[0] = rec("svc.menu", "[]");
+    expect(missingHardFailKeys(r)).toEqual(["svc.price", "svc.sla", "svc.payee"]);
+  });
+  test("payee set only: blames price+sla, never payee", () => {
+    const r = all(); r[3] = rec("svc.payee", "0x1234");
+    expect(missingHardFailKeys(r)).toEqual(["svc.price", "svc.sla"]);
   });
 });
