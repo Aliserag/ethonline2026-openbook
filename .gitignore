@@ -21,3 +21,6 @@ subgraph/spike/generated/
 
 # SDD scratch (gitignored)
 .superpowers/
+
+# reviewer-agent browser sessions
+.playwright-cli/
