@@ -460,17 +460,6 @@ export default function App() {
             </p>
           </div>
         </div>
-        <div className="walletblock" aria-label="wallet">
-          {isConnected ? (
-            <span className="addr" title="connected wallet">{truncateHash(address ?? "")}</span>
-          ) : (
-            connectors.map((connector) => (
-              <button key={connector.uid} className="ghost" onClick={() => connect({ connector })}>
-                Connect wallet
-              </button>
-            ))
-          )}
-        </div>
         <div className="chainbadges">
           <span>arc · 5042002</span>
           <span>ensv2 · sepolia</span>

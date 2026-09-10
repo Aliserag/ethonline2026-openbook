@@ -1113,11 +1113,23 @@ textarea {
   max-width: calc(100vw - 32px);
 }
 
-/* tooltips: desktop = centered bubble over the chip; mobile = the bubble
-   anchors to the CARD, never the tip — a tip-relative flip can only fit tips
-   in a middle band of the viewport (pass-2 evidence: -119px lefts at 390px) */
+/* tooltips: desktop = centered bubble over the chip; masthead chips open
+   BELOW (the masthead sits near the viewport top — an above-chip bubble clips
+   the top edge at scrollY 0); ≤1150px the bubble anchors to the viewport */
 
-@media (max-width: 1150px) {
+.masthead .tip::after {
+  bottom: auto;
+  top: 130%;
+}
+
+.masthead .tip::before {
+  bottom: auto;
+  top: 122%;
+  border-top-color: transparent;
+  border-bottom-color: var(--ink);
+}
+
+@media (max-width: 1200px) {
   .stepcard {
     position: relative;
   }
