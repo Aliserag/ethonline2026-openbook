@@ -430,18 +430,22 @@ EOF
 # ---------------------------------------------------------------------------
 stage_verify() {
   echo "── [7/7] verify ──"
-  local key value missing=0
-  for key in svc.price svc.sla svc.payee agent-context "agent-endpoint[mcp]" "agent-endpoint[web]"; do
+  # Read back EXACTLY the keys the batch wrote (records.json) — no hardcoded
+  # subset, no placeholder agentId. CHANGEME residue is impossible here (the
+  # script aborts upstream), so every key is the real one.
+  local key value missing=0 count=0
+  while IFS= read -r key; do
+    [ -n "$key" ] || continue
+    count=$((count + 1))
     value="$(ens get text "$NAME" --chain "$CHAIN" --key "$key" --format json 2>/dev/null | jq -r .value)"
     if [ -n "$value" ] && [ "$value" != "null" ]; then
-      echo "  OK   $key = $value"
+      echo "  OK   $key = ${value:0:100}"
     else
       echo "  MISS $key (unset) — storefront incomplete; Task 5 get_quote HARD-FAILS on missing svc.price/sla/payee"
       missing=1
     fi
-  done
-  value="$(ens get text "$NAME" --chain "$CHAIN" --key "agent-registration[0x00010000034cef52148004a818bfb912233c491871b3d84c89a494bd9e][1]" --format json 2>/dev/null | jq -r .value)"
-  echo "  agent-registration[...] (probe with agentId=1) = ${value:-<unset>} — the funded run sets the real AGENT_ID"
+  done < <(jq -r '.[].key' "$RECORDS_FINAL")
+  echo "  verified $count records from records.json"
   echo "  viem read (Task 7, app/): createPublicClient({chain: sepolia}).getEnsText({name, key}) per record — same source, same values."
   [ "$missing" -eq 0 ] || { [ "$MODE" = "execute" ] && return 1; }
 }
