@@ -36,7 +36,7 @@ const OPERATOR_KEY = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7b
 const OPERATOR_ACCOUNT = privateKeyToAccount(OPERATOR_KEY);
 
 /** The freshness fragment the server appends to every Gateway query. */
-const META_FRAGMENT_RE = /_meta\s*\{\s*block\s*\{\s*number\s*hash\s*\}\s*chainHeadBlock\s*\{\s*number\s*\}\s*\}/;
+const META_FRAGMENT_RE = /_meta\s*\{\s*block\s*\{\s*number\s*hash\s*timestamp\s*\}\s*hasIndexingErrors\s*\}/;
 
 function configPath(name: string): string {
   return path.join(import.meta.dir, "..", "config", name);
@@ -48,9 +48,11 @@ interface CapturedRequest {
 }
 
 /** Fake gateway payload carrying the `_meta` freshness fields. */
-function gatewayBody(data: Record<string, unknown>, block: number, hash: string, chainHeadBlock: number): unknown {
+function gatewayBody(data: Record<string, unknown>, block: number, hash: string): unknown {
   return {
-    data: { ...data, _meta: { block: { number: block, hash }, chainHeadBlock: { number: chainHeadBlock } } },
+    // the Gateway's _Meta_ has no chainHeadBlock (live probe 2026-09-09);
+    // the freshness head is the app's chainHead seam (Alchemy eth_blockNumber)
+    data: { ...data, _meta: { block: { number: block, hash, timestamp: 1789000000 }, hasIndexingErrors: false } },
   };
 }
 
@@ -209,7 +211,7 @@ describe("get_quote (ENS-gated pricing)", () => {
 
 describe("query_dataset (freshness gate)", () => {
   const config = configOf("openbook.json");
-  const freshMeta: unknown = gatewayBody({ markets: [{ id: "0x1" }] }, 995, "0xdeadbeef", 1000);
+  const freshMeta: unknown = gatewayBody({ markets: [{ id: "0x1" }] }, 995, "0xdeadbeef");
 
   const appFor = (respond: (url: string, body: string) => unknown) => {
     const { fetchImpl, requests } = mockFetch(respond);
@@ -217,12 +219,13 @@ describe("query_dataset (freshness gate)", () => {
       env: { GRAPH_GATEWAY_KEY: "test-key", OPERATOR_PRIVATE_KEY: OPERATOR_KEY },
       fetchImpl,
       readEnsText: stubEns(ensFixtures),
+      chainHead: async () => 1000,
     });
     return { app, requests };
   };
 
-  it("marks the query unavailable (STALE) when chainHeadBlock - _meta.block > maxAge — no attestation, never charge", async () => {
-    const { app, requests } = appFor(() => gatewayBody({ markets: [{ id: "0x1" }] }, 100, "0xaa", 1000));
+  it("marks the query unavailable (STALE) when chain head - _meta.block > maxAge — no attestation, never charge", async () => {
+    const { app, requests } = appFor(() => gatewayBody({ markets: [{ id: "0x1" }] }, 100, "0xaa"));
     const out: QueryDatasetResult = await app.queryDataset("aave-v3-arbitrum-lending", "{ markets { id } }");
     expect(out.unavailable).toBe(true);
     if (out.unavailable) expect(out.reason).toBe("STALE");
@@ -387,7 +390,8 @@ describe("MCP server (protocol-level)", () => {
     app = createApp(configOf("openbook.json"), {
       env: { GRAPH_GATEWAY_KEY: "test-key", OPERATOR_PRIVATE_KEY: OPERATOR_KEY },
       readEnsText: stubEns(ensFixtures),
-      fetchImpl: mockFetch(() => gatewayBody({ markets: [{ id: "0x1" }] }, 995, "0xdeadbeef", 1000)).fetchImpl,
+      fetchImpl: mockFetch(() => gatewayBody({ markets: [{ id: "0x1" }] }, 995, "0xdeadbeef")).fetchImpl,
+      chainHead: async () => 1000,
     });
   });
 
@@ -447,7 +451,8 @@ describe("MCP server (protocol-level)", () => {
     const staleApp = createApp(configOf("openbook.json"), {
       env: { GRAPH_GATEWAY_KEY: "test-key", OPERATOR_PRIVATE_KEY: OPERATOR_KEY },
       readEnsText: stubEns(ensFixtures),
-      fetchImpl: mockFetch(() => gatewayBody({ markets: [] }, 10, "0xaa", 1000)).fetchImpl,
+      fetchImpl: mockFetch(() => gatewayBody({ markets: [] }, 10, "0xaa")).fetchImpl,
+      chainHead: async () => 1000,
     });
     const mcp = createMcpServer(staleApp);
     const [client, serverSide] = InMemoryTransport.createLinkedPair();
@@ -548,8 +553,14 @@ describe.skipIf(!hasKey)("live Gateway (opt-in: RUN_LIVE=1 + GRAPH_GATEWAY_KEY)"
   );
 
   it(
-    "get_pnl returns the openbook-pnl shape from Studio",
+    "get_pnl returns the openbook-pnl shape from Studio (requires the funded-run deploy)",
     async () => {
+      if (process.env.RUN_PNL_LIVE !== "1") {
+        console.warn(
+          "SKIP: openbook-pnl is deployed during the funded run — re-run with RUN_LIVE=1 RUN_PNL_LIVE=1 after `bash scripts/deploy-subgraph.sh`.",
+        );
+        return;
+      }
       const out: GetPnlResult = await liveApp.getPnl();
       expect(Array.isArray(out.dailyPnLs)).toBe(true);
       expect(out.metaBlock).toBeGreaterThan(0);

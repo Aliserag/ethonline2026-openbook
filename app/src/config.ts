@@ -15,6 +15,9 @@ export interface DatasetConfig {
   freshness: { maxAge: number };
   priceUsdc: number;
   pinned: boolean;
+  /** the dataset's settlement chain — the freshness head reference (Alchemy);
+   * the Gateway _meta has no chainHeadBlock field */
+  chain: "arbitrum" | "ethereum";
 }
 
 export interface AppConfig {

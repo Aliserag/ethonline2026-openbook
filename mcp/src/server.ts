@@ -38,6 +38,7 @@ import {
   type OpenBookConfig,
 } from "./datasets";
 import { gatewayQuery, hostedQuery, type FetchLike, type GatewayMeta } from "./gateway";
+import { defaultChainHeadResolver, type ChainHeadResolver } from "./chainhead";
 import {
   createEnsTextReader,
   parsePriceToAmount6dec,
@@ -147,6 +148,9 @@ export interface AppDeps {
   env?: Record<string, string | undefined>;
   readEnsText?: EnsTextReader;
   fetchImpl?: FetchLike;
+  /** freshness head resolver — defaults to Alchemy via chainhead.ts (the
+   * Gateway's _meta has no chainHeadBlock field; live probe 2026-09-09) */
+  chainHead?: ChainHeadResolver;
 }
 
 // --- app construction -------------------------------------------------------------
@@ -166,6 +170,7 @@ export function createApp(config: OpenBookConfig, deps: AppDeps = {}): OpenBookA
   const env = deps.env ?? {};
   const readEnsText = deps.readEnsText ?? createEnsTextReader({ rpcUrl: env["SEPOLIA_RPC"] });
   const fetchImpl = deps.fetchImpl;
+  const chainHead = deps.chainHead ?? defaultChainHeadResolver(env["ALCHEMY_API_KEY"]);
   const operatorKey = resolveOperatorKey(config, env);
   const gatewayKey = resolveGatewayKey(config, env);
 
@@ -291,7 +296,12 @@ export function createApp(config: OpenBookConfig, deps: AppDeps = {}): OpenBookA
     });
     const freshnessMaxAge = dataset.freshness.maxAge;
     const block = meta.block;
-    const head = meta.chainHeadBlock;
+    let head: number | null;
+    try {
+      head = block === null ? null : await chainHead(dataset.chain);
+    } catch {
+      head = null; // fail-closed: no reference head → unavailable, never charged
+    }
     if (block === null || head === null) {
       return {
         unavailable: true,

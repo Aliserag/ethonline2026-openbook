@@ -50,16 +50,18 @@ function mockFetch(respond: (url: string, body: string) => unknown) {
   return { fetchImpl: fetchImpl as typeof fetch, requests };
 }
 
-function gatewayData(block: number, chainHeadBlock: number, hash = "0xdeadbeef"): unknown {
+function gatewayData(block: number, hash = "0xdeadbeef"): unknown {
+  // the Gateway's _Meta_ has no chainHeadBlock (live probe 2026-09-09) —
+  // the head reference is the deps.chainHead seam.
   return {
     markets: [{ id: "0x1" }],
-    _meta: { block: { number: block, hash }, chainHeadBlock: { number: chainHeadBlock } },
+    _meta: { block: { number: block, hash, timestamp: 1789000000 }, hasIndexingErrors: false },
   };
 }
 
 const GATEWAY_PATH =
   "/api/test-key/subgraphs/id/4xyasjQeREe7PxnF6wVdobZvCw5mhoHZq3T7guRpuNPf";
-const META_FRAGMENT_RE = /_meta\s*\{\s*block\s*\{\s*number\s*hash\s*\}\s*chainHeadBlock\s*\{\s*number\s*\}\s*\}/;
+const META_FRAGMENT_RE = /_meta\s*\{\s*block\s*\{\s*number\s*hash\s*timestamp\s*\}\s*hasIndexingErrors\s*\}/;
 
 // --- quote flow (keyless, ENS-gated) -----------------------------------------
 
@@ -117,11 +119,11 @@ describe("buyer-cli delivery (mocked gateway)", () => {
   });
 
   it("queries the live Gateway URL with the freshness fragment and a deterministic payload hash", async () => {
-    const { fetchImpl, requests } = mockFetch(() => ({ data: gatewayData(995, 1000) }));
+    const { fetchImpl, requests } = mockFetch(() => ({ data: gatewayData(995) }));
     const delivery = await deliverQuery(
       CONFIG,
       { datasetId: "aave-v3-arbitrum-lending" },
-      { env: { GRAPH_GATEWAY_KEY: "test-key" }, fetchImpl },
+      { env: { GRAPH_GATEWAY_KEY: "test-key" }, fetchImpl, chainHead: async () => 1000 },
     );
     expect(requests).toHaveLength(1);
     expect(requests[0].url).toBe(`https://gateway.thegraph.com${GATEWAY_PATH}`);
@@ -140,11 +142,11 @@ describe("buyer-cli delivery (mocked gateway)", () => {
   });
 
   it("classifies an old _meta as STALE without any live-network dependence", async () => {
-    const { fetchImpl, requests } = mockFetch(() => ({ data: gatewayData(90, 1000) }));
+    const { fetchImpl, requests } = mockFetch(() => ({ data: gatewayData(90) }));
     const delivery = await deliverQuery(
       CONFIG,
       { datasetId: "aave-v3-arbitrum-lending" },
-      { env: { GRAPH_GATEWAY_KEY: "test-key" }, fetchImpl },
+      { env: { GRAPH_GATEWAY_KEY: "test-key" }, fetchImpl, chainHead: async () => 1000 },
     );
     expect(delivery.freshness).toBe("stale"); // 1000 - 90 = 910 > maxAge 50
     expect(requests).toHaveLength(1);
@@ -152,12 +154,12 @@ describe("buyer-cli delivery (mocked gateway)", () => {
 
   it("--stale routes the query through the stale proxy (money-shot path)", async () => {
     const { fetchImpl, requests } = mockFetch(() => ({
-      data: gatewayData(90, 141, "0xoldblock"),
+      data: gatewayData(90, "0xoldblock"),
     }));
     const delivery = await deliverQuery(
       CONFIG,
       { datasetId: "aave-v3-arbitrum-lending", stale: true, staleProxyUrl: "http://127.0.0.1:8787" },
-      { env: { GRAPH_GATEWAY_KEY: "test-key" }, fetchImpl },
+      { env: { GRAPH_GATEWAY_KEY: "test-key" }, fetchImpl, chainHead: async () => 1000 },
     );
     expect(requests).toHaveLength(1);
     expect(requests[0].url).toBe(`http://127.0.0.1:8787${GATEWAY_PATH}`);
@@ -165,7 +167,7 @@ describe("buyer-cli delivery (mocked gateway)", () => {
       via: "stale-proxy",
       freshness: "stale",
       metaBlock: 90,
-      chainHeadBlock: 141,
+      chainHeadBlock: 1000,
     });
     // the replayed block is verifiably below any SLA minBlock derived at pay time
     expect(delivery.metaBlock).toBeLessThan(90 + 50);

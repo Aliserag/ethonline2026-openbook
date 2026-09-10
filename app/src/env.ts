@@ -11,6 +11,10 @@ export const env = {
   arcRpc: (import.meta.env.VITE_ARC_TESTNET_RPC as string | undefined) ?? undefined,
   /** The Graph Studio key: gates the delivery query + the openbook-pnl query */
   graphKey: (import.meta.env.VITE_GRAPH_GATEWAY_KEY as string | undefined) ?? "",
+  /** Alchemy key: the freshness head reference (Gateway _meta has no
+   * chainHeadBlock field — the head comes from the dataset's own chain) */
+  alchemyKey: (import.meta.env.VITE_ALCHEMY_API_KEY as string | undefined) ?? "",
 };
 
 export const hasGraphKey = env.graphKey.length > 0;
+export const hasAlchemyKey = env.alchemyKey.length > 0;

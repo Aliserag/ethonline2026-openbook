@@ -17,13 +17,14 @@ import { useEffect, useMemo, useState, type JSX } from "react";
 import { useAccount, useConnect } from "wagmi";
 import { createPublicClient, http, keccak256, toBytes, type PublicClient } from "viem";
 import { arcTestnet } from "./wagmi";
-import { env, hasGraphKey } from "./env";
+import { env, hasAlchemyKey, hasGraphKey } from "./env";
 import { CONFIG, defaultQueryFor, type DatasetConfig } from "./config";
 import { arcWalletClient, ensureArcChain } from "./arc";
 import { explorerUrl, truncateHash, usdc6 } from "./format";
 import { fetchPnl, type PnlRow } from "./pnl";
 import { createEnsTextReader, type EnsTextReader } from "../../mcp/src/ens";
 import { gatewayQuery, stripMeta } from "../../mcp/src/gateway";
+import { defaultChainHeadResolver } from "../../mcp/src/chainhead";
 import { createJobWithSla, ERC8183, type Sla } from "../../agent/escrow";
 import { verifyDelivery } from "../../mcp/src/escrow";
 
@@ -292,9 +293,19 @@ export default function App() {
       await ensureArcChain();
       const trace: string[] = [];
       const wallet = arcWalletClient(address, trace);
-      const head = await publicClient.getBlockNumber();
+      // The SLA floor is a block on the DATASET's chain (the data lives on
+      // Arbitrum/Ethereum), never on Arc — the delivery's metaBlock and this
+      // floor must share a chain or the freshness gate is vacuous.
+      let head = 0;
+      if (hasAlchemyKey) {
+        try {
+          head = await defaultChainHeadResolver(env.alchemyKey)(dataset.chain);
+        } catch {
+          head = 0;
+        }
+      }
       const sla: Sla = {
-        minBlock: Number(head) - quote.minBlockLag,
+        minBlock: head - quote.minBlockLag,
         schemaHash: keccak256(toBytes(dataset.schema)),
         maxLatencyMs: quote.maxLatencyMs,
       };
@@ -331,17 +342,27 @@ export default function App() {
         subgraphId: dataset.subgraphId,
         query: queryText,
       });
+      // Freshness reference: the dataset's own chain head (Alchemy). The
+      // Gateway's _meta has no chainHeadBlock field (live probe 2026-09-09).
+      let head: number | null = null;
+      if (hasAlchemyKey) {
+        try {
+          head = await defaultChainHeadResolver(env.alchemyKey)(dataset.chain);
+        } catch {
+          head = null;
+        }
+      }
       const freshness: DeliveryState["freshness"] =
-        meta.block === null || meta.chainHeadBlock === null
+        meta.block === null || head === null
           ? "no-meta"
-          : meta.chainHeadBlock - meta.block <= dataset.freshness.maxAge
+          : head - meta.block <= dataset.freshness.maxAge
             ? "fresh"
             : "stale";
       setDelivery({
         dataset,
         payloadHash: keccak256(toBytes(JSON.stringify(stripMeta(data)))),
         metaBlock: meta.block,
-        chainHeadBlock: meta.chainHeadBlock,
+        chainHeadBlock: head,
         freshness,
         result: stripMeta(data),
       });

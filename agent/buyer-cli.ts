@@ -53,6 +53,7 @@ import {
   type Sla,
 } from "./escrow";
 import { gatewayQuery, stripMeta, type FetchLike } from "../mcp/src/gateway";
+import { defaultChainHeadResolver } from "../mcp/src/chainhead";
 import {
   createEnsTextReader,
   parsePriceToAmount6dec,
@@ -131,6 +132,9 @@ export interface BuyerDeps {
   publicClient?: PublicClient;
   buyerWallet?: WalletClient;
   providerWallet?: WalletClient;
+  /** freshness head resolver — defaults to Alchemy via mcp/src/chainhead.ts
+   * (the Gateway's _meta has no chainHeadBlock field; live probe 2026-09-09) */
+  chainHead?: (chain: "arbitrum" | "ethereum") => Promise<number>;
   log?: (line: string) => void;
 }
 
@@ -172,10 +176,18 @@ export async function deliverQuery(
     fetchImpl: deps.fetchImpl,
   });
   const payloadHash: `0x${string}` = keccak256(toBytes(JSON.stringify(stripMeta(data))));
+  let head: number | null;
+  try {
+    head = meta.block === null
+      ? null
+      : await (deps.chainHead ?? defaultChainHeadResolver(deps.env?.["ALCHEMY_API_KEY"]))(dataset.chain);
+  } catch {
+    head = null; // fail-closed: no reference head → no-meta, never settle blind
+  }
   const freshness: DeliveryRecord["freshness"] =
-    meta.block === null || meta.chainHeadBlock === null
+    meta.block === null || head === null
       ? "no-meta"
-      : meta.chainHeadBlock - meta.block <= dataset.freshness.maxAge
+      : head - meta.block <= dataset.freshness.maxAge
         ? "fresh"
         : "stale";
   return {
@@ -183,7 +195,7 @@ export async function deliverQuery(
     url: `${baseUrl}/api/${gatewayKey}/subgraphs/id/${dataset.subgraphId}`,
     payloadHash,
     metaBlock: meta.block,
-    chainHeadBlock: meta.chainHeadBlock,
+    chainHeadBlock: head,
     freshness,
     via: options.stale ? "stale-proxy" : "gateway",
   };

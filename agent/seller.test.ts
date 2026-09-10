@@ -98,6 +98,7 @@ describe("serveFundedJobs — schema-mismatch skip (no misdelivery)", () => {
         publicClient,
         walletClient,
         fetchImpl,
+        chainHead: async () => 1000,
         log: (line) => logLines.push(line),
       },
       { lookback: 100n },
@@ -135,7 +136,7 @@ describe("serveFundedJobs — schema-mismatch skip (no misdelivery)", () => {
         JSON.stringify({
           data: {
             markets: [{ id: "0x1" }],
-            _meta: { block: { number: 990, hash: "0xbeef" }, chainHeadBlock: { number: 1000 } },
+            _meta: { block: { number: 990, hash: "0xbeef", timestamp: 1789000000 }, hasIndexingErrors: false },
           },
         }),
         { status: 200, headers: { "content-type": "application/json" } },
@@ -171,6 +172,7 @@ describe("serveFundedJobs — schema-mismatch skip (no misdelivery)", () => {
         publicClient,
         walletClient,
         fetchImpl,
+        chainHead: async () => 1000,
         log: (line) => logLines.push(line),
       },
       { lookback: 100n },
@@ -210,7 +212,7 @@ describe("serveFundedJobs — schema-mismatch skip (no misdelivery)", () => {
         JSON.stringify({
           data: {
             markets: [{ id: "0x1" }],
-            _meta: { block: { number: 90, hash: "0xold" }, chainHeadBlock: { number: 1000 } },
+            _meta: { block: { number: 90, hash: "0xold", timestamp: 1789000000 }, hasIndexingErrors: false },
           },
         }),
         { status: 200, headers: { "content-type": "application/json" } },
@@ -224,6 +226,7 @@ describe("serveFundedJobs — schema-mismatch skip (no misdelivery)", () => {
         publicClient,
         walletClient,
         fetchImpl,
+        chainHead: async () => 1000,
         log: (line) => logLines.push(line),
       },
       { lookback: 100n },

@@ -51,6 +51,7 @@ import {
   type Sla,
 } from "./escrow";
 import { gatewayQuery, stripMeta, type FetchLike } from "../mcp/src/gateway";
+import { defaultChainHeadResolver } from "../mcp/src/chainhead";
 import {
   loadConfigFile,
   resolveGatewayKey,
@@ -101,6 +102,9 @@ export interface SellerServices {
   publicClient?: PublicClient;
   walletClient?: WalletClient;
   fetchImpl?: FetchLike;
+  /** freshness head resolver — defaults to Alchemy via mcp/src/chainhead.ts
+   * (the Gateway's _meta has no chainHeadBlock field; live probe 2026-09-09) */
+  chainHead?: (chain: "arbitrum" | "ethereum") => Promise<number>;
   log?: (line: string) => void;
 }
 
@@ -271,17 +275,23 @@ export async function serveFundedJobs(
       continue;
     }
     const { data, meta } = gatewayResult;
-    if (meta.block === null || meta.chainHeadBlock === null) {
+    let head: number | null;
+    try {
+      head = meta.block === null ? null : await (services.chainHead ?? defaultChainHeadResolver(services.env?.["ALCHEMY_API_KEY"]))(dataset.chain);
+    } catch {
+      head = null; // fail-closed: no reference head → skip, never submit a refund
+    }
+    if (meta.block === null || head === null) {
       stats.staleSkipped++;
-      log(`SKIP job=${jobId}: gateway returned no _meta — cannot attest freshness`);
+      log(`SKIP job=${jobId}: gateway returned no _meta or no chain head — cannot attest freshness`);
       continue;
     }
-    const inWindow = meta.chainHeadBlock - meta.block <= dataset.freshness.maxAge;
+    const inWindow = head - meta.block <= dataset.freshness.maxAge;
     const meetsSla = meta.block >= sla.minBlock;
     if (!inWindow || !meetsSla) {
       stats.staleSkipped++;
       log(
-        `SKIP job=${jobId}: deliverable stale metaBlock=${meta.block} (window: head - block = ${meta.chainHeadBlock - meta.block}, SLA minBlock=${sla.minBlock}) — submitting would guarantee a refund`,
+        `SKIP job=${jobId}: deliverable stale metaBlock=${meta.block} (window: head - block = ${head - meta.block}, SLA minBlock=${sla.minBlock}) — submitting would guarantee a refund`,
       );
       continue;
     }

@@ -43,6 +43,9 @@ export interface DatasetConfig {
   priceUsdc: number;
   /** true for the global Start Fresh pins; configs set pseudo-field via loader */
   pinned: boolean;
+  /** the dataset's settlement chain — the freshness head reference (Alchemy
+   * eth_blockNumber); the Gateway _meta has no chainHeadBlock field */
+  chain: "arbitrum" | "ethereum";
 }
 
 export interface GatewayConfig {
@@ -133,6 +136,12 @@ function validateDataset(entry: unknown, index: number): DatasetConfig {
       `mcp config: dataset "${id}" is a Global Start Fresh pin; its subgraphId must be ${pinnedId} (got ${subgraphId})`,
     );
   }
+  const chainRaw = raw["chain"];
+  if (chainRaw !== "arbitrum" && chainRaw !== "ethereum") {
+    throw new Error(
+      `mcp config: datasets[${index}].chain must be "arbitrum" or "ethereum" (the freshness head reference chain)`,
+    );
+  }
   return {
     id,
     subgraphId,
@@ -141,6 +150,7 @@ function validateDataset(entry: unknown, index: number): DatasetConfig {
     freshness: { maxAge },
     priceUsdc,
     pinned: pinnedId !== undefined,
+    chain: chainRaw,
   };
 }
 
