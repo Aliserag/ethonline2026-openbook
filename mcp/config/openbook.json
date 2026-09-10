@@ -9,7 +9,7 @@
     "baseUrl": "https://gateway.thegraph.com"
   },
   "pnl": {
-    "endpoint": "https://api.studio.thegraph.com/query/{GRAPH_GATEWAY_KEY}/openbook-pnl/version/latest",
+    "endpoint": "https://api.studio.thegraph.com/query/1760032/open-book/version/latest",
     "query": "{ dailyPnLs { id revenue costs refunds net } _meta { block { number } } }"
   },
   "datasets": [

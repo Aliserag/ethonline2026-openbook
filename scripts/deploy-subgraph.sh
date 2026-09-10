@@ -13,7 +13,7 @@
 # codegen; without it the mapping keeps the zero-address placeholder and the
 # deploy is REFUSED (a placeholder deployment would silently book no P&L).
 #
-# Pre-req (one-time, user action): create the subgraph named `openbook-pnl` in
+# Pre-req (one-time, user action): create the subgraph named `open-book` in
 # Subgraph Studio, and toggle Settings -> "Show Testnets" so network `arc-testnet`
 # is selectable.
 #
@@ -27,7 +27,7 @@ set -uo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SUBGRAPH_DIR="$REPO_ROOT/subgraph"
-SUBGRAPH_NAME="${SUBGRAPH_NAME:-openbook-pnl}"
+SUBGRAPH_NAME="${SUBGRAPH_NAME:-open-book}"
 NETWORK="${NETWORK:-arc-testnet}"
 GRAPH_BIN="${GRAPH_BIN:-$(command -v graph || echo "$HOME/.npm-global/bin/graph")}"
 

@@ -21,7 +21,7 @@ export const PINNED_SUBGRAPH_IDS: Record<string, string> = {
 export const DEFAULT_GATEWAY_BASE = "https://gateway.thegraph.com";
 export const DEFAULT_KEY_ENV = "GRAPH_GATEWAY_KEY";
 export const DEFAULT_PNL_ENDPOINT =
-  "https://api.studio.thegraph.com/query/{GRAPH_GATEWAY_KEY}/openbook-pnl/version/latest";
+  "https://api.studio.thegraph.com/query/1760032/open-book/version/latest";
 export const DEFAULT_PNL_QUERY =
   "{ dailyPnLs { id revenue costs refunds net } _meta { block { number } } }";
 

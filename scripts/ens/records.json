@@ -4,7 +4,7 @@
   {"type":"text","key":"svc.sla","value":"{\"maxBlockLag\":50,\"maxLatencyMs\":2000}"},
   {"type":"text","key":"svc.payee","value":"CHANGEME:POLICY_WALLET_ADDR"},
   {"type":"text","key":"svc.operator","value":"CHANGEME:AGENT_ADDR"},
-  {"type":"text","key":"svc.pnl","value":"openbook/openbook-pnl"},
+  {"type":"text","key":"svc.pnl","value":"https://api.studio.thegraph.com/query/1760032/open-book/version/latest"},
   {"type":"text","key":"agent-context","value":"OpenBook: autonomous agent selling freshness-guaranteed onchain data. Every payment carries an SLA; missed SLA = automatic onchain refund. ERC-8004 agent CHANGEME:AGENT_ID on Arc."},
   {"type":"text","key":"agent-endpoint[mcp]","value":"CHANGEME:MCP_HOST/mcp"},
   {"type":"text","key":"agent-endpoint[web]","value":"CHANGEME:FRONTEND_URL"},
