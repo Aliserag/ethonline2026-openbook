@@ -47,15 +47,16 @@ doc_mode() {
   USDC=0x3600000000000000000000000000000000000000
   PK=$(sed -nE 's/^ARC_TESTNET_PK=(.*)$/\1/p' .env)
   ADDR=$(cast wallet address --private-key "$PK")
+  GAS=$(cast gas-price --rpc-url "$RPC")   # live base fee — Arc pins the 20 Gwei floor but the live price floats above it
 
   # ---- JOB A: happy path (create -> setBudget -> approve -> fund -> submit -> complete) ----
-  cast send $ESCROW "createJob(address,address,uint256,string,address)" $ADDR $ADDR $(( $(date +%s) + 3600 )) "test" 0x0000000000000000000000000000000000000000 --rpc-url $RPC --private-key $PK --gas-price "$LIVE_GAS"
+  cast send $ESCROW "createJob(address,address,uint256,string,address)" $ADDR $ADDR $(( $(date +%s) + 3600 )) "test" 0x0000000000000000000000000000000000000000 --rpc-url $RPC --private-key $PK --gas-price "$GAS"
   JOB=$(cast call $ESCROW "jobCounter()(uint256)" --rpc-url $RPC | cut -d' ' -f1)
-  cast send $ESCROW "setBudget(uint256,uint256,bytes)" $JOB 10000 0x --rpc-url $RPC --private-key $PK --gas-price "$LIVE_GAS"     # provider
-  cast send $USDC "approve(address,uint256)" $ESCROW 10000 --rpc-url $RPC --private-key $PK --gas-price "$LIVE_GAS"             # approve escrow
-  cast send $ESCROW "fund(uint256,bytes)" $JOB 0x --rpc-url $RPC --private-key $PK --gas-price "$LIVE_GAS"                      # client funds
-  cast send $ESCROW "submit(uint256,bytes32,bytes)" $JOB 0x80adce4a8a5654de547a0f2333538a0fb9cf51d5a2827dff1bb0c763eb887cc8 0x --rpc-url $RPC --private-key $PK --gas-price "$LIVE_GAS"
-  cast send $ESCROW "complete(uint256,bytes32,bytes)" $JOB 0x80adce4a8a5654de547a0f2333538a0fb9cf51d5a2827dff1bb0c763eb887cc8 0x --rpc-url $RPC --private-key $PK --gas-price "$LIVE_GAS"  # evaluator
+  cast send $ESCROW "setBudget(uint256,uint256,bytes)" $JOB 10000 0x --rpc-url $RPC --private-key $PK --gas-price "$GAS"     # provider
+  cast send $USDC "approve(address,uint256)" $ESCROW 10000 --rpc-url $RPC --private-key $PK --gas-price "$GAS"             # approve escrow
+  cast send $ESCROW "fund(uint256,bytes)" $JOB 0x --rpc-url $RPC --private-key $PK --gas-price "$GAS"                      # client funds
+  cast send $ESCROW "submit(uint256,bytes32,bytes)" $JOB 0x80adce4a8a5654de547a0f2333538a0fb9cf51d5a2827dff1bb0c763eb887cc8 0x --rpc-url $RPC --private-key $PK --gas-price "$GAS"
+  cast send $ESCROW "complete(uint256,bytes32,bytes)" $JOB 0x80adce4a8a5654de547a0f2333538a0fb9cf51d5a2827dff1bb0c763eb887cc8 0x --rpc-url $RPC --private-key $PK --gas-price "$GAS"  # evaluator
   # EXPECT: status 3 (Completed); provider balance +10000 (0.01 USDC); events PaymentReleased(10000)
 
   # ---- JOB B: reject path (create -> setBudget -> fund -> evaluator reject) ----
@@ -81,8 +82,8 @@ exec_mode() {
     echo "FATAL: wallet $ADDR balance $bal < required $need (3x 0.01 escrow + gas buffer). Fund via faucet first."
     exit 3
   fi
-  local LIVE_GAS="$(cast gas-price --rpc-url "$RPC")"   # live base fee (floats above the 20 Gwei floor)
-  local FLAGS=(--rpc-url "$RPC" --private-key "$PK" --gas-price "$LIVE_GAS")   # Arc 20 Gwei fee floor trap
+  local GAS="$(cast gas-price --rpc-url "$RPC")"   # live base fee (floats above the 20 Gwei floor)
+  local FLAGS=(--rpc-url "$RPC" --private-key "$PK" --gas-price "$GAS")   # live gas price — the 20 Gwei floor floats (base fee pinned 20, suggested price floats above)
   local now job st deliv
   deliv="0x80adce4a8a5654de547a0f2333538a0fb9cf51d5a2827dff1bb0c763eb887cc8"   # keccak("openbook-spike-deliverable-1")
 
