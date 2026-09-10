@@ -62,6 +62,7 @@ async function main() {
   const env = loadEnv();
   const pk = env.ARC_TESTNET_PK;
   const recipient = env.ARC_RECIPIENT_ADDR;
+  const LIVE_GAS = cast(["gas-price", "--rpc-url", RPC]).trim();
   if (!pk || !recipient) {
     console.log("SKIP: .env missing ARC_TESTNET_PK / ARC_RECIPIENT_ADDR — run scripts/spikes/generate-key.sh first.");
     printFundingSteps();
@@ -83,7 +84,7 @@ async function main() {
   console.log(`transfer = ${usdc(AMOUNT)} -> ${recipient}`);
   const out = cast([
     "send", USDC, "transfer(address,uint256)", recipient, AMOUNT.toString(),
-    "--rpc-url", RPC, `--private-key=${pk}`, "--max-fee-per-gas", "20000000000", // Arc 20 Gwei fee floor trap
+    "--rpc-url", RPC, `--private-key=${pk}`, "--gas-price", LIVE_GAS, // live base fee (floats above the 20 Gwei floor)
   ]);
   const tx = (out.match(/0x[0-9a-fA-F]{64}/) || [])[0];
   if (!tx) {

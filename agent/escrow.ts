@@ -19,7 +19,12 @@
  *    "block.number + expiryBlocks" — that predates the verification and would
  *    revert; we therefore take `expirySeconds` from `block.timestamp`.
  *  - the mempool enforces a 20 Gwei `maxFeePerGas` floor (silently drops lower
- *    caps; EIP-1559 base fee is pinned at exactly 20 Gwei) → ARC_GAS.
+ *    caps) and the live base fee FLOATS (25 Gwei observed 2026-09-09) — a
+ *    pinned cap above the floor but below the live base reverts every write.
+ *    Fees are read live via arcFees(), never pinned.
+ *  - write() passes the ACCOUNT OBJECT (never a bare address) — a bare address
+ *    is read as a JSON-RPC account and routes through eth_sendTransaction,
+ *    which Arc's RPC does not serve (live failure: MethodNotFoundRpcError).
  *  - USDC amount6dec is ALWAYS the 6-decimal ERC-20 view — never the
  *    18-decimal native-gas view.
  */
@@ -28,6 +33,7 @@ import {
   keccak256,
   toBytes,
   type Abi,
+  type Account,
   type Address,
   type Hash,
   type PublicClient,
@@ -85,17 +91,21 @@ export const USDC_ABI = [
 ] as const satisfies Abi;
 
 /**
- * Arc mempool fee floor (Task 0-verified): transactions with maxFeePerGas below
- * 20 Gwei are silently dropped, and EIP-1559's base fee is pinned at exactly
- * 20 Gwei. Cap is floor + 1 Gwei (21 Gwei): capping AT the floor would make the
- * effective priority fee maxPriorityFeePerGas − (maxFeePerGas − baseFee) = 0
- * and leave no headroom — 21 Gwei is the minimum that keeps the 1 Gwei tip
- * effective.
+ * Arc fee model: the mempool enforces a 20 Gwei maxFeePerGas floor, but the
+ * live base fee FLOATS (25 Gwei observed 2026-09-09) — a fixed cap above the
+ * doc floor but below the live base reverts every write. Never pin: read
+ * fees live and keep floor + headroom. arcFees() is the single source.
  */
-export const ARC_GAS = {
-  maxFeePerGas: 21_000_000_000n,
-  maxPriorityFeePerGas: 1_000_000_000n,
-} as const;
+export async function arcFees(publicClient: PublicClient): Promise<{
+  maxFeePerGas: bigint;
+  maxPriorityFeePerGas: bigint;
+}> {
+  const est = await publicClient.estimateFeesPerGas();
+  const tip = est.maxPriorityFeePerGas ?? 1_000_000_000n;
+  const floor = 20_000_000_000n + tip;
+  const cap = est.maxFeePerGas > floor ? est.maxFeePerGas : floor;
+  return { maxFeePerGas: cap, maxPriorityFeePerGas: tip };
+}
 
 /** SLA freshness terms packed into the job description (consumed by Tasks 5/6). */
 export interface Sla {
@@ -243,11 +253,11 @@ export async function createJobWithSla(
   const expiredAt = timestamp + BigInt(expirySeconds);
 
   // 1. BUYER creates the job — description carries the packed SLA
-  const createHash = await write(buyer, {
+  const createHash = await write(publicClient, buyer, {
     address: ERC8183,
     abi: ERC8183_ABI,
     functionName: "createJob",
-    args: [providerAccount, evaluator, expiredAt, packSla(sla), hook],
+    args: [providerAccount.address, evaluator, expiredAt, packSla(sla), hook],
   });
   const createReceipt = await publicClient.waitForTransactionReceipt({
     hash: createHash,
@@ -263,21 +273,23 @@ export async function createJobWithSla(
   const jobId = BigInt(jobLog.topics[1]);
 
   // 2. PROVIDER quotes the budget — provider-only in the reference impl
-  await write(provider, {
+  //    (sendAndConfirm serializes the legs: fund can NEVER land before budget
+  //    on a different sender — the live failure mode was a raced revert)
+  await sendAndConfirm(publicClient, provider, {
     address: ERC8183,
     abi: ERC8183_ABI,
     functionName: "setBudget",
     args: [jobId, amount6dec, "0x"],
   });
   // 3. BUYER approves USDC — 6 decimals, never 18 (verified Task 0)
-  await write(buyer, {
+  await sendAndConfirm(publicClient, buyer, {
     address: USDC,
     abi: USDC_ABI,
     functionName: "approve",
     args: [ERC8183, amount6dec],
   });
   // 4. BUYER funds — job moves to Funded (status 1)
-  await write(buyer, {
+  await sendAndConfirm(publicClient, buyer, {
     address: ERC8183,
     abi: ERC8183_ABI,
     functionName: "fund",
@@ -294,13 +306,12 @@ export async function submitDeliverable(
   jobId: bigint,
   deliverableHash: `0x${string}`,
 ): Promise<TransactionReceipt> {
-  const hash = await write(walletClient, {
+  return sendAndConfirm(publicClient, walletClient, {
     address: ERC8183,
     abi: ERC8183_ABI,
     functionName: "submit",
     args: [jobId, deliverableHash, "0x"],
   });
-  return publicClient.waitForTransactionReceipt({ hash });
 }
 
 /** Evaluator settles the job → USDC released to the provider; status 3. */
@@ -310,13 +321,12 @@ export async function complete(
   jobId: bigint,
   reasonHash: `0x${string}`,
 ): Promise<TransactionReceipt> {
-  const hash = await write(walletClient, {
+  return sendAndConfirm(publicClient, walletClient, {
     address: ERC8183,
     abi: ERC8183_ABI,
     functionName: "complete",
     args: [jobId, reasonHash, "0x"],
   });
-  return publicClient.waitForTransactionReceipt({ hash });
 }
 
 /** Evaluator rejects the deliverable → client auto-refunded (Refunded event); status 4. */
@@ -326,13 +336,12 @@ export async function rejectAndRefund(
   jobId: bigint,
   reasonHash: `0x${string}`,
 ): Promise<TransactionReceipt> {
-  const hash = await write(walletClient, {
+  return sendAndConfirm(publicClient, walletClient, {
     address: ERC8183,
     abi: ERC8183_ABI,
     functionName: "reject",
     args: [jobId, reasonHash, "0x"],
   });
-  return publicClient.waitForTransactionReceipt({ hash });
 }
 
 /** Client reclaims funds after expiredAt passes (JobExpired + Refunded); status 5. */
@@ -341,13 +350,12 @@ export async function claimTimeout(
   walletClient: WalletClient,
   jobId: bigint,
 ): Promise<TransactionReceipt> {
-  const hash = await write(walletClient, {
+  return sendAndConfirm(publicClient, walletClient, {
     address: ERC8183,
     abi: ERC8183_ABI,
     functionName: "claimRefund",
     args: [jobId],
   });
-  return publicClient.waitForTransactionReceipt({ hash });
 }
 
 /** topic0 of JobCreated(uint256,address,address,address,uint256,address) — computed once. */
@@ -372,33 +380,69 @@ type WriteContractFn = (request: {
   abi: Abi;
   functionName: string;
   args: readonly unknown[];
-  account: Address;
+  account: Account;
   maxFeePerGas: bigint;
   maxPriorityFeePerGas: bigint;
 }) => Promise<Hash>;
 
-/** Signed write through the caller's wallet client with the Arc fee floor pinned. */
+/**
+ * Signed write through the caller's wallet client. The account must be the
+ * ACCOUNT OBJECT (never a bare address): an address-only account is read by
+ * viem as a JSON-RPC account and routed through eth_sendTransaction, which
+ * Arc's RPC does not serve — the live failure was MethodNotFoundRpcError.
+ * Fees are read live via arcFees (the doc's 20 Gwei floor floats).
+ */
 async function write(
+  publicClient: PublicClient,
   walletClient: WalletClient,
   params: WriteParams,
 ): Promise<Hash> {
   const send = walletClient.writeContract as unknown as WriteContractFn;
+  const fees = await arcFees(publicClient);
   return send({
     address: params.address,
     abi: params.abi,
     functionName: params.functionName,
     args: params.args,
     account: requireAccount(walletClient),
-    ...ARC_GAS,
+    ...fees,
   });
 }
 
-function requireAccount(walletClient: WalletClient): Address {
+/**
+ * Every write confirms its own receipt: viem sends return a hash as soon as
+ * the node accepts the tx, but on a sub-second-finality chain the NEXT read
+ * can still race the tx's inclusion — and a reverted write is invisible
+ * without a status check. Live failure mode observed: fund() raced read-back,
+ * job read as Open with budget unset. sendAndConfirm is the ONLY way helpers
+ * write: it waits for the receipt and throws on revert.
+ */
+async function sendAndConfirm(
+  publicClient: PublicClient,
+  walletClient: WalletClient,
+  params: WriteParams,
+): Promise<TransactionReceipt> {
+  const hash = await write(publicClient, walletClient, params);
+  let receipt: TransactionReceipt;
+  try {
+    receipt = await publicClient.waitForTransactionReceipt({ hash });
+  } catch (error) {
+    throw new Error(
+      `${params.functionName} failed onchain (tx ${hash}): ${(error as Error).message.slice(0, 300)}`,
+    );
+  }
+  if (receipt.status !== "success") {
+    throw new Error(`${params.functionName} reverted onchain (tx ${receipt.transactionHash})`);
+  }
+  return receipt;
+}
+
+function requireAccount(walletClient: WalletClient): Account {
   const account = walletClient.account;
   if (!account) {
     throw new Error(
       "escrow helpers need a wallet client with an attached account (createWalletClient({ account }))",
     );
   }
-  return account.address;
+  return account;
 }

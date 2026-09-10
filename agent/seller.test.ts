@@ -155,6 +155,12 @@ describe("serveFundedJobs — schema-mismatch skip (no misdelivery)", () => {
     // the escrow submit helpers wait for a receipt — stub waitForTransactionReceipt
     (publicClient as unknown as Record<string, unknown>)["waitForTransactionReceipt"] = async () => ({
       transactionHash: `0x${"4".repeat(64)}`,
+      status: "success" as const,
+    });
+    // write() reads live fees via arcFees before the stubbed send
+    (publicClient as unknown as Record<string, unknown>)["estimateFeesPerGas"] = async () => ({
+      maxFeePerGas: 26_000_000_000n,
+      maxPriorityFeePerGas: 1_000_000_000n,
     });
 
     const logLines: string[] = [];

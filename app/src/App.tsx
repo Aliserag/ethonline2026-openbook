@@ -1,23 +1,17 @@
 /**
- * OpenBook — THE LEDGER TERMINAL (one route, the agent's public book):
+ * OpenBook — THE RECEIPT PRINTER (one route, guided ledger).
  *
- *   storefront  ENSv2 svc.* records (Sepolia) — hard-fails when price/sla/payee
- *               are not set; never falls back to hard-coded values
- *   quote       live ENS-resolved price → 6-dec USDC amount + SLA terms
- *   pay         buyer flow: createJobWithSla split-key (single-key demo) —
- *               jobId + every tx hash from the escrow writes
- *   delivery    query_dataset via the Gateway with _meta block vs chainHead
- *               (freshness ruler — the tape) + verify/settle/refund
- *   pnl         openbook-pnl subgraph (Task 4) ledger via the Studio endpoint
+ * Brand: the agent's settlement book, printed live. `▤ OB` mark. Paper, ink,
+ * stamps (SETTLED / REFUNDED / STALE), and THE TAPE — a receipt printer that
+ * types out every settlement event as it lands.
  *
- * Key-guarded UI states: GRAPH_GATEWAY_KEY gates delivery+pnl; the wallet
- * gates pay/settle; missing keys render explicit notices, never fake data.
+ * Guided: each step is a card with a plain-language job ("See what's for
+ * sale", "Get the price", "Pay", "Watch data arrive", "Settle or refund"),
+ * tooltips on every jargon term, and key gates rendered as setup cards with
+ * exact 60-second steps — never silent dead ends.
  *
- * Design: "The Ledger Terminal". Bindery ledger paper, printer's ink, one
- * semantic color family for money states (settled / refunded / stale), a
- * printer's blue for interactivity. Every figure is ledger monotype. The
- * signature is THE TAPE — a receipt-style freshness strip that prints the
- * settlement events as they land.
+ * Logic preserved verbatim from the prior revision; only presentation and
+ * copy changed (plus aria + status semantics).
  */
 import { useEffect, useMemo, useState, type JSX } from "react";
 import { useAccount, useConnect } from "wagmi";
@@ -145,6 +139,56 @@ function quoteFromRecords(dataset: DatasetConfig, records: StorefrontState["reco
     maxLatencyMs,
     payee: rec("svc.payee"),
   };
+}
+
+/** Tooltip — the page's vocabulary for judges with zero context. */
+function Tip({ text }: { text: string }): JSX.Element {
+  return (
+    <span className="tip" data-tip={text} role="note" aria-label={text} tabIndex={0}>
+      ?
+    </span>
+  );
+}
+
+type StepStateAttr = "active" | "done" | "failed" | "blocked" | "idle";
+
+/** One step card — the guided spine. */
+function StepCard(props: {
+  n: number;
+  state: StepStateAttr;
+  title: string;
+  what: string;
+  why?: string;
+  children: React.ReactNode;
+}): JSX.Element {
+  const stateLabel =
+    props.state === "done"
+      ? "done"
+      : props.state === "active"
+        ? "next"
+        : props.state === "failed"
+          ? "failed"
+          : props.state === "blocked"
+            ? "needs setup"
+            : "waiting";
+  return (
+    <section className="stepcard" data-state={props.state} aria-labelledby={`step-${props.n}-title`}>
+      <div className="stepcard__head">
+        <span className="stepno" aria-hidden="true">
+          {props.n}
+        </span>
+        <div className="steptitle">
+          <h2 id={`step-${props.n}-title`}>{props.title}</h2>
+          <p className="what">{props.what}</p>
+        </div>
+        <span className="stepstate">{stateLabel}</span>
+      </div>
+      <div className="body">
+        {props.why !== undefined && <p className="why">{props.why}</p>}
+        {props.children}
+      </div>
+    </section>
+  );
 }
 
 export default function App() {
@@ -328,20 +372,23 @@ export default function App() {
     settle,
   });
 
-  // ---- THE TAPE events (signature): print what actually happened ---------
+  const stepState = (k: StepKind): StepStateAttr =>
+    k === "done" ? "done" : k === "failed" ? "failed" : k === "live" ? "active" : "idle";
+
+  // ---- THE TAPE events (the signature): print what actually happened ------
   const tapeEvents: { text: string; kind: "settled" | "refunded" | "stale" | "idle" }[] = [];
   if (settle !== null) {
     tapeEvents.push(
       settle.verdict === "APPROVE"
-        ? { text: `SETTLED job ${settle.minBlock > 0 ? `#minBlock${settle.minBlock}` : ""} — seller paid · ${settle.txHash ? truncateHash(settle.txHash) : ""}`.replace("  ", " "), kind: "settled" as const }
-        : { text: `REFUNDED — ${settle.reason ?? "SLA miss"} · ${settle.txHash ? truncateHash(settle.txHash) : ""}`, kind: "refunded" as const },
+        ? { text: `SETTLED job ${job?.jobId ?? ""} — seller paid${settle.txHash ? ` · ${truncateHash(settle.txHash)}` : ""}`, kind: "settled" as const }
+        : { text: `REFUNDED — ${settle.reason ?? "SLA miss"}${settle.txHash ? ` · ${truncateHash(settle.txHash)}` : ""}`, kind: "refunded" as const },
     );
   } else if (delivery !== null) {
     tapeEvents.push(
       delivery.freshness === "fresh"
-        ? { text: `DELIVERED block ${delivery.metaBlock} · ${delivery.freshness}`, kind: "settled" as const }
+        ? { text: `DELIVERED block ${delivery.metaBlock} · fresh`, kind: "settled" as const }
         : delivery.freshness === "stale"
-          ? { text: `DELIVERED block ${delivery.metaBlock} · STALE — gate refuses charge, refund path armed`, kind: "stale" as const }
+          ? { text: `DELIVERED block ${delivery.metaBlock} · STALE — gate refuses charge, refund armed`, kind: "stale" as const }
           : { text: "DELIVERED · NO META — cannot attest freshness", kind: "idle" as const },
     );
   } else if (job !== null) {
@@ -356,13 +403,18 @@ export default function App() {
     <>
       <header className="masthead">
         <div className="nameblock">
-          <h1>
-            OpenBook<span className="ledger-no">the agent's settlement ledger</span>
-          </h1>
-          <p className="tagline">
-            an autonomous agent selling freshness-guaranteed onchain data — every payment carries
-            an SLA, every miss refunds itself onchain
-          </p>
+          <span className="brandmark" aria-hidden="true">
+            ▤ OB
+          </span>
+          <div>
+            <h1>
+              OpenBook<span className="ledger-no">the agent's settlement ledger</span>
+            </h1>
+            <p className="tagline">
+              an autonomous agent selling freshness-guaranteed onchain data — every payment
+              carries an SLA, and <span className="accent">every miss refunds itself onchain</span>
+            </p>
+          </div>
         </div>
         <div className="chainbadges">
           <span>arc · 5042002</span>
@@ -373,47 +425,84 @@ export default function App() {
       </header>
 
       <main>
-        <p className="envline">
-        <span>{hasGraphKey ? <b className="yes">GRAPH_GATEWAY_KEY set</b> : <b className="no">GRAPH_GATEWAY_KEY unset</b>}</span>
-        <span>{env.sepoliaRpc ? <b className="yes">SEPOLIA_RPC set</b> : <b className="no">SEPOLIA_RPC unset (viem default)</b>}</span>
-        <span>{env.arcRpc ? <b className="yes">ARC_TESTNET_RPC set</b> : <b className="no">ARC_TESTNET_RPC unset (public rpc)</b>}</span>
-        <span>{isConnected ? <b className="yes">wallet: {truncateHash(address ?? "")}</b> : <b className="no">wallet disconnected</b>}</span>
-      </p>
+        <p className="envline" aria-label="environment status">
+          <span>
+            <span className={hasGraphKey ? "dot yes" : "dot no"} aria-hidden="true" />
+            {hasGraphKey ? "GRAPH_GATEWAY_KEY set" : "GRAPH_GATEWAY_KEY unset"}
+          </span>
+          <span>
+            <span className={env.sepoliaRpc ? "dot yes" : "dot no"} aria-hidden="true" />
+            {env.sepoliaRpc ? "SEPOLIA_RPC set" : "SEPOLIA_RPC unset (viem default)"}
+          </span>
+          <span>
+            <span className={env.arcRpc ? "dot yes" : "dot no"} aria-hidden="true" />
+            {env.arcRpc ? "ARC_TESTNET_RPC set" : "ARC_TESTNET_RPC unset (public rpc)"}
+          </span>
+          <span>
+            <span className={isConnected ? "dot yes" : "dot no"} aria-hidden="true" />
+            {isConnected ? `wallet: ${truncateHash(address ?? "")}` : "wallet disconnected"}
+          </span>
+        </p>
 
-      <div className="book">
-        <div className="journal">
-          <ol className="process">
-            <li className={chipClass(step.resolve)}>resolve</li>
-            <li className={step.quote === "done" ? "done" : ""}>quote</li>
-            <li className={step.pay === "done" ? "done" : step.pay === "live" ? "live" : ""}>pay</li>
-            <li className={step.deliver === "done" ? "done" : step.deliver === "live" ? "live" : ""}>deliver</li>
-            <li className={step.settle === "done" ? "done" : step.settle === "live" ? "live" : ""}>settle</li>
-          </ol>
+        <div className="book">
+          <div className="journal">
+            <ol className="process" aria-label="flow progress">
+              <li className={chipClass(step.resolve)}>resolve</li>
+              <li className={chipClass(step.quote)}>quote</li>
+              <li className={chipClass(step.pay)}>pay</li>
+              <li className={chipClass(step.deliver)}>deliver</li>
+              <li className={chipClass(step.settle)}>settle</li>
+            </ol>
 
-          <section className="panel">
-            <header>
-              <h2>Storefront</h2>
-              <span className="sub">{CONFIG.ens} · ENSv2 · Sepolia · live reads</span>
-            </header>
-            <div className="body">
-              {ensLoading && <p className="notice">resolving {CONFIG.ens} svc.* records…</p>}
+            <StepCard
+              n={1}
+              state={ensDone ? "done" : ensLoading ? "active" : "failed"}
+              title="See what's for sale"
+              what="The storefront lives on ENSv2 (Sepolia): menu, price, SLA, payee."
+              why="The storefront is a name, not a file. OpenBook.eth publishes its menu, price and service-level promise as live ENSv2 records — if any record is missing, nothing gets priced. No hard-coded values, ever."
+            >
+              {ensLoading && (
+                <p className="notice" role="status">
+                  Resolving {CONFIG.ens} on Sepolia — reading its live records…
+                </p>
+              )}
               {ens !== null && ens.hardFail !== null && (
-                <div className="notice hardfail">
-                  <strong>hard fail</strong> — the storefront is not priceable without its records.
-                  <div className="mono">{ens.hardFail}</div>
-                </div>
+                <>
+                  <div className="notice hardfail">
+                    <strong>Storefront isn't set up yet.</strong> The agent won't guess a price — it
+                    refuses to trade until its ENSv2 records exist. That's the point: no name, no
+                    commerce.
+                    <div className="mono">{ens.hardFail}</div>
+                  </div>
+                  <div className="setupcard">
+                    <span className="kicker">60-second setup</span>
+                    <strong>To watch OpenBook sell:</strong>
+                    <ol>
+                      <li>
+                        Register the name and records with <code>scripts/ens/setup.sh</code> (writes
+                        menu, price, SLA, payee).
+                        <Tip text="The setup script needs a Sepolia key with test ETH + free MockUSDC. Details in docs/keys-needed.md." />
+                      </li>
+                      <li>Reload this page — the table below fills with live records.</li>
+                      <li>Step 2 unlocks: prices are read from the name, not hard-coded.</li>
+                    </ol>
+                  </div>
+                </>
               )}
               {ens !== null && ens.hardFail === null && (
                 <div className="notice ok">
-                  <strong>records resolved</strong> — price, SLA and payee are live ENS text records,
-                  not constants in this page.
+                  <strong>Storefront live.</strong> Price, SLA and payee resolved from ENSv2 records
+                  on {CONFIG.ens} — the exact values the agent is bound by, read off the chain.
                 </div>
               )}
-              <table className="ledger">
+              <table className="ledger" aria-label="ENS storefront records">
                 <thead>
                   <tr>
-                    <th>record</th>
-                    <th>value</th>
+                    <th scope="col">
+                      ENSv2 record
+                      <Tip text="ENSv2 (Sepolia) lets the agent publish a structured menu: what it sells, at what price, under what SLA, and who gets paid." />
+                    </th>
+                    <th scope="col">live value</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -427,17 +516,20 @@ export default function App() {
                   ))}
                 </tbody>
               </table>
-            </div>
-          </section>
+            </StepCard>
 
-          <section className="panel">
-            <header>
-              <h2>Quote &amp; pay</h2>
-              <span className="sub">buyer flow · escrow {truncateHash(ERC8183)}</span>
-            </header>
-            <div className="body">
+            <StepCard
+              n={2}
+              state={stepState(step.quote) === "idle" && stepState(step.resolve) === "done" ? "active" : stepState(step.quote)}
+              title="Get the price"
+              what="Quote the chosen dataset — priced straight from the ENSv2 records."
+              why="Ask first, pay later. The agent quotes from its own ENSv2 records (price + SLA), so you always know exactly what you're buying before a payment moves."
+            >
               <div className="field">
-                <label htmlFor="dataset">dataset</label>
+                <label htmlFor="dataset">
+                  dataset
+                  <Tip text="Two standardized Messari subgraphs — the same query shape runs on both. That's The Graph's schema leverage." />
+                </label>
                 <select id="dataset" value={datasetId} onChange={(event) => setDatasetId(event.target.value)}>
                   {CONFIG.datasets.map((d) => (
                     <option key={d.id} value={d.id}>
@@ -447,46 +539,52 @@ export default function App() {
                 </select>
               </div>
               {quote === null ? (
-                <button className="primary" disabled={!ensDone} onClick={handleQuote}>
+                <button
+                  className="primary"
+                  disabled={!ensDone}
+                  onClick={handleQuote}
+                  title={!ensDone ? "The storefront (step 1) must resolve first" : undefined}
+                >
                   Get quote
                 </button>
               ) : (
-                <div className="notice ok">
-                  <strong>{quote.amountUsdc} USDC/query</strong> (6-dec · ENS svc.price)
+                <div className="notice ok" role="status">
+                  <strong>{quote.amountUsdc} USDC/query</strong> — quoted from ENS, guaranteed fresh
                   <div className="mono">
-                    SLA: min block lag {quote.minBlockLag} · latency {quote.maxLatencyMs}ms ·
-                    payee {truncateHash(quote.payee)}
+                    SLA: min block lag {quote.minBlockLag} · latency {quote.maxLatencyMs}ms · payee{" "}
+                    {truncateHash(quote.payee)}
                   </div>
                 </div>
               )}
-
-              {isConnected ? (
-                <p style={{ marginTop: 14 }}>
-                  <button
-                    className="primary"
-                    disabled={quote === null || paying || job !== null}
-                    onClick={handlePay}
-                  >
-                    {paying ? "signing escrow txs…" : job !== null ? "job funded" : `Pay ${quote?.amountUsdc ?? ""} USDC into escrow`}
-                  </button>
-                </p>
-              ) : (
-                <p className="notice">
-                  Connect a wallet to pay.{" "}
-                  {connectors.map((connector) => (
-                    <button key={connector.uid} style={{ marginRight: 8 }} onClick={() => connect({ connector })}>
-                      Connect {connector.name}
+              {quote !== null && (
+                <p style={{ marginTop: 12 }}>
+                  {isConnected ? (
+                    <button
+                      className="primary"
+                      disabled={paying || job !== null}
+                      onClick={handlePay}
+                      title={job !== null ? "This job is already funded" : undefined}
+                    >
+                      {paying ? "signing escrow txs…" : job !== null ? "job funded ✓" : `Pay ${quote.amountUsdc} USDC into escrow`}
                     </button>
-                  ))}
+                  ) : (
+                    <span className="notice" style={{ display: "inline-block", marginBottom: 0 }}>
+                      Connect a wallet to pay.{" "}
+                      {connectors.map((connector) => (
+                        <button key={connector.uid} style={{ marginRight: 8 }} onClick={() => connect({ connector })}>
+                          Connect {connector.name}
+                        </button>
+                      ))}
+                    </span>
+                  )}
                 </p>
               )}
-
               {job !== null && (
-                <div className="notice ok">
-                  <strong>funded</strong> — job {job.jobId} on ERC-8183 ({truncateHash(ERC8183)})
+                <div className="notice ok" role="status">
+                  <strong>Funded — the SLA is now onchain.</strong> job {job.jobId} on ERC-8183 (
+                  {truncateHash(ERC8183)}). The agent has committed to deliver data no older than
+                  block {job.minBlock} — or refund you automatically.
                   <div className="mono">
-                    SLA minBlock <b>{job.minBlock}</b> · escrow 0.10 USDC (6-dec)
-                    <br />
                     {job.hashes.map((hash, index) => (
                       <span key={hash}>
                         tx{job.hashes.length - index}:{" "}
@@ -499,38 +597,81 @@ export default function App() {
                   </div>
                 </div>
               )}
-            </div>
-          </section>
+            </StepCard>
 
-          <section className="panel">
-            <header>
-              <h2>Delivery</h2>
-              <span className="sub">the graph gateway · _meta freshness gate</span>
-            </header>
-            <div className="body">
+            <StepCard
+              n={3}
+              state={
+                delivery !== null
+                  ? "done"
+                  : querying
+                    ? "active"
+                    : !hasGraphKey
+                      ? "blocked"
+                      : "idle"
+              }
+              title="Watch data arrive"
+              what="One live query through The Graph's Gateway — with its freshness timestamp."
+              why="Every answer carries a proof of freshness (the _meta block). If the data is older than the SLA allows, the agent refuses to charge for it — before you pay, not after."
+            >
               {!hasGraphKey && (
-                <p className="notice error">
-                  <strong>Graph gateway key not set</strong> — add <span className="mono">VITE_GRAPH_GATEWAY_KEY</span>{" "}
-                  to <span className="mono">app/.env.local</span> (free Studio key at thegraph.com/studio).
-                  The query and P&amp;L panels are key-gated — no hard-coded data.
-                </p>
+                <div className="setupcard">
+                  <span className="kicker">one free key, 60 seconds</span>
+                  <strong>To watch live data:</strong>
+                  <ol>
+                    <li>
+                      Get a free key at <a href="https://thegraph.com/studio" target="_blank" rel="noreferrer">thegraph.com/studio</a>{" "}
+                      (account → API keys).
+                      <Tip text="The Studio key gates Gateway queries and the hosted Subgraph MCP — one key, both." />
+                    </li>
+                    <li>
+                      Add it to <code>app/.env.local</code> as <code>VITE_GRAPH_GATEWAY_KEY</code>.
+                    </li>
+                    <li>Reload — this panel runs the live query.</li>
+                  </ol>
+                </div>
               )}
               <div className="field">
-                <label htmlFor="query">graphql</label>
+                <label htmlFor="query">
+                  graphql
+                  <Tip text="The exact query the agent runs against the pinned Messari subgraph — you can edit it live." />
+                </label>
                 <textarea id="query" value={queryText} onChange={(event) => setQueryText(event.target.value)} />
               </div>
-              <button className="primary" disabled={!hasGraphKey || querying} onClick={handleQuery}>
+              <button
+                className="primary"
+                disabled={!hasGraphKey || querying}
+                onClick={handleQuery}
+                title={!hasGraphKey ? "Needs the Graph gateway key (see card above)" : undefined}
+              >
                 {querying ? "querying…" : "Pull fresh data"}
               </button>
 
               <FreshnessRuler delivery={delivery} minBlock={job?.minBlock ?? null} />
               {delivery !== null && <DeliveryResult delivery={delivery} />}
+            </StepCard>
 
-              <p style={{ marginTop: 14 }}>
+            <StepCard
+              n={4}
+              state={stepState(step.settle)}
+              title="Settle — or refund"
+              what="The verdict is deterministic open code: fresh data settles, stale data refunds."
+              why="This is the whole idea: the payment itself checks the SLA. The agent never gets paid for stale data, and the buyer never has to ask for a refund — it just happens onchain."
+            >
+              <p style={{ marginTop: 0 }}>
                 <button
                   className={delivery !== null && delivery.freshness === "stale" ? "danger" : "primary"}
                   disabled={!isConnected || job === null || delivery === null || settling}
                   onClick={handleSettle}
+                  title={
+                    !isConnected
+                      ? "Connect a wallet first (step 2)"
+                      : job === null
+                        ? "Fund a job first (step 2)"
+                        : delivery === null
+                          ? "Pull fresh data first (step 3)"
+                          : undefined
+                  }
                 >
                   {settling
                     ? "settling…"
@@ -540,8 +681,15 @@ export default function App() {
                 </button>
               </p>
               {settle !== null && (
-                <div className={settle.verdict === "APPROVE" ? "notice ok" : "notice error"}>
-                  <strong>{settle.verdict === "APPROVE" ? "settled — seller paid" : `refund issued (${settle.reason ?? "SLA miss"})`}</strong>
+                <div className={settle.verdict === "APPROVE" ? "notice ok" : "notice error"} role="status">
+                  <span className={settle.verdict === "APPROVE" ? "stamp settled" : "stamp refunded"}>
+                    {settle.verdict === "APPROVE" ? "SETTLED" : "REFUNDED"}
+                  </span>{" "}
+                  <strong>
+                    {settle.verdict === "APPROVE"
+                      ? "seller paid — SLA met"
+                      : `refund issued (${settle.reason ?? "SLA miss"})`}
+                  </strong>
                   {settle.txHash !== undefined && (
                     <div className="mono">
                       <a href={explorerUrl(settle.txHash)} target="_blank" rel="noreferrer">
@@ -552,113 +700,137 @@ export default function App() {
                   )}
                 </div>
               )}
-            </div>
-          </section>
-        </div>
+            </StepCard>
+          </div>
 
-        <aside className="summary">
-          <section className="panel">
-            <header>
-              <h2>Running balance</h2>
-              <span className="sub">openbook-pnl · arc-testnet</span>
-            </header>
-            <div className="body">
-              {!hasGraphKey && (
-                <p className="notice error">
-                  <strong>P&amp;L unavailable</strong> — same Gateway key gate as the rest of the
-                  Graph paths.
+          <aside className="summary">
+            <section className="stepcard" data-state={pnl !== null && pnl.length > 0 ? "done" : "idle"}>
+              <div className="stepcard__head">
+                <span className="stepno" aria-hidden="true">
+                  P
+                </span>
+                <div className="steptitle">
+                  <h2 id="pnl-title">The agent's books</h2>
+                  <p className="what">
+                    Running P&amp;L, onchain and queryable — every settlement lands here.
+                  </p>
+                </div>
+                <span className="stepstate">live</span>
+              </div>
+              <div className="body">
+                {!hasGraphKey && (
+                  <div className="setupcard">
+                    <span className="kicker">one free key, 60 seconds</span>
+                    <strong>To read the books:</strong> same Graph key as step 3 — add
+                    <code> VITE_GRAPH_GATEWAY_KEY</code> to <code>app/.env.local</code> and reload.
+                  </div>
+                )}
+                {pnlError !== null && <p className="notice error">{pnlError}</p>}
+                {pnl !== null && pnl.length === 0 && (
+                  <p className="notice">no settlement rows yet — the ledger fills as jobs complete.</p>
+                )}
+                {pnl !== null && pnl.length > 0 && (
+                  <ul className="running">
+                    <li>
+                      <span className="cap">revenue</span>
+                      <span className="fig settled">{usdc6(sum(pnl, (r) => r.revenue))} USDC</span>
+                    </li>
+                    <li>
+                      <span className="cap">costs</span>
+                      <span className="fig">{usdc6(sum(pnl, (r) => r.costs))} USDC</span>
+                    </li>
+                    <li>
+                      <span className="cap">refunds</span>
+                      <span className="fig refunded">{usdc6(sum(pnl, (r) => r.refunds))} USDC</span>
+                    </li>
+                    <li>
+                      <span className="cap">net</span>
+                      <span className="fig net">{usdc6(sum(pnl, (r) => r.net))} USDC</span>
+                    </li>
+                  </ul>
+                )}
+                <p className="statline">
+                  _meta block {pnlMeta ?? "—"} · chain head {pnlHead ?? "—"} · daily rows{" "}
+                  {pnl !== null ? String(pnl.length) : "—"}
                 </p>
-              )}
-              {pnlError !== null && <p className="notice error">{pnlError}</p>}
-              {pnl !== null && pnl.length === 0 && <p className="notice">no settlement rows yet — the ledger fills as jobs complete.</p>}
-              {pnl !== null && pnl.length > 0 && (
-                <ul className="running">
-                  <li>
-                    <span className="cap">revenue</span>
-                    <span className="fig settled">{usdc6(sum(pnl, (r) => r.revenue))} USDC</span>
-                  </li>
-                  <li>
-                    <span className="cap">costs</span>
-                    <span className="fig">{usdc6(sum(pnl, (r) => r.costs))} USDC</span>
-                  </li>
-                  <li>
-                    <span className="cap">refunds</span>
-                    <span className="fig refunded">{usdc6(sum(pnl, (r) => r.refunds))} USDC</span>
-                  </li>
-                  <li>
-                    <span className="cap">net</span>
-                    <span className="fig net">{usdc6(sum(pnl, (r) => r.net))} USDC</span>
-                  </li>
-                </ul>
-              )}
-              <p className="statline">
-                _meta block {pnlMeta ?? "—"} · chain head {pnlHead ?? "—"} · daily rows{" "}
-                {pnl !== null ? String(pnl.length) : "—"}
-              </p>
-            </div>
-          </section>
+              </div>
+            </section>
 
-          <section className="panel">
-            <header>
-              <h2>Ledger</h2>
-              <span className="sub">daily rows</span>
-            </header>
-            <div className="body">
-              {pnl !== null && pnl.length > 0 ? (
-                <table className="ledger">
-                  <thead>
-                    <tr>
-                      <th>day</th>
-                      <th>revenue</th>
-                      <th>costs</th>
-                      <th>refunds</th>
-                      <th>net</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {pnl.map((row) => (
-                      <tr key={row.id}>
-                        <td className="key">{row.id}</td>
-                        <td className="val">{usdc6(row.revenue)}</td>
-                        <td className="val">{usdc6(row.costs)}</td>
-                        <td className="val">{usdc6(row.refunds)}</td>
-                        <td className={row.net.startsWith("-") ? "val missing" : "val ok"}>{usdc6(row.net)}</td>
+            <section className="stepcard" data-state="idle">
+              <div className="stepcard__head">
+                <span className="stepno" aria-hidden="true">
+                  L
+                </span>
+                <div className="steptitle">
+                  <h2 id="ledger-title">Daily rows</h2>
+                  <p className="what">The audit trail, day by day.</p>
+                </div>
+              </div>
+              <div className="body">
+                {pnl !== null && pnl.length > 0 ? (
+                  <table className="ledger" aria-label="daily P&L rows">
+                    <thead>
+                      <tr>
+                        <th scope="col">day</th>
+                        <th scope="col">revenue</th>
+                        <th scope="col">costs</th>
+                        <th scope="col">refunds</th>
+                        <th scope="col">net</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              ) : (
-                <p className="notice">daily rows appear here once settlements land.</p>
-              )}
-            </div>
-          </section>
-        </aside>
-      </div>
+                    </thead>
+                    <tbody>
+                      {pnl.map((row) => (
+                        <tr key={row.id}>
+                          <td className="key">{row.id}</td>
+                          <td className="val">{usdc6(row.revenue)}</td>
+                          <td className="val">{usdc6(row.costs)}</td>
+                          <td className="val">{usdc6(row.refunds)}</td>
+                          <td className={row.net.startsWith("-") ? "val missing" : "val ok"}>{usdc6(row.net)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                ) : (
+                  <p className="notice">daily rows appear here once settlements land.</p>
+                )}
+              </div>
+            </section>
+          </aside>
+        </div>
 
-      <div className="tape" aria-label="settlement tape: freshness scale and printed events">
-        <div className="tape__head">
-          <span className="tape__title">The Tape</span>
-          <span className="tape__status">
-            {delivery !== null ? `delivery ${delivery.freshness}` : settle !== null ? `settled ${settle.verdict}` : "idle"}
-          </span>
-        </div>
-        <div className="tape__body">
-          <div className="tape__scale">
-            <FreshnessRuler delivery={delivery} minBlock={job?.minBlock ?? null} />
-            <div className="tape__ticks">
-              <span>SLA floor</span>
-              <span>delivered ▸ chain head</span>
+        <div className="tape" aria-label="settlement tape: freshness scale and printed events">
+          <div className="tape__head">
+            <span className="tape__title">The Tape — settlement printer</span>
+            <span className="tape__status">
+              {settle !== null
+                ? `settled ${settle.verdict}`
+                : delivery !== null
+                  ? `delivery ${delivery.freshness}`
+                  : job !== null
+                    ? `funded ${job.jobId}`
+                    : quote !== null
+                      ? `quoted ${quote.amountUsdc} USDC`
+                      : "idle"}
+            </span>
+          </div>
+          <div className="tape__body">
+            <div className="tape__scale">
+              <FreshnessRuler delivery={delivery} minBlock={job?.minBlock ?? null} />
+              <div className="tape__ticks">
+                <span>SLA floor</span>
+                <span>delivered ▸ chain head</span>
+              </div>
+            </div>
+            <div className="tape__events" role="status" aria-live="polite">
+              {tapeEvents.map((event, index) => (
+                <span key={`${event.kind}-${index}`} className={`ev ${event.kind}`}>
+                  {event.text}
+                </span>
+              ))}
             </div>
           </div>
-          <div className="tape__events" role="status" aria-live="polite">
-            {tapeEvents.map((event, index) => (
-              <span key={`${event.kind}-${index}`} className={`ev ${event.kind}`}>
-                {event.text}
-              </span>
-            ))}
-          </div>
         </div>
-      </div>
+      </main>
 
       <footer className="foot">
         <span>
@@ -673,7 +845,6 @@ export default function App() {
           architecture ↗
         </a>
       </footer>
-    </main>
     </>
   );
 }
@@ -733,8 +904,10 @@ function DeliveryResult({ delivery }: { delivery: DeliveryState }): JSX.Element 
         ? `${delta} block${delta === 1 ? "" : "s"} behind chain head — beyond SLA maxAge ${delivery.dataset.freshness.maxAge}; the gate refuses to charge, verify refunds`
         : "no _meta in the response — cannot attest freshness";
   return (
-    <div className={delivery.freshness === "fresh" ? "notice ok" : "notice error"}>
-      <strong>{delivery.freshness === "fresh" ? "FRESH" : delivery.freshness === "stale" ? "STALE" : "NO META"}</strong>{" "}
+    <div className={delivery.freshness === "fresh" ? "notice ok" : "notice error"} role="status">
+      <span className={delivery.freshness === "fresh" ? "stamp settled" : delivery.freshness === "stale" ? "stamp stale" : "stamp"}>
+        {delivery.freshness === "fresh" ? "FRESH" : delivery.freshness === "stale" ? "STALE" : "NO META"}
+      </span>{" "}
       — {status}
       <div className="mono">
         payloadHash {truncateHash(delivery.payloadHash, 10, 10)} ·{" "}

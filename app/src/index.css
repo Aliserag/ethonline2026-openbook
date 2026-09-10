@@ -1,23 +1,34 @@
-/* OpenBook — THE LEDGER TERMINAL.
-   The subject is the agent's public book: a live settlement ledger for the
-   machine economy. Bindery ledger paper, printer's ink, one semantic color
-   family for money states (settled / refunded / stale), a sola printer's
-   blue for interactivity. Every figure is set in ledger monotype. The
-   signature is THE TAPE — a receipt-style freshness strip that runs the
-   width of the page and prints every settlement event.
+/* OpenBook — THE RECEIPT PRINTER.
+   Brand: an agent's settlement ledger, printed live. Bindery paper, ink,
+   one semantic money-color family (settled/refunded/stale), printer's blue
+   for interactivity, and the signature: every state prints like a receipt —
+   perforated edges, dashed rules, mono figures, stamps. The brand mark is
+   `▤ OB` — a ledger glyph, used once, memorably.
 
-   Display: Space Grotesk (the Arc chain's own UI face — the chain this
-   book runs on). Body: IBM Plex Sans. Data: IBM Plex Mono, always. */
+   Type: Space Grotesk (display, the Arc chain's own face), IBM Plex Sans
+   (body), IBM Plex Mono (every figure). Typography carries the soul. */
+
+@import "@fontsource/space-grotesk/400.css";
+@import "@fontsource/space-grotesk/500.css";
+@import "@fontsource/space-grotesk/600.css";
+@import "@fontsource/space-grotesk/700.css";
+@import "@fontsource/ibm-plex-sans/400.css";
+@import "@fontsource/ibm-plex-sans/500.css";
+@import "@fontsource/ibm-plex-sans/600.css";
+@import "@fontsource/ibm-plex-mono/400.css";
+@import "@fontsource/ibm-plex-mono/500.css";
+@import "@fontsource/ibm-plex-mono/600.css";
 
 :root {
   /* paper & ink */
   --paper: #eceae2;
   --sheet: #f7f5ef;
   --ink: #10151c;
+  --ink-2: #1c2530;
   --muted: #5e6670;
   --rule: #c9c6ba;
   --rule-strong: #9a9588;
-  /* money states — the only color that carries meaning */
+  /* money states — the only colors that carry meaning */
   --settled: #0e7a4f;
   --settled-bg: #e3efe8;
   --refunded: #b3402e;
@@ -26,6 +37,7 @@
   --stale-bg: #f4ecda;
   /* interactivity only */
   --accent: #2a4b8f;
+  --accent-soft: #e7ecf6;
   /* type */
   --display: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
   --sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
@@ -43,7 +55,9 @@ body {
 }
 
 body {
-  background: var(--paper);
+  background:
+    radial-gradient(circle at 18% -10%, rgba(16, 21, 28, 0.035), transparent 42%),
+    var(--paper);
   color: var(--ink);
   font-family: var(--sans);
   font-size: 15px;
@@ -52,12 +66,12 @@ body {
 }
 
 #root {
-  max-width: 1120px;
+  max-width: 1140px;
   margin: 0 auto;
-  padding: 28px 22px 48px;
+  padding: 26px 22px 52px;
 }
 
-/* ---- identity card (masthead) ------------------------------------------ */
+/* ============ IDENTITY (masthead) ======================================== */
 
 .masthead {
   display: flex;
@@ -65,43 +79,73 @@ body {
   justify-content: space-between;
   gap: 20px;
   flex-wrap: wrap;
-  padding-bottom: 16px;
+  padding: 6px 2px 18px;
   border-bottom: 3px double var(--ink);
 }
 
-.masthead .nameblock {
+.nameblock {
+  display: flex;
+  align-items: center;
+  gap: 16px;
   min-width: 0;
 }
 
-.masthead h1 {
-  margin: 0 0 4px;
+.brandmark {
+  flex: 0 0 auto;
+  width: 46px;
+  height: 46px;
+  display: grid;
+  place-items: center;
+  background: var(--ink);
+  color: var(--sheet);
   font-family: var(--display);
-  font-size: 34px;
+  font-size: 15px;
   font-weight: 600;
+  letter-spacing: 0.02em;
+  border-radius: 6px;
+  position: relative;
+  box-shadow: 0 1px 0 var(--rule-strong);
+}
+
+.brandmark::after {
+  content: "";
+  position: absolute;
+  inset: 2px;
+  border: 1px dashed rgba(247, 245, 239, 0.4);
+  border-radius: 4px;
+  pointer-events: none;
+}
+
+.masthead h1 {
+  margin: 0;
+  font-family: var(--display);
+  font-size: 32px;
+  font-weight: 700;
   letter-spacing: -0.02em;
-  line-height: 1.05;
+  line-height: 1.04;
 }
 
 .masthead h1 .ledger-no {
+  display: block;
   font-family: var(--mono);
-  font-size: 15px;
+  font-size: 12px;
   font-weight: 500;
   color: var(--muted);
-  letter-spacing: 0.04em;
-  margin-left: 10px;
-}
-
-.masthead h1 .ledger-no::before {
-  content: "·";
-  color: var(--rule-strong);
-  margin-right: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin-top: 3px;
 }
 
 .tagline {
-  margin: 0;
-  font-family: var(--mono);
-  font-size: 12.5px;
-  color: var(--muted);
+  margin: 6px 0 0;
+  font-size: 13.5px;
+  color: var(--ink-2);
+  max-width: 62ch;
+}
+
+.tagline .accent {
+  color: var(--refunded);
+  font-weight: 600;
 }
 
 .chainbadges {
@@ -112,46 +156,56 @@ body {
 
 .chainbadges span {
   font-family: var(--mono);
-  font-size: 11px;
-  letter-spacing: 0.06em;
+  font-size: 10.5px;
+  letter-spacing: 0.07em;
   text-transform: uppercase;
   border: 1px solid var(--rule-strong);
   padding: 3px 8px;
   background: var(--sheet);
+  border-radius: 3px;
 }
 
-/* ---- printer's proof strip (env + wallet) ------------------------------- */
+/* ---- proof strip (env + wallet) ---------------------------------------- */
 
 .envline {
   display: flex;
-  gap: 14px;
+  gap: 16px;
   flex-wrap: wrap;
   font-family: var(--mono);
   font-size: 11.5px;
   color: var(--muted);
-  padding: 8px 0 14px;
-  border-bottom: 1px solid var(--rule);
+  padding: 10px 2px;
 }
 
-.envline .yes {
-  color: var(--settled);
+.envline .dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  margin-right: 6px;
+  background: var(--rule-strong);
+  vertical-align: 1px;
 }
 
-.envline .no {
-  color: var(--muted);
-  text-decoration: underline dotted var(--rule-strong);
+.envline .dot.yes {
+  background: var(--settled);
 }
 
-/* ---- the book: journal left, running balance right ---------------------- */
+.envline .dot.no {
+  background: var(--stale);
+}
+
+/* ============ GUIDED FLOW (step cards) ==================================== */
 
 .book {
   display: grid;
-  grid-template-columns: minmax(0, 1.65fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1.62fr) minmax(0, 1fr);
   gap: 18px;
   margin-top: 18px;
+  align-items: start;
 }
 
-@media (max-width: 860px) {
+@media (max-width: 900px) {
   .book {
     grid-template-columns: 1fr;
   }
@@ -160,111 +214,215 @@ body {
 .journal {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 18px;
   min-width: 0;
 }
 
-/* journal entry numbers — this flow is a real sequence (resolve→settle) */
-
-.process {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  counter-reset: entry;
+.stepcard {
+  border: 1px solid var(--rule-strong);
+  border-radius: 6px;
+  background: var(--sheet);
+  overflow: hidden;
+  position: relative;
 }
 
-.process li {
-  counter-increment: entry;
-  flex: 1 1 auto;
-  min-width: 96px;
+.stepcard::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 8px;
+  background-image: radial-gradient(circle at 4px 4px, var(--paper) 3px, transparent 3.5px);
+  background-size: 12px 8px;
+  background-position: 0 0;
+}
+
+.stepcard__head {
   display: flex;
   align-items: center;
-  gap: 7px;
-  font-family: var(--mono);
-  font-size: 11px;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--muted);
-  padding: 8px 10px;
-  border: 1px solid var(--rule);
-  border-radius: 4px;
-  background: var(--sheet);
-}
-
-.process li::before {
-  content: counter(entry, decimal-leading-zero);
-  font-size: 10px;
-  color: var(--rule-strong);
-}
-
-.process li.done {
-  color: var(--ink);
-  background: var(--settled-bg);
-  border-color: var(--settled);
-}
-
-.process li.live {
-  color: var(--ink);
-  background: var(--stale-bg);
-  border-color: var(--stale);
-}
-
-.process li.done::before {
-  color: var(--settled);
-}
-
-.process li.failed {
-  color: var(--refunded);
-  background: var(--refunded-bg);
-  border-color: var(--refunded);
-}
-
-.process li.failed::before {
-  color: var(--refunded);
-}
-
-/* ---- panels --------------------------------------------------------------- */
-
-.panel {
-  border: 1px solid var(--rule-strong);
-  background: var(--sheet);
-  border-radius: 4px;
-  overflow: hidden;
-}
-
-.panel > header {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
-  padding: 10px 16px;
-  border-bottom: 1px solid var(--rule);
+  gap: 14px;
+  padding: 14px 16px 12px;
+  border-bottom: 1px dashed var(--rule-strong);
   background: var(--paper);
 }
 
-.panel > header h2 {
-  margin: 0;
+.stepno {
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
   font-family: var(--display);
-  font-size: 15px;
-  font-weight: 600;
-  letter-spacing: 0.01em;
-}
-
-.panel > header .sub {
-  font-family: var(--mono);
-  font-size: 11px;
+  font-size: 14px;
+  font-weight: 700;
+  background: var(--sheet);
+  border: 2px solid var(--rule-strong);
   color: var(--muted);
 }
 
-.panel .body {
-  padding: 16px 18px 18px;
+.stepcard[data-state="active"] .stepno {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
-/* ---- ledger tables ------------------------------------------------------- */
+.stepcard[data-state="done"] .stepno {
+  background: var(--settled);
+  border-color: var(--settled);
+  color: #fff;
+}
+
+.stepcard[data-state="failed"] .stepno {
+  background: var(--refunded);
+  border-color: var(--refunded);
+  color: #fff;
+}
+
+.stepcard[data-state="blocked"] .stepno {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.stepcard[data-state="failed"] .stepno::after {
+  content: "";
+}
+
+.stepcard[data-state="blocked"] .stepstate {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.steptitle {
+  min-width: 0;
+  flex: 1;
+}
+
+.steptitle h2 {
+  margin: 0;
+  font-family: var(--display);
+  font-size: 16.5px;
+  font-weight: 600;
+  line-height: 1.15;
+}
+
+.steptitle .what {
+  margin: 2px 0 0;
+  font-size: 12.5px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.stepstate {
+  flex: 0 0 auto;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 3px 9px;
+  border-radius: 3px;
+  border: 1px solid var(--rule-strong);
+  color: var(--muted);
+  background: var(--sheet);
+  white-space: nowrap;
+}
+
+.stepcard[data-state="active"] .stepstate {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.stepcard[data-state="done"] .stepstate {
+  color: var(--settled);
+  border-color: var(--settled);
+  background: var(--settled-bg);
+}
+
+.stepcard[data-state="failed"] .stepstate {
+  color: var(--refunded);
+  border-color: var(--refunded);
+  background: var(--refunded-bg);
+}
+
+.stepcard .body {
+  padding: 14px 16px 16px;
+}
+
+.stepcard .why {
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+
+/* ---- tooltips (jargon) --------------------------------------------------- */
+
+.tip {
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  margin-left: 5px;
+  border-radius: 50%;
+  border: 1px solid var(--rule-strong);
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  cursor: help;
+  position: relative;
+  vertical-align: 2px;
+}
+
+.tip::after {
+  content: attr(data-tip);
+  position: absolute;
+  bottom: 130%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 230px;
+  padding: 8px 10px;
+  background: var(--ink);
+  color: var(--sheet);
+  font-family: var(--sans);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.4;
+  border-radius: 5px;
+  white-space: normal;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease;
+  z-index: 30;
+  box-shadow: 0 4px 14px rgba(16, 21, 28, 0.25);
+  text-align: left;
+}
+
+.tip::before {
+  content: "";
+  position: absolute;
+  bottom: 122%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 5px solid transparent;
+  border-top-color: var(--ink);
+  opacity: 0;
+  transition: opacity 120ms ease;
+  z-index: 30;
+}
+
+.tip:hover::after,
+.tip:focus-visible::after,
+.tip:hover::before,
+.tip:focus-visible::before {
+  opacity: 1;
+}
+
+/* ---- ledger tables -------------------------------------------------------- */
 
 .ledger {
   width: 100%;
@@ -285,7 +443,7 @@ body {
 
 .ledger td {
   padding: 7px 8px;
-  border-bottom: 1px solid var(--rule);
+  border-bottom: 1px dashed var(--rule);
   vertical-align: top;
   word-break: break-word;
 }
@@ -320,17 +478,17 @@ body {
   color: var(--refunded);
 }
 
-/* ---- buttons, inputs ----------------------------------------------------- */
+/* ---- buttons, inputs ------------------------------------------------------ */
 
 button {
   font-family: var(--sans);
   font-size: 13.5px;
   font-weight: 500;
   border: 1px solid var(--rule-strong);
-  border-radius: 4px;
+  border-radius: 5px;
   background: var(--sheet);
   color: var(--ink);
-  padding: 7px 14px;
+  padding: 8px 15px;
   cursor: pointer;
 }
 
@@ -347,6 +505,7 @@ button.primary {
   background: var(--ink);
   color: var(--sheet);
   border-color: var(--ink);
+  font-weight: 600;
 }
 
 button.primary:hover:not(:disabled) {
@@ -358,6 +517,16 @@ button.danger {
   background: var(--refunded);
   border-color: var(--refunded);
   color: #fff;
+  font-weight: 600;
+}
+
+button.ghost {
+  background: transparent;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  padding: 4px 8px;
+  color: var(--accent);
+  border-color: var(--accent);
 }
 
 select,
@@ -365,17 +534,17 @@ textarea {
   font-family: var(--mono);
   font-size: 12.5px;
   border: 1px solid var(--rule-strong);
-  border-radius: 4px;
+  border-radius: 5px;
   background: #fffdfa;
   color: var(--ink);
-  padding: 7px 9px;
+  padding: 8px 9px;
   width: 100%;
 }
 
 textarea {
-  min-height: 120px;
+  min-height: 110px;
   resize: vertical;
-  line-height: 1.5;
+  line-height: 1.55;
 }
 
 .field {
@@ -392,7 +561,142 @@ textarea {
   margin-bottom: 5px;
 }
 
-/* ---- running balance (P&L summary — right column) ----------------------- */
+/* ---- notices + setup cards ------------------------------------------------- */
+
+.notice {
+  border: 1px solid var(--rule);
+  background: var(--paper);
+  border-radius: 5px;
+  padding: 10px 12px;
+  font-size: 13.5px;
+  margin: 0 0 12px;
+}
+
+.notice.error {
+  border-color: var(--refunded);
+  background: var(--refunded-bg);
+}
+
+.notice.error strong {
+  color: var(--refunded);
+}
+
+.notice.hardfail {
+  border-color: var(--refunded);
+  background: var(--refunded-bg);
+}
+
+.notice.hardfail strong {
+  color: var(--refunded);
+}
+
+.notice.ok {
+  border-color: var(--settled);
+  background: var(--settled-bg);
+}
+
+.notice.ok strong {
+  color: var(--settled);
+}
+
+.notice .mono {
+  font-family: var(--mono);
+  font-size: 12px;
+  margin-top: 5px;
+  word-break: break-word;
+}
+
+.notice a {
+  color: var(--accent);
+}
+
+/* setup card: key gates framed as invitations with exact steps */
+
+.setupcard {
+  border: 1px dashed var(--accent);
+  background: var(--accent-soft);
+  border-radius: 5px;
+  padding: 12px 14px;
+  font-size: 13.5px;
+  margin: 0 0 12px;
+}
+
+.setupcard .kicker {
+  display: block;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 5px;
+}
+
+.setupcard strong {
+  color: var(--ink);
+}
+
+.setupcard ol {
+  margin: 8px 0 0;
+  padding-left: 18px;
+}
+
+.setupcard ol li {
+  margin: 4px 0;
+  font-size: 13px;
+}
+
+.setupcard code {
+  font-family: var(--mono);
+  font-size: 12px;
+  background: var(--sheet);
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  padding: 1px 5px;
+}
+
+.setupcard .copyline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+/* ---- stamps + status chips ------------------------------------------------ */
+
+.stamp {
+  display: inline-block;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  padding: 4px 10px;
+  border: 2px solid currentColor;
+  border-radius: 3px;
+  transform: rotate(-1.4deg);
+  box-shadow: 1px 1px 0 var(--rule-strong);
+}
+
+.stamp.settled {
+  color: var(--settled);
+  border-color: var(--settled);
+  background: var(--settled-bg);
+}
+
+.stamp.refunded {
+  color: var(--refunded);
+  border-color: var(--refunded);
+  background: var(--refunded-bg);
+}
+
+.stamp.stale {
+  color: var(--stale);
+  border-color: var(--stale);
+  background: var(--stale-bg);
+}
+
+/* ---- running balance (P&L) ----------------------------------------------- */
 
 .running {
   margin: 0;
@@ -406,7 +710,7 @@ textarea {
   justify-content: space-between;
   gap: 12px;
   padding: 9px 2px;
-  border-bottom: 1px solid var(--rule);
+  border-bottom: 1px dashed var(--rule);
   font-family: var(--mono);
   font-size: 13px;
 }
@@ -449,71 +753,18 @@ textarea {
   border-top: 1px dashed var(--rule-strong);
 }
 
-/* ---- notices --------------------------------------------------------------- */
-
-.notice {
-  border: 1px solid var(--rule);
-  background: var(--paper);
-  border-radius: 4px;
-  padding: 10px 12px;
-  font-size: 13.5px;
-  margin: 0 0 12px;
-}
-
-.notice.error {
-  border-color: var(--refunded);
-  background: var(--refunded-bg);
-}
-
-.notice.error strong {
-  color: var(--refunded);
-}
-
-.notice.hardfail {
-  border-color: var(--refunded);
-  background: var(--refunded-bg);
-}
-
-.notice.hardfail strong {
-  color: var(--refunded);
-}
-
-.notice.ok {
-  border-color: var(--settled);
-  background: var(--settled-bg);
-}
-
-.notice.ok strong {
-  color: var(--settled);
-}
-
-.notice .mono {
-  font-family: var(--mono);
-  font-size: 12px;
-  margin-top: 5px;
-}
-
-.notice a {
-  color: var(--accent);
-}
-
-b.step {
-  font-family: var(--mono);
-  font-weight: 600;
-}
-
-/* ---- THE TAPE — the signature ---------------------------------------------
-   A receipt strip, full width, beneath the book. It prints the freshness
-   scale (SLA floor → delivered → chain head) with a needle, then types out
-   the settlement events as they land. Idle: rules only, awaiting activity. */
+/* ============ THE TAPE (receipt printer — the signature) ================== */
 
 .tape {
   margin-top: 18px;
   border: 1px solid var(--ink);
-  border-radius: 4px;
+  border-radius: 5px;
   background: var(--sheet);
   overflow: hidden;
+  position: relative;
 }
+
+/* perforation: dashed top and bottom edges of the receipt body */
 
 .tape__head {
   display: flex;
@@ -521,7 +772,7 @@ b.step {
   justify-content: space-between;
   gap: 12px;
   flex-wrap: wrap;
-  padding: 8px 14px;
+  padding: 9px 14px;
   background: var(--ink);
   color: var(--sheet);
   font-family: var(--mono);
@@ -539,13 +790,26 @@ b.step {
 }
 
 .tape__body {
-  padding: 14px 14px 10px;
+  padding: 12px 14px 12px;
+  position: relative;
+  background:
+    linear-gradient(var(--sheet), var(--sheet)),
+    repeating-linear-gradient(to right, transparent 0 6px, var(--rule) 6px 7px);
+}
+
+.tape__body::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background-image: repeating-linear-gradient(to right, var(--rule-strong) 0 8px, transparent 8px 14px);
 }
 
 .tape__scale {
   position: relative;
   height: 46px;
-  border-bottom: 1px dashed var(--rule-strong);
   margin-bottom: 10px;
 }
 
@@ -594,7 +858,7 @@ b.step {
   color: var(--muted);
 }
 
-/* reuse the ruling scale from the old ruler inside the tape */
+/* freshness ruler (inside the tape + delivery panel) */
 
 .ruler {
   position: absolute;
@@ -676,6 +940,8 @@ b.step {
   justify-content: space-between;
   align-items: center;
   margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--rule);
   font-family: var(--mono);
   font-size: 11px;
   color: var(--muted);

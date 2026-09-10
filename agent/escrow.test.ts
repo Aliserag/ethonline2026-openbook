@@ -25,7 +25,7 @@ import {
   ERC8183,
   USDC,
   USDC_ABI,
-  ARC_GAS,
+  arcFees,
   packSla,
   parseSla,
   createJobWithSla,
@@ -168,15 +168,17 @@ it.skipIf(!lifecycleReady)(
     });
 
     // seed the provider's gas (tutorial pattern: client funds the provider) and
-    // baseline their balance AFTER the seed so the escrow payout is isolated
-    await buyerWallet.writeContract({
+    // baseline their balance AFTER the seed confirms — a fire-and-forget send
+    // races this read on a sub-second chain (the balance lands pre-seed).
+    const seedHash = await buyerWallet.writeContract({
       address: USDC,
       abi: USDC_ABI,
       functionName: "transfer",
       args: [providerAccount.address, PROVIDER_SEED],
       account: buyerAccount,
-      ...ARC_GAS,
+      ...(await arcFees(publicClient)),
     });
+    await publicClient.waitForTransactionReceipt({ hash: seedHash });
     const providerBefore = (await publicClient.readContract({
       address: USDC,
       abi: USDC_ABI,
