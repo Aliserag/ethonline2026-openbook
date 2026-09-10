@@ -458,6 +458,33 @@ body {
   white-space: nowrap;
 }
 
+/* masthead DOM order is wallet-first (tab order = mobile visual order);
+   desktop restores brand-first via grid areas (brand left, badges+wallet right) */
+.masthead {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "brand right-top"
+    "brand right-bottom";
+  column-gap: 20px;
+  row-gap: 10px;
+  align-items: end;
+}
+
+.masthead .nameblock {
+  grid-area: brand;
+}
+
+.masthead .chainbadges {
+  grid-area: right-top;
+  justify-content: flex-end;
+}
+
+.masthead .walletblock {
+  grid-area: right-bottom;
+  justify-content: flex-end;
+}
+
 @media (max-width: 860px) {
   .ledger td.key {
     white-space: normal;
@@ -465,21 +492,26 @@ body {
   }
 
   .masthead {
-    flex-direction: column;
-    align-items: flex-start;
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "wallet"
+      "brand"
+      "badges";
+    align-items: start;
   }
 
   .masthead .walletblock {
-    order: -1;
-    align-self: flex-end;
+    grid-area: wallet;
+    justify-content: flex-start;
   }
 
   .masthead .nameblock {
-    width: 100%;
+    grid-area: brand;
   }
 
   .masthead .chainbadges {
-    width: 100%;
+    grid-area: badges;
+    justify-content: flex-start;
   }
 }
 
@@ -1085,7 +1117,7 @@ textarea {
    anchors to the CARD, never the tip — a tip-relative flip can only fit tips
    in a middle band of the viewport (pass-2 evidence: -119px lefts at 390px) */
 
-@media (max-width: 860px) {
+@media (max-width: 1150px) {
   .stepcard {
     position: relative;
   }

@@ -432,6 +432,17 @@ export default function App() {
   return (
     <>
       <header className="masthead">
+        <div className="walletblock" aria-label="wallet">
+          {isConnected ? (
+            <span className="addr" title="connected wallet">{truncateHash(address ?? "")}</span>
+          ) : (
+            connectors.map((connector) => (
+              <button key={connector.uid} className="ghost" onClick={() => connect({ connector })}>
+                Connect wallet
+              </button>
+            ))
+          )}
+        </div>
         <div className="nameblock">
           <span className="brandmark" aria-hidden="true">
             ▤ OB
@@ -449,12 +460,6 @@ export default function App() {
             </p>
           </div>
         </div>
-        <div className="chainbadges">
-          <span>arc · 5042002</span>
-          <span>ensv2 · sepolia</span>
-          <span>the graph · gateway</span>
-          <span>{CONFIG.ens}</span>
-        </div>
         <div className="walletblock" aria-label="wallet">
           {isConnected ? (
             <span className="addr" title="connected wallet">{truncateHash(address ?? "")}</span>
@@ -465,6 +470,12 @@ export default function App() {
               </button>
             ))
           )}
+        </div>
+        <div className="chainbadges">
+          <span>arc · 5042002</span>
+          <span>ensv2 · sepolia</span>
+          <span>the graph · gateway</span>
+          <span>{CONFIG.ens}</span>
         </div>
       </header>
 
