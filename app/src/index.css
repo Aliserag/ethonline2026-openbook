@@ -558,7 +558,7 @@ b.step {
   justify-content: space-between;
   font-family: var(--mono);
   font-size: 9.5px;
-  color: var(--rule-strong);
+  color: var(--muted);
   letter-spacing: 0.04em;
 }
 
