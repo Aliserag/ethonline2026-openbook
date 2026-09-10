@@ -16,10 +16,10 @@ GRAPH_GATEWAY_KEY=<your studio key> OPERATOR_PRIVATE_KEY=<seller key> \
   bun mcp/src/server.ts --config mcp/config/openbook.json
 ```
 
-Or via the published bin (after `bun run build` in `mcp/`):
+Or via the built bin (after `bun run build` in `mcp/`):
 
 ```bash
-npx sla-subgraph-mcp --config myconfig.json
+node mcp/dist/server.js --config myconfig.json
 ```
 
 Any MCP client (Claude, Codex, Cursor, a custom stdio client…) connects over
@@ -31,7 +31,7 @@ stdio and gets five tools:
 | `get_quote`       | live ENSv2 price/SLA/payee for a dataset (hard-fails if unset) |
 | `query_dataset`   | Gateway query with `_meta` freshness gate + signed attestation |
 | `verify_delivery` | deterministic APPROVE/REJECT; `settle:true` executes onchain   |
-| `get_pnl`         | openbook-pnl DailyPnL from arc-testnet                         |
+| `get_pnl`         | open-book DailyPnL from arc-testnet                            |
 
 ## Register a dataset (any subgraph, ~1 minute)
 

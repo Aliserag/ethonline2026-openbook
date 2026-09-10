@@ -16,8 +16,11 @@ const CLIENT = "0x8BA1f109551bD432803012645Ac136ddd64DBA72";
 // "ours" = the provider the mapping books for (SELLER placeholder; the deploy
 // script substitutes the real operator address — tests follow the constant).
 const PROVIDER = SELLER;
-// a foreign provider on the SHARED reference contract (another ETHOnline agent)
-const FOREIGN = "0x64A78b6d5e99274d01D1d0A70B180A73AAEb8d21";
+// a foreign provider on the SHARED reference contract (another ETHOnline agent).
+// Must NEVER equal the deploy-time SELLER substitution — the real OpenBook
+// operator address once sat here and silently became "ours" the moment the
+// funded deploy baked it in, breaking this test at review time.
+const FOREIGN = "0x1111111111111111111111111111111111111111";
 
 function createJobCreatedEvent(
   jobId: BigInt,
@@ -150,7 +153,7 @@ describe("handleJobCreated + handleQueryPaid", () => {
 
     assert.entityCount("QueryPaid", 1);
     // Real seller (provider) + deadline (expiredAt); store key = bytes hex of "qp-7"
-    assert.fieldEquals("QueryPaid", "0x71702d37", "seller", SELLER);
+    assert.fieldEquals("QueryPaid", "0x71702d37", "seller", SELLER.toLowerCase()); // store keeps bytes-hex (lowercase)
     assert.fieldEquals("QueryPaid", "0x71702d37", "buyer", "0x8ba1f109551bd432803012645ac136ddd64dba72");
     assert.fieldEquals("QueryPaid", "0x71702d37", "deadline", "999999");
     assert.fieldEquals("QueryPaid", "0x71702d37", "minBlock", "21500");

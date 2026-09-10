@@ -1,0 +1,3 @@
+[test]
+# matchstick (AssemblyScript) tests run via `graph test` in subgraph/, never under bun
+pathIgnorePatterns = ["subgraph/tests/**"]

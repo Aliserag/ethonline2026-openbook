@@ -55,8 +55,13 @@ if [ -n "${SELLER_ADDRESS:-}" ]; then
   fi
   sed -i.bak "s|const SELLER = \"$SELLER_PLACEHOLDER\"|const SELLER = \"$SELLER_ADDRESS\"|" "$SELLER_FILE" \
     || { echo "FATAL: could not substitute SELLER in $SELLER_FILE"; exit 1; }
-  rm -f "$SELLER_FILE.bak"
-  echo "substituted SELLER -> $SELLER_ADDRESS in $SELLER_FILE"
+  # The substitution is build-time only — the source tree keeps the
+  # placeholder (keyless-safe default; matchstick fixtures derive from it).
+  # Restore after build no matter what, or the committed source silently
+  # carries a deployment address and the scoping tests break (round-2 review).
+  restore_seller() { [ -f "$SELLER_FILE.bak" ] && mv "$SELLER_FILE.bak" "$SELLER_FILE"; }
+  trap restore_seller EXIT
+  echo "substituted SELLER -> $SELLER_ADDRESS in $SELLER_FILE (restored after build)"
 fi
 
 echo "== [2/4] codegen + build (keyless) =="

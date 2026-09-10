@@ -27,13 +27,16 @@ See [docs/architecture.md](docs/architecture.md). The three sponsors are organs,
   escrow settlement, custom policy-gated treasury (`PolicyWallet.sol` with onchain
   `PolicyBlocked` events — Circle's built-in policies are mainnet-only; ours is the
   testnet-demoable path).
-- **The Graph (the product):** `sla-subgraph-mcp` — a generic, npx-publishable MCP server
+- **The Graph (the product):** `sla-subgraph-mcp` — a generic MCP server with a
+  packaged, node-runnable bin (npm publishing is the one-line post-freeze step)
   that turns any subgraph into a paid, freshness-gated product; OpenBook is the reference
   deployment. Plus the `open-book` Studio subgraph on **arc-testnet** indexing every
   payment/refund/policy event — the agent's audited books.
 - **ENS (storefront + business license):** `openbook.eth` on ENSv2 Sepolia publishes menu,
   pricing, SLA, and payee as text records; buyers hard-fail without resolution
-  ("No ENS, no payment"). The name's manager key = the treasury admin key.
+  ("No ENS, no payment"). The `svc.payee` record names the PolicyWallet as the
+  only payee — the storefront can never route money anywhere but the
+  policy-gated treasury.
 
 ## Repo layout
 

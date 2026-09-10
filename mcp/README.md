@@ -33,11 +33,11 @@ GRAPH_GATEWAY_KEY=<key> OPERATOR_PRIVATE_KEY=<key> \
   bun mcp/src/server.ts --config mcp/config/openbook.json
 ```
 
-Or the packaged bin (build once, then `npx`/`node` works):
+Or the packaged bin (build once, then `node` runs it anywhere):
 
 ```bash
 cd mcp && bun run build     # -> dist/server.js (bun-bundled, node-runnable)
-npx sla-subgraph-mcp --config mcp/config/openbook.json
+node mcp/dist/server.js --config mcp/config/openbook.json
 ```
 
 The server talks **stdio MCP** — attach any MCP client, or pipe JSON-RPC:
