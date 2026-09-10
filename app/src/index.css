@@ -951,7 +951,136 @@ textarea {
   color: var(--accent);
 }
 
-/* focus / reduced motion ---------------------------------------------------- */
+/* journal progress strip — chips, not a bare list; states match the cards */
+
+.process {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  counter-reset: entry;
+}
+
+.process li {
+  counter-increment: entry;
+  flex: 1 1 auto;
+  min-width: 96px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 8px 10px;
+  border: 1px solid var(--rule);
+  border-radius: 5px;
+  background: var(--sheet);
+}
+
+.process li::before {
+  content: counter(entry, decimal-leading-zero);
+  font-size: 10px;
+  color: var(--rule-strong);
+}
+
+.process li.done {
+  color: var(--ink);
+  background: var(--settled-bg);
+  border-color: var(--settled);
+}
+
+.process li.live {
+  color: var(--ink);
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+.process li.failed {
+  color: var(--refunded);
+  background: var(--refunded-bg);
+  border-color: var(--refunded);
+}
+
+.process li.failed::before {
+  color: var(--refunded);
+}
+
+.process li.done::before {
+  color: var(--settled);
+}
+
+.process li.live::before {
+  color: var(--accent);
+}
+
+/* captions under CTAs — a disabled button's reason is always visible */
+
+.caption {
+  margin: 8px 0 0;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.caption a {
+  color: var(--accent);
+}
+
+/* header wallet affordance */
+
+.walletblock {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+}
+
+.walletblock .addr {
+  border: 1px solid var(--settled);
+  background: var(--settled-bg);
+  color: var(--settled);
+  padding: 3px 8px;
+  border-radius: 3px;
+}
+
+/* tooltips: viewport-safe, focus + hover + touch */
+
+.tip {
+  width: 24px;
+  height: 24px;
+  font-size: 11px;
+  vertical-align: 2px;
+}
+
+.tip::after {
+  width: min(230px, 74vw);
+  max-width: calc(100vw - 32px);
+}
+
+@media (max-width: 860px) {
+  .tip::after {
+    left: auto;
+    right: -10px;
+    transform: none;
+  }
+
+  .tip::before {
+    left: auto;
+    right: 4px;
+    transform: none;
+  }
+}
+
+.tip:focus::after,
+.tip:focus::before {
+  opacity: 1;
+}
 
 :focus-visible {
   outline: 2px solid var(--accent);

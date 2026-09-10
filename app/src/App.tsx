@@ -156,13 +156,15 @@ type StepStateAttr = "active" | "done" | "failed" | "blocked" | "idle";
 function StepCard(props: {
   n: number;
   state: StepStateAttr;
+  stateLabel?: string;
   title: string;
   what: string;
   why?: string;
   children: React.ReactNode;
 }): JSX.Element {
   const stateLabel =
-    props.state === "done"
+    props.stateLabel ??
+    (props.state === "done"
       ? "done"
       : props.state === "active"
         ? "next"
@@ -170,7 +172,7 @@ function StepCard(props: {
           ? "failed"
           : props.state === "blocked"
             ? "needs setup"
-            : "waiting";
+            : "waiting");
   return (
     <section className="stepcard" data-state={props.state} aria-labelledby={`step-${props.n}-title`}>
       <div className="stepcard__head">
@@ -210,6 +212,9 @@ export default function App() {
   const [pnlMeta, setPnlMeta] = useState<number | null>(null);
   const [pnlHead, setPnlHead] = useState<number | null>(null);
   const [pnlError, setPnlError] = useState<string | null>(null);
+  const [payError, setPayError] = useState<string | null>(null);
+  const [queryError, setQueryError] = useState<string | null>(null);
+  const [settleError, setSettleError] = useState<string | null>(null);
 
   const dataset = useMemo(
     () => CONFIG.datasets.find((d) => d.id === datasetId) ?? CONFIG.datasets[0],
@@ -282,6 +287,7 @@ export default function App() {
   const handlePay = async (): Promise<void> => {
     if (!address || quote === null || dataset === undefined) return;
     setPaying(true);
+    setPayError(null);
     try {
       await ensureArcChain();
       const trace: string[] = [];
@@ -301,6 +307,15 @@ export default function App() {
         expirySeconds: 3600,
       });
       setJob({ jobId: String(jobId), minBlock: sla.minBlock, hashes: trace });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setPayError(
+        /reject|denied|denied/i.test(message)
+          ? "Signature rejected — approve the transactions in your wallet to fund the job, or try again."
+          : /insufficient|gas|fund/i.test(message)
+            ? "The wallet needs testnet USDC (USDC is gas on Arc) — see docs/keys-needed.md §2."
+            : `Payment failed: ${message.slice(0, 140)}`,
+      );
     } finally {
       setPaying(false);
     }
@@ -309,6 +324,7 @@ export default function App() {
   const handleQuery = async (): Promise<void> => {
     if (!hasGraphKey || dataset === undefined) return;
     setQuerying(true);
+    setQueryError(null);
     try {
       const { data, meta } = await gatewayQuery({
         key: env.graphKey,
@@ -329,6 +345,13 @@ export default function App() {
         freshness,
         result: stripMeta(data),
       });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setQueryError(
+        /auth|key|401|403|not found/i.test(message)
+          ? "The Graph gateway rejected the key — check VITE_GRAPH_GATEWAY_KEY (fresh Studio key, docs/keys-needed.md §4)."
+          : `Query failed: ${message.slice(0, 140)}`,
+      );
     } finally {
       setQuerying(false);
     }
@@ -356,6 +379,13 @@ export default function App() {
         minBlock: result.minBlock,
         txHash: result.txHash,
       });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setSettleError(
+        /reject|denied/i.test(message)
+          ? "Signature rejected — approve in your wallet to settle, or retry."
+          : `Settlement failed: ${message.slice(0, 140)}`,
+      );
     } finally {
       setSettling(false);
     }
@@ -412,7 +442,10 @@ export default function App() {
             </h1>
             <p className="tagline">
               an autonomous agent selling freshness-guaranteed onchain data — every payment
-              carries an SLA, and <span className="accent">every miss refunds itself onchain</span>
+              carries an{" "}
+              SLA
+              <Tip text="Service-level agreement: a freshness promise attached to the payment itself. Miss the freshness window and the payment refunds itself onchain — nobody has to ask." />
+              , and <span className="accent">every miss refunds itself onchain</span>
             </p>
           </div>
         </div>
@@ -421,6 +454,17 @@ export default function App() {
           <span>ensv2 · sepolia</span>
           <span>the graph · gateway</span>
           <span>{CONFIG.ens}</span>
+        </div>
+        <div className="walletblock" aria-label="wallet">
+          {isConnected ? (
+            <span className="addr" title="connected wallet">{truncateHash(address ?? "")}</span>
+          ) : (
+            connectors.map((connector) => (
+              <button key={connector.uid} className="ghost" onClick={() => connect({ connector })}>
+                Connect wallet
+              </button>
+            ))
+          )}
         </div>
       </header>
 
@@ -431,12 +475,12 @@ export default function App() {
             {hasGraphKey ? "GRAPH_GATEWAY_KEY set" : "GRAPH_GATEWAY_KEY unset"}
           </span>
           <span>
-            <span className={env.sepoliaRpc ? "dot yes" : "dot no"} aria-hidden="true" />
-            {env.sepoliaRpc ? "SEPOLIA_RPC set" : "SEPOLIA_RPC unset (viem default)"}
+            <span className={env.sepoliaRpc ? "dot yes" : "dot"} aria-hidden="true" />
+            {env.sepoliaRpc ? "SEPOLIA_RPC set" : "SEPOLIA_RPC unset (viem default — ok)"}
           </span>
           <span>
-            <span className={env.arcRpc ? "dot yes" : "dot no"} aria-hidden="true" />
-            {env.arcRpc ? "ARC_TESTNET_RPC set" : "ARC_TESTNET_RPC unset (public rpc)"}
+            <span className={env.arcRpc ? "dot yes" : "dot"} aria-hidden="true" />
+            {env.arcRpc ? "ARC_TESTNET_RPC set" : "ARC_TESTNET_RPC unset (public rpc — ok)"}
           </span>
           <span>
             <span className={isConnected ? "dot yes" : "dot no"} aria-hidden="true" />
@@ -457,6 +501,7 @@ export default function App() {
             <StepCard
               n={1}
               state={ensDone ? "done" : ensLoading ? "active" : "failed"}
+              stateLabel={ensLoading ? "resolving…" : undefined}
               title="See what's for sale"
               what="The storefront lives on ENSv2 (Sepolia): menu, price, SLA, payee."
               why="The storefront is a name, not a file. OpenBook.eth publishes its menu, price and service-level promise as live ENSv2 records — if any record is missing, nothing gets priced. No hard-coded values, ever."
@@ -539,14 +584,21 @@ export default function App() {
                 </select>
               </div>
               {quote === null ? (
-                <button
-                  className="primary"
-                  disabled={!ensDone}
-                  onClick={handleQuote}
-                  title={!ensDone ? "The storefront (step 1) must resolve first" : undefined}
-                >
-                  Get quote
-                </button>
+                <>
+                  <button
+                    className="primary"
+                    disabled={!ensDone}
+                    onClick={handleQuote}
+                    aria-describedby="quote-caption"
+                  >
+                    Get quote
+                  </button>
+                  {!ensDone && (
+                    <p className="caption" id="quote-caption">
+                      Needs the storefront (step 1) — see the card above.
+                    </p>
+                  )}
+                </>
               ) : (
                 <div className="notice ok" role="status">
                   <strong>{quote.amountUsdc} USDC/query</strong> — quoted from ENS, guaranteed fresh
@@ -556,33 +608,45 @@ export default function App() {
                   </div>
                 </div>
               )}
-              {quote !== null && (
-                <p style={{ marginTop: 12 }}>
-                  {isConnected ? (
-                    <button
-                      className="primary"
-                      disabled={paying || job !== null}
-                      onClick={handlePay}
-                      title={job !== null ? "This job is already funded" : undefined}
-                    >
-                      {paying ? "signing escrow txs…" : job !== null ? "job funded ✓" : `Pay ${quote.amountUsdc} USDC into escrow`}
-                    </button>
-                  ) : (
-                    <span className="notice" style={{ display: "inline-block", marginBottom: 0 }}>
-                      Connect a wallet to pay.{" "}
-                      {connectors.map((connector) => (
-                        <button key={connector.uid} style={{ marginRight: 8 }} onClick={() => connect({ connector })}>
-                          Connect {connector.name}
-                        </button>
-                      ))}
-                    </span>
-                  )}
-                </p>
-              )}
+
+              <div style={{ marginTop: 12 }}>
+                {isConnected ? (
+                  <button
+                    className="primary"
+                    disabled={quote === null || paying || job !== null}
+                    onClick={handlePay}
+                    aria-describedby="pay-caption"
+                  >
+                    {paying ? "signing escrow txs…" : job !== null ? "job funded ✓" : `Pay ${quote?.amountUsdc ?? "0.10"} USDC into escrow`}
+                  </button>
+                ) : (
+                  <p className="caption">
+                    Paying needs a wallet —{" "}
+                    {connectors.map((connector) => (
+                      <button key={connector.uid} className="ghost" onClick={() => connect({ connector })}>
+                        Connect {connector.name}
+                      </button>
+                    ))}{" "}
+                    (or use the Connect wallet button up top). Nothing leaves the escrow until the SLA is checked.
+                  </p>
+                )}
+                {quote === null && isConnected && (
+                  <p className="caption" id="pay-caption">
+                    Quote first — the price comes from the agent's ENS records.
+                  </p>
+                )}
+                {payError !== null && (
+                  <div className="notice error" role="alert">
+                    <strong>Payment didn't go through.</strong> {payError}
+                  </div>
+                )}
+              </div>
               {job !== null && (
                 <div className="notice ok" role="status">
                   <strong>Funded — the SLA is now onchain.</strong> job {job.jobId} on ERC-8183 (
-                  {truncateHash(ERC8183)}). The agent has committed to deliver data no older than
+                  {truncateHash(ERC8183)}
+                  <Tip text="Escrow (ERC-8183): USDC sits in a neutral contract, released to the agent only when the delivery passes the SLA check — or refunded to you automatically if it doesn't or the deadline lapses." />
+                  ). The agent has committed to deliver data no older than
                   block {job.minBlock} — or refund you automatically.
                   <div className="mono">
                     {job.hashes.map((hash, index) => (
@@ -642,10 +706,20 @@ export default function App() {
                 className="primary"
                 disabled={!hasGraphKey || querying}
                 onClick={handleQuery}
-                title={!hasGraphKey ? "Needs the Graph gateway key (see card above)" : undefined}
+                aria-describedby={!hasGraphKey ? "query-caption" : undefined}
               >
                 {querying ? "querying…" : "Pull fresh data"}
               </button>
+              {!hasGraphKey && (
+                <p className="caption" id="query-caption">
+                  Needs the Graph key — see the setup card above.
+                </p>
+              )}
+              {queryError !== null && (
+                <div className="notice error" role="alert">
+                  <strong>Query failed.</strong> {queryError}
+                </div>
+              )}
 
               <FreshnessRuler delivery={delivery} minBlock={job?.minBlock ?? null} />
               {delivery !== null && <DeliveryResult delivery={delivery} />}
@@ -663,14 +737,8 @@ export default function App() {
                   className={delivery !== null && delivery.freshness === "stale" ? "danger" : "primary"}
                   disabled={!isConnected || job === null || delivery === null || settling}
                   onClick={handleSettle}
-                  title={
-                    !isConnected
-                      ? "Connect a wallet first (step 2)"
-                      : job === null
-                        ? "Fund a job first (step 2)"
-                        : delivery === null
-                          ? "Pull fresh data first (step 3)"
-                          : undefined
+                  aria-describedby={
+                    !isConnected || job === null || delivery === null ? "settle-caption" : undefined
                   }
                 >
                   {settling
@@ -680,6 +748,23 @@ export default function App() {
                       : "Verify & settle delivery"}
                 </button>
               </p>
+              {(!isConnected || job === null || delivery === null) && (
+                <p className="caption" id="settle-caption">
+                  Needs:{" "}
+                  {[
+                    !isConnected && "a connected wallet",
+                    job === null && "a funded job (step 2)",
+                    delivery === null && "fresh data pulled (step 3)",
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </p>
+              )}
+              {settleError !== null && (
+                <div className="notice error" role="alert">
+                  <strong>Settlement didn't complete.</strong> {settleError}
+                </div>
+              )}
               {settle !== null && (
                 <div className={settle.verdict === "APPROVE" ? "notice ok" : "notice error"} role="status">
                   <span className={settle.verdict === "APPROVE" ? "stamp settled" : "stamp refunded"}>
@@ -704,7 +789,10 @@ export default function App() {
           </div>
 
           <aside className="summary">
-            <section className="stepcard" data-state={pnl !== null && pnl.length > 0 ? "done" : "idle"}>
+            <section
+              className="stepcard"
+              data-state={!hasGraphKey ? "blocked" : pnl !== null && pnl.length > 0 ? "done" : "idle"}
+            >
               <div className="stepcard__head">
                 <span className="stepno" aria-hidden="true">
                   P
@@ -715,7 +803,9 @@ export default function App() {
                     Running P&amp;L, onchain and queryable — every settlement lands here.
                   </p>
                 </div>
-                <span className="stepstate">live</span>
+                <span className="stepstate">
+                  {!hasGraphKey ? "needs setup" : pnl !== null && pnl.length > 0 ? "live" : "waiting"}
+                </span>
               </div>
               <div className="body">
                 {!hasGraphKey && (
@@ -835,7 +925,9 @@ export default function App() {
       <footer className="foot">
         <span>
           SLA committed onchain at payment · verdict is deterministic open code · timeout defaults
-          to the buyer (claimRefund)
+          to the buyer (claimRefund
+          <Tip text="claimRefund: if the agent's deadline lapses with no delivery, anyone can trigger the refund — the buyer never has to chase the agent." />
+          )
         </span>
         <a
           href="https://github.com/Aliserag/ethonline2026-openbook/blob/main/docs/architecture.md"
