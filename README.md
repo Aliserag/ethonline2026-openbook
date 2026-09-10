@@ -25,6 +25,8 @@ the refund executes onchain, automatically.** Money flows both ways.
 indexed in the agent's books ([live P&L panel](https://ethonline2026-openbook.vercel.app) —
 refunds column, no keys needed; [raw subgraph](https://api.studio.thegraph.com/query/1760032/open-book/version/latest)).
 
+![The agent's books — live P&L with the refund row](docs/images/pnl-refund-panel.png)
+
 ## Architecture
 
 See [docs/architecture.md](docs/architecture.md). The three sponsors are organs, not stickers:
@@ -49,7 +51,7 @@ See [docs/architecture.md](docs/architecture.md). The three sponsors are organs,
 - `contracts/` — PolicyWallet.sol (+ tests)
 - `agent/` — agent loop, ERC-8183 settlement spine, buyer CLI
 - `mcp/` — `sla-subgraph-mcp` (the Graph tooling entry) + `SKILL.md`
-- `subgraph/` — `openbook-pnl` (Arc testnet)
+- `subgraph/` — the P&L subgraph source (deployed to Studio as `open-book`, Arc testnet)
 - `app/` — minimal Vite + wagmi frontend (storefront → pay → P&L)
 - `scripts/` — ENS setup, spikes, stale-replay proxy
 - `docs/` — architecture, design decisions, demo script, submission copy

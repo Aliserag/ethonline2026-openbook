@@ -9,7 +9,7 @@ export const env = {
   sepoliaRpc: (import.meta.env.VITE_SEPOLIA_RPC as string | undefined) ?? undefined,
   /** Optional Arc testnet RPC; unset -> https://rpc.testnet.arc.io (public) */
   arcRpc: (import.meta.env.VITE_ARC_TESTNET_RPC as string | undefined) ?? undefined,
-  /** The Graph Studio key: gates the delivery query + the openbook-pnl query */
+  /** The Graph Studio key: gates the delivery query (the open-book P&L endpoint is public) */
   graphKey: (import.meta.env.VITE_GRAPH_GATEWAY_KEY as string | undefined) ?? "",
   /** Alchemy key: the freshness head reference (Gateway _meta has no
    * chainHeadBlock field — the head comes from the dataset's own chain) */

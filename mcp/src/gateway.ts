@@ -157,7 +157,7 @@ export async function gatewayQuery(opts: {
 
 /**
  * POST an arbitrary GraphQL query to a hosted endpoint (used for the Task 4
- * openbook-pnl Studio query). The query is sent verbatim (it carries its own
+ * open-book Studio query). The query is sent verbatim (it carries its own
  * `_meta` selection).
  */
 export async function hostedQuery(opts: {

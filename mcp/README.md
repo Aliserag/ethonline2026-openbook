@@ -2,7 +2,7 @@
 
 OpenBook's reusable MCP server: it sells **freshness-guaranteed subgraph
 queries** over The Graph Gateway with ENSv2-priced quotes (Sepolia), ERC-8183
-escrow settlement (Arc testnet), and an onchain P&L (openbook-pnl subgraph).
+escrow settlement (Arc testnet), and an onchain P&L (the open-book subgraph).
 Stale data is never charged; a missed SLA auto-refunds.
 
 Judge quickstart — from 0 to a live query in four commands.
@@ -99,7 +99,7 @@ attestation signature from the operator key.
                                             // uses the live svc.payee record anyway
   "operatorKey": "OPERATOR_PRIVATE_KEY",    // env var NAME (no secrets in repo)
   "gateway": { "keyEnv": "GRAPH_GATEWAY_KEY", "baseUrl": "https://gateway.thegraph.com" },
-  "pnl": { "endpoint": "https://api.studio.thegraph.com/query/{GRAPH_GATEWAY_KEY}/openbook-pnl/version/latest" },
+  "pnl": { "endpoint": "https://api.studio.thegraph.com/query/1760032/open-book/version/latest" },
   "datasets": [
     {
       "id": "aave-v3-arbitrum-lending",

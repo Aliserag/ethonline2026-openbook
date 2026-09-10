@@ -6,7 +6,7 @@
  *   get_quote       — ENSv2-resolved price/SLA/payee (hard-fails without records)
  *   query_dataset   — Gateway query with _meta freshness gate (never charges stale)
  *   verify_delivery — deterministic APPROVE/REJECT + ERC-8183 settle/refund
- *   get_pnl         — Task 4 openbook-pnl subgraph P&L
+ *   get_pnl         — Task 4 open-book subgraph P&L
  *
  * All external I/O (Gateway HTTP, ENS text, chain writes) goes through seams
  * (fetchImpl / readEnsText / injected clients) — production uses real services,
