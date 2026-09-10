@@ -17,7 +17,7 @@ bun install          # from the repo root (workspace: mcp)
 
 | var                  | needed for      | where to get it                                            |
 | -------------------- | --------------- | ---------------------------------------------------------- |
-| `GRAPH_GATEWAY_KEY`  | `query_dataset`, `get_pnl` | thegraph.com/studio → **API key** (one key for Gateway + hosted MCP) |
+| `GRAPH_GATEWAY_KEY`  | `query_dataset` | thegraph.com/studio → **API key** (Gateway queries are key-gated) |
 | `OPERATOR_PRIVATE_KEY` | `query_dataset` attestation, `verify_delivery` settle | seller/operator key (falls back to `ARC_TESTNET_PK`) |
 | `SEPOLIA_RPC`        | `get_quote`, `list_datasets` ENS reads | any Sepolia RPC (default: public Sepolia)      |
 | `ARC_TESTNET_RPC`    | `verify_delivery` settle            | default `https://rpc.testnet.arc.io`          |
@@ -57,11 +57,14 @@ printf '%s\n' \
 | `get_quote(id)`   | `{amount: 100000, amountUsdc: "0.10", minBlockLag: 50, deadlineBlocks: 1, payee, source: "ENS"}` |
 | `query_dataset(id, gql)` | fresh: `{result, meta: {block, hash}, attestation: {message, signature, signer}}`; stale: `{unavailable: true, reason: "STALE"}` |
 | `verify_delivery({jobId, payloadHash, metaBlock})` | `{verdict: "APPROVE"}` or `{verdict: "REJECT", reason: "STALE_DATA"}`; add `settle: true` to execute the onchain settlement |
-| `get_pnl()`       | `{dailyPnLs: [{id, revenue, costs, refunds, net}], metaBlock}` from openbook-pnl (arc-testnet) |
+| `get_pnl()`       | `{dailyPnLs: [{id, revenue, costs, refunds, net}], metaBlock}` from the open-book subgraph (arc-testnet; public Studio endpoint — no key) |
 
-`query_dataset` appends `_meta { block { number hash } chainHeadBlock { number } }`
-to every query; when `chainHeadBlock - _meta.block > dataset.freshness.maxAge`
-the result is `unavailable` and **never charged** (the freshness gate fires
+`query_dataset` appends `_meta { block { number hash timestamp } hasIndexingErrors }`
+to every query (the Gateway's `_Meta_` type has no chain-head field), then reads
+the chain head from the **dataset's own chain RPC** (`mcp/src/chain-head.ts` —
+the freshness math is same-chain: Arbitrum metaBlock vs Arbitrum head, not Arc's).
+When `chainHead - _meta.block > dataset.freshness.maxAge` the result is
+`unavailable` and **never charged** (the freshness gate fires
 before any payment path). Fresh results carry the operator's EIP-191 signature
 over `queryId|payloadHash|metaBlock` — a buyer can verify the delivery claims
 offchain before settling an escrowed job.

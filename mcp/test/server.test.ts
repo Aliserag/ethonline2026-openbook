@@ -557,17 +557,41 @@ describe.skipIf(!hasKey)("live Gateway (opt-in: RUN_LIVE=1 + GRAPH_GATEWAY_KEY)"
   );
 
   it(
-    "get_pnl returns the openbook-pnl shape from Studio (requires the funded-run deploy)",
+    "get_pnl serves the real, synced open-book ledger from Studio (requires the funded-run deploy)",
     async () => {
       if (process.env.RUN_PNL_LIVE !== "1") {
         console.warn(
-          "SKIP: openbook-pnl is deployed during the funded run — re-run with RUN_LIVE=1 RUN_PNL_LIVE=1 after `bash scripts/deploy-subgraph.sh`.",
+          "SKIP: open-book is deployed during the funded run — re-run with RUN_LIVE=1 RUN_PNL_LIVE=1 after `bash scripts/deploy-subgraph.sh`.",
         );
         return;
       }
       const out: GetPnlResult = await liveApp.getPnl();
       expect(Array.isArray(out.dailyPnLs)).toBe(true);
       expect(out.metaBlock).toBeGreaterThan(0);
+      // The funded run produced real escrow/policy events — the pinned
+      // deployment must book them (a zero-row ledger fails, per review).
+      expect(out.dailyPnLs.length).toBeGreaterThan(0);
+      for (const row of out.dailyPnLs) {
+        expect(row.id).toMatch(/^day-\d+$/);
+        expect(row.revenue).toMatch(/^\d+$/);
+        expect(row.costs).toMatch(/^\d+$/);
+        expect(row.refunds).toMatch(/^\d+$/);
+        expect(row.net).toMatch(/^-?\d+$/);
+      }
+      // Sync-lag guard: the subgraph tracks arc-testnet, so metaBlock must be
+      // near the Arc head. v0.0.1 had no startBlock and sat ~35M blocks behind
+      // serving empty rows — shape-only asserts passed anyway. 200k blocks is
+      // generous for ordinary lag and fatal to a genesis-scale stall.
+      const headRes = await fetch("https://rpc.testnet.arc.io", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_blockNumber", params: [] }),
+      });
+      const headJson = (await headRes.json()) as { result?: string };
+      expect(typeof headJson.result).toBe("string");
+      const arcHead = Number.parseInt(headJson.result ?? "0x0", 16);
+      expect(arcHead).toBeGreaterThan(0);
+      expect(out.metaBlock).toBeGreaterThan(arcHead - 200_000);
     },
     60_000,
   );

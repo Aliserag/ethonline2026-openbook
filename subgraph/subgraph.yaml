@@ -20,6 +20,10 @@ dataSources:
       # (verified in Task 0: proxy 0x0747…4583 -> impl 0xa316fd…351a)
       address: "0x0747EEf0706327138c69792bF28Cd525089e4583"
       abi: ERC8183
+      # First OpenBook-relevant event verified onchain at block 61,314,527
+      # (reject tx 0x5d89e616…); 527 blocks of buffer. Without this the node
+      # syncs from genesis — ~61M blocks — and the ledger reads empty for days.
+      startBlock: 61314000
     mapping:
       kind: ethereum/events
       apiVersion: 0.0.7
@@ -55,6 +59,9 @@ dataSources:
       # address-parameterized so only this line changes at deploy time.
       address: "0x4e83eB15EE973A49E40D9A79aB2cA89a4Eb4894E"
       abi: PolicyWallet
+      # Deployment block (tx 0x080aba99c171aea562a26e7dc59f9c8bd9b5c921723ba17c29d9485e51c157e9),
+      # verified via cast receipt. No events can predate construction.
+      startBlock: 61330579
     mapping:
       kind: ethereum/events
       apiVersion: 0.0.7

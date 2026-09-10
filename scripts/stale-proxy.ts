@@ -11,11 +11,12 @@
  *
  * End to end:
  *   1. Run once against a live Gateway query  -> the proxy records the `_meta`
- *      snapshot to `<cache>` and serves the response with the CURRENT block
- *      (fresh: `head - block` is small).
+ *      snapshot to `<cache>` and serves the response unpatched.
  *   2. Later (or immediately with `--stale-block N`), any query through the
- *      proxy returns the OLD recorded block while `chainHeadBlock` stays live
- *      -> `head - block > maxAge` AND `metaBlock < SLA minBlock` ->
+ *      proxy returns the OLD recorded block. The MCP freshness gate reads the
+ *      chain head LIVE from the dataset chain's RPC (the Gateway `_meta` has
+ *      no chainHeadBlock field — the proxy does not synthesize one), so
+ *      `head - block > maxAge` AND `metaBlock < SLA minBlock` ->
  *      verify_delivery REJECTs with STALE_DATA -> rejectAndRefund ->
  *      Refunded onchain. The money shot, reproducible on demand.
  *
@@ -29,11 +30,6 @@
  *                       replayed on every later run (default .superpowers/stale-meta.json)
  *   --stale-block <n>   force _meta.block.number to n (fully deterministic; wins
  *                       over the recorded snapshot; 0 = block 0)
- *   --live-chain-head   keep the upstream chainHeadBlock.number instead of
- *                       deriving one from the stale block (default derives
- *                       head = staleBlock + maxAge + 1 so the gate always trips)
- *   --max-age <n>       freshness window used for the derived head (default 50,
- *                       matches the openbook config freshness.maxAge)
  *
  * The proxy exposes:
  *   GET  /health        status + current replay mode
@@ -51,7 +47,6 @@ import { stripMeta } from "../mcp/src/gateway";
 export interface StaleSnapshot {
   block: number;
   hash: string | null;
-  chainHeadBlock: number | null;
   recordedAt: string;
 }
 
@@ -65,8 +60,6 @@ export interface StaleProxyOptions {
   upstreamBase?: string;
   cacheFile?: string;
   staleBlock?: number;
-  liveChainHead?: boolean;
-  maxAge?: number;
   fetchImpl?: typeof fetch;
   storage?: SnapshotStorage;
   now?: () => string;
@@ -89,7 +82,6 @@ export interface ProxyResult {
 
 export const DEFAULT_UPSTREAM = "https://gateway.thegraph.com";
 export const DEFAULT_CACHE_FILE = ".superpowers/stale-meta.json";
-export const DEFAULT_MAX_AGE = 50;
 
 /** Disk-backed snapshot storage (production). */
 function fileStorageRead(cacheFile: string): StaleSnapshot | null {
@@ -103,7 +95,6 @@ function fileStorageRead(cacheFile: string): StaleSnapshot | null {
     return {
       block,
       hash: typeof record["hash"] === "string" ? (record["hash"] as string) : null,
-      chainHeadBlock: typeof record["chainHeadBlock"] === "number" ? (record["chainHeadBlock"] as number) : null,
       recordedAt: typeof record["recordedAt"] === "string" ? (record["recordedAt"] as string) : "",
     };
   } catch {
@@ -125,32 +116,27 @@ export function fileStorage(cacheFile: string): SnapshotStorage {
 interface MetaView {
   block: number | null;
   hash: string | null;
-  chainHeadBlock: number | null;
 }
 
 /** Extract the `_meta` view from a gateway payload (mirrors mcp/src/gateway). */
 export function extractMetaView(data: unknown): MetaView {
-  if (typeof data !== "object" || data === null) return { block: null, hash: null, chainHeadBlock: null };
+  if (typeof data !== "object" || data === null) return { block: null, hash: null };
   const meta = (data as Record<string, unknown>)["_meta"];
-  if (typeof meta !== "object" || meta === null) return { block: null, hash: null, chainHeadBlock: null };
+  if (typeof meta !== "object" || meta === null) return { block: null, hash: null };
   const record = meta as Record<string, unknown>;
   const block = typeof record["block"] === "object" && record["block"] !== null
     ? (record["block"] as Record<string, unknown>)
     : null;
-  const head = typeof record["chainHeadBlock"] === "object" && record["chainHeadBlock"] !== null
-    ? (record["chainHeadBlock"] as Record<string, unknown>)
-    : null;
   return {
     block: typeof block?.["number"] === "number" ? (block["number"] as number) : null,
     hash: typeof block?.["hash"] === "string" ? (block["hash"] as string) : null,
-    chainHeadBlock: typeof head?.["number"] === "number" ? (head["number"] as number) : null,
   };
 }
 
 export { stripMeta };
 
 /** Deterministic replay: patch `_meta` with the stale/recorded block. */
-export function patchMeta(data: unknown, block: number, chainHeadBlock: number, hash: string | null): unknown {
+export function patchMeta(data: unknown, block: number, hash: string | null): unknown {
   if (typeof data !== "object" || data === null) return data;
   const copy: Record<string, unknown> = { ...(data as Record<string, unknown>) };
   const metaRaw = copy["_meta"];
@@ -162,7 +148,6 @@ export function patchMeta(data: unknown, block: number, chainHeadBlock: number, 
   blockView["number"] = block;
   if (hash !== null) blockView["hash"] = hash;
   meta["block"] = blockView;
-  meta["chainHeadBlock"] = { number: chainHeadBlock };
   copy["_meta"] = meta;
   return copy;
 }
@@ -181,7 +166,6 @@ export async function handleProxyRequest(
   body: string,
 ): Promise<ProxyResult> {
   const upstreamBase = options.upstreamBase ?? DEFAULT_UPSTREAM;
-  const maxAge = options.maxAge ?? DEFAULT_MAX_AGE;
   const fetchImpl = options.fetchImpl ?? fetch;
   const storage = options.storage ?? fileStorage(options.cacheFile ?? DEFAULT_CACHE_FILE);
 
@@ -246,7 +230,6 @@ export async function handleProxyRequest(
     const snapshot: StaleSnapshot = {
       block: meta.block,
       hash: meta.hash,
-      chainHeadBlock: meta.chainHeadBlock,
       recordedAt: (options.now ?? (() => new Date().toISOString()))(),
     };
     storage.write(snapshot);
@@ -255,17 +238,11 @@ export async function handleProxyRequest(
     recorded = true;
   }
 
-  // chain head: keep live, or derive one that always trips the freshness gate.
-  const upstreamHead = meta.chainHeadBlock;
-  const chainHeadBlock =
-    options.liveChainHead || upstreamHead === null
-      ? upstreamHead
-      : patchBlock !== null
-        ? patchBlock + maxAge + 1
-        : upstreamHead;
-
-  const patchedData = patchBlock !== null && chainHeadBlock !== null
-    ? patchMeta(data, patchBlock, chainHeadBlock, replayHash)
+  // Patch the block alone. The freshness gate's chain head is read live from
+  // the dataset chain's RPC downstream — the Gateway `_meta` has no head field
+  // (funded-run bug #1), so keying the patch on it skipped every patch.
+  const patchedData = patchBlock !== null
+    ? patchMeta(data, patchBlock, replayHash)
     : data;
 
   const patched = patchBlock !== null;
@@ -313,9 +290,6 @@ function parseCli(argv: string[]): { port: number; options: StaleProxyOptions } 
   if (cache !== undefined) options.cacheFile = cache;
   const staleBlock = takeValue("--stale-block");
   if (staleBlock !== undefined) options.staleBlock = Number.parseInt(staleBlock, 10);
-  if (args.includes("--live-chain-head")) options.liveChainHead = true;
-  const maxAge = takeValue("--max-age");
-  if (maxAge !== undefined) options.maxAge = Number.parseInt(maxAge, 10);
   return { port, options };
 }
 

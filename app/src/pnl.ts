@@ -1,7 +1,8 @@
 /**
- * P&L panel data: the openbook-pnl Studio subgraph (Task 4) via the SAME
- * hosted endpoint the MCP get_pnl tool uses (config.pnl) — key-gated like
- * every The Graph path in OpenBook.
+ * P&L panel data: the open-book Studio subgraph (Task 4) via the SAME
+ * hosted endpoint the MCP get_pnl tool uses (config.pnl). The Studio query
+ * endpoint is account-scoped and PUBLIC — no key required. ({GRAPH_GATEWAY_KEY}
+ * interpolation kept for configs that still carry the placeholder.)
  */
 import { hostedQuery, type FetchLike } from "../../mcp/src/gateway";
 import { CONFIG } from "./config";
@@ -19,8 +20,8 @@ export interface PnlResult {
   metaBlock: number | null;
 }
 
-export async function fetchPnl(key: string, fetchImpl?: FetchLike): Promise<PnlResult> {
-  const endpoint = CONFIG.pnl.endpoint.replace("{GRAPH_GATEWAY_KEY}", key);
+export async function fetchPnl(key?: string, fetchImpl?: FetchLike): Promise<PnlResult> {
+  const endpoint = CONFIG.pnl.endpoint.replace("{GRAPH_GATEWAY_KEY}", key ?? "");
   const { data, meta } = await hostedQuery({ url: endpoint, query: CONFIG.pnl.query, fetchImpl });
   const rows: PnlRow[] = [];
   if (typeof data === "object" && data !== null) {

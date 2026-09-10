@@ -257,9 +257,8 @@ export default function App() {
     setQueryText(defaultQueryFor(dataset));
   }, [dataset]);
 
-  // P&L ledger: the openbook-pnl subgraph via Studio (key-gated)
+  // P&L ledger: the open-book subgraph via Studio — public endpoint, no key.
   useEffect(() => {
-    if (!hasGraphKey) return;
     let cancelled = false;
     Promise.all([fetchPnl(env.graphKey), publicClient.getBlockNumber()])
       .then(([result, head]) => {
@@ -812,7 +811,7 @@ export default function App() {
           <aside className="summary">
             <section
               className="stepcard"
-              data-state={!hasGraphKey ? "blocked" : pnl !== null && pnl.length > 0 ? "done" : "idle"}
+              data-state={pnlError !== null ? "failed" : pnl !== null && pnl.length > 0 ? "done" : "idle"}
             >
               <div className="stepcard__head">
                 <span className="stepno" aria-hidden="true">
@@ -825,17 +824,10 @@ export default function App() {
                   </p>
                 </div>
                 <span className="stepstate">
-                  {!hasGraphKey ? "needs setup" : pnl !== null && pnl.length > 0 ? "live" : "waiting"}
+                  {pnlError !== null ? "error" : pnl !== null && pnl.length > 0 ? "live" : "waiting"}
                 </span>
               </div>
               <div className="body">
-                {!hasGraphKey && (
-                  <div className="setupcard">
-                    <span className="kicker">one free key, 60 seconds</span>
-                    <strong>To read the books:</strong> same Graph key as step 3 — add
-                    <code> VITE_GRAPH_GATEWAY_KEY</code> to <code>app/.env.local</code> and reload.
-                  </div>
-                )}
                 {pnlError !== null && <p className="notice error">{pnlError}</p>}
                 {pnl !== null && pnl.length === 0 && (
                   <p className="notice">no settlement rows yet — the ledger fills as jobs complete.</p>

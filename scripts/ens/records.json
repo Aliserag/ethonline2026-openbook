@@ -42,7 +42,7 @@
   {
     "type": "text",
     "key": "agent-endpoint[web]",
-    "value": "https://github.com/Aliserag/ethonline2026-openbook"
+    "value": "https://ethonline2026-openbook.vercel.app"
   },
   {
     "type": "text",

@@ -6,30 +6,36 @@
  * need no keys. They pin the money-shot contract: the FIRST proxied response
  * records the live `_meta` snapshot, every later one REPLAYS it — and
  * `--stale-block` forces a deterministic old block regardless of recording.
+ *
+ * The proxy patches `_meta.block` ONLY. The Gateway's `_Meta_` type has no
+ * `chainHeadBlock` field (live probe 2026-09-09, funded-run bug #1) — the
+ * freshness gate's chain head is read live from the dataset chain's RPC
+ * downstream (`mcp/src/chainhead.ts`). A proxy that synthesized a head would
+ * be writing a field no consumer reads; a proxy that required it (the old
+ * behavior) patched nothing at all.
  */
-import { describe, expect, it, beforeEach } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import {
   handleProxyRequest,
   patchMeta,
   extractMetaView,
   stripMeta,
   DEFAULT_UPSTREAM,
-  DEFAULT_MAX_AGE,
   type StaleSnapshot,
   type SnapshotStorage,
 } from "./stale-proxy";
 
-/** Fake gateway `data` view: markets + fresh _meta (block 1000 of 1050 chain head). */
-function gatewayData(block = 1000, chainHeadBlock = 1050, hash = "0xabc123"): unknown {
+/** Fake gateway `data` view: markets + _meta in the REAL Gateway shape (no chainHeadBlock). */
+function gatewayData(block = 1000, hash = "0xabc123"): unknown {
   return {
     markets: [{ id: "0x1" }],
-    _meta: { block: { number: block, hash }, chainHeadBlock: { number: chainHeadBlock } },
+    _meta: { block: { number: block, hash }, hasIndexingErrors: false },
   };
 }
 
 /** Fake gateway payload: { data: gatewayData(...) }. */
-function gatewayPayload(block = 1000, chainHeadBlock = 1050, hash = "0xabc123"): unknown {
-  return { data: gatewayData(block, chainHeadBlock, hash) };
+function gatewayPayload(block = 1000, hash = "0xabc123"): unknown {
+  return { data: gatewayData(block, hash) };
 }
 
 function memoryStorage(): { storage: SnapshotStorage; writeCount: () => number } {
@@ -78,7 +84,7 @@ describe("handleProxyRequest — record then replay", () => {
     expect(bodies).toEqual([CLIENT_GRAPHQL]);
   });
 
-  it("records the live _meta snapshot on the first request and serves the current block (fresh)", async () => {
+  it("records the live _meta snapshot on the first request and serves the current block", async () => {
     const { fetchImpl } = mockUpstream(() => gatewayPayload());
     const { storage, writeCount } = memoryStorage();
     const result = await handleProxyRequest({ fetchImpl, storage }, GATEWAY_PATH, CLIENT_GRAPHQL);
@@ -86,9 +92,8 @@ describe("handleProxyRequest — record then replay", () => {
     expect(result.state.recorded).toBe(true);
     expect(result.state.patched).toBe(true);
     expect(writeCount()).toBe(1);
-    expect(result.state.snapshot).toMatchObject({ block: 1000, hash: "0xabc123", chainHeadBlock: 1050 });
-    // served with the CURRENT block -> head - block = 50 == maxAge boundary
-    const body = result.body as { data: { _meta: { block: { number: number }; chainHeadBlock: { number: number } } } };
+    expect(result.state.snapshot).toMatchObject({ block: 1000, hash: "0xabc123" });
+    const body = result.body as { data: { _meta: { block: { number: number } } } };
     expect(body.data._meta.block.number).toBe(1000);
   });
 
@@ -97,43 +102,51 @@ describe("handleProxyRequest — record then replay", () => {
     const seeded: StaleSnapshot = {
       block: 90,
       hash: "0xoldblock",
-      chainHeadBlock: 140,
       recordedAt: "2026-09-08T00:00:00.000Z",
     };
     const storage: SnapshotStorage = { read: () => seeded, write: () => {} };
-    const { fetchImpl } = mockUpstream(() => gatewayPayload(1000, 1050));
+    const { fetchImpl } = mockUpstream(() => gatewayPayload(1000));
     const result = await handleProxyRequest({ fetchImpl, storage }, GATEWAY_PATH, CLIENT_GRAPHQL);
     expect(result.state.recorded).toBe(false);
-    const body = result.body as { data: { _meta: { block: { number: number; hash: string }; chainHeadBlock: { number: number } } } };
+    const body = result.body as {
+      data: { _meta: { block: { number: number; hash: string }; chainHeadBlock?: unknown } };
+    };
     expect(body.data._meta.block.number).toBe(90); // the old recorded block, not 1000
     expect(body.data._meta.block.hash).toBe("0xoldblock");
-    // derived head = stale block + maxAge + 1, so head - block > maxAge for the gate
-    expect(body.data._meta.chainHeadBlock.number).toBe(90 + DEFAULT_MAX_AGE + 1);
+    // The proxy never synthesizes a chain head — downstream reads it live from
+    // the dataset chain's RPC, and head - 90 >> maxAge trips the stale gate.
+    expect(body.data._meta.chainHeadBlock).toBeUndefined();
     expect(body.data.markets).toEqual([{ id: "0x1" }]); // data + meta both arrive
   });
 
   it("--stale-block forces the block number regardless of any recording (fully deterministic)", async () => {
-    const { fetchImpl } = mockUpstream(() => gatewayPayload(1000, 1050));
+    const { fetchImpl } = mockUpstream(() => gatewayPayload(1000));
     const { storage } = memoryStorage();
     const result = await handleProxyRequest(
       { fetchImpl, storage, staleBlock: 0 },
       GATEWAY_PATH,
       CLIENT_GRAPHQL,
     );
-    const body = result.body as { data: { _meta: { block: { number: number }; chainHeadBlock: { number: number } } } };
+    const body = result.body as { data: { _meta: { block: { number: number }; chainHeadBlock?: unknown } } };
     expect(body.data._meta.block.number).toBe(0);
-    expect(body.data._meta.chainHeadBlock.number).toBe(0 + DEFAULT_MAX_AGE + 1);
+    expect(body.data._meta.chainHeadBlock).toBeUndefined();
     expect(result.state.snapshot).toBeNull(); // forced mode never depends on the cache
   });
 
-  it("--live-chain-head keeps the upstream chain head instead of deriving a stale one", async () => {
-    const seeded: StaleSnapshot = { block: 90, hash: "0xold", chainHeadBlock: 140, recordedAt: "x" };
-    const storage: SnapshotStorage = { read: () => seeded, write: () => {} };
-    const { fetchImpl } = mockUpstream(() => gatewayPayload(1000, 1050));
-    const result = await handleProxyRequest({ fetchImpl, storage, liveChainHead: true }, GATEWAY_PATH, CLIENT_GRAPHQL);
-    const body = result.body as { data: { _meta: { chainHeadBlock: { number: number } } } };
-    expect(body.data._meta.block).toBeDefined();
-    expect(body.data._meta.chainHeadBlock.number).toBe(1050);
+  it("patches even when the upstream _meta carries no head field (the real Gateway shape)", async () => {
+    // Regression pin for the funded-run defect: keying the patch on a
+    // chainHeadBlock that never arrives left every response unpatched, so the
+    // money shot delivered FRESH data and settled instead of refunding.
+    const { fetchImpl } = mockUpstream(() => gatewayPayload(1000));
+    const { storage } = memoryStorage();
+    const result = await handleProxyRequest(
+      { fetchImpl, storage, staleBlock: 0 },
+      GATEWAY_PATH,
+      CLIENT_GRAPHQL,
+    );
+    expect(result.state.patched).toBe(true);
+    const body = result.body as { data: { _meta: { block: { number: number } } } };
+    expect(body.data._meta.block.number).toBe(0);
   });
 
   it("passes through responses whose data carries no _meta (nothing to replay)", async () => {
@@ -167,29 +180,28 @@ describe("handleProxyRequest — record then replay", () => {
 });
 
 describe("extractMetaView / stripMeta / patchMeta", () => {
-  it("extracts block, hash and chainHeadBlock from gateway data", () => {
-    expect(extractMetaView(gatewayData(1000, 1050, "0xbeef"))).toEqual({
+  it("extracts block and hash from gateway data", () => {
+    expect(extractMetaView(gatewayData(1000, "0xbeef"))).toEqual({
       block: 1000,
       hash: "0xbeef",
-      chainHeadBlock: 1050,
     });
-    expect(extractMetaView({ markets: [] })).toEqual({ block: null, hash: null, chainHeadBlock: null });
-    expect(extractMetaView(null)).toEqual({ block: null, hash: null, chainHeadBlock: null });
+    expect(extractMetaView({ markets: [] })).toEqual({ block: null, hash: null });
+    expect(extractMetaView(null)).toEqual({ block: null, hash: null });
   });
 
   it("stripMeta removes only _meta (the deliverable payload is hash-of-stripMeta)", () => {
-    const data = gatewayData(1000, 1050, "0xbeef");
+    const data = gatewayData(1000, "0xbeef");
     const stripped = stripMeta(data);
     expect(stripped).toEqual({ markets: [{ id: "0x1" }] });
-    const second = stripMeta(gatewayData(1000, 1050, "0xbeef"));
+    const second = stripMeta(gatewayData(1000, "0xbeef"));
     expect(JSON.stringify(stripped)).toBe(JSON.stringify(second)); // deterministic
   });
 
   it("patchMeta never mutates its input", () => {
-    const data = gatewayData(1000, 1050, "0xbeef");
-    const patched = patchMeta(data, 90, 141, "0xold");
+    const data = gatewayData(1000, "0xbeef");
+    const patched = patchMeta(data, 90, "0xold");
     // original untouched
-    expect(extractMetaView(data)).toEqual({ block: 1000, hash: "0xbeef", chainHeadBlock: 1050 });
-    expect(extractMetaView(patched)).toEqual({ block: 90, hash: "0xold", chainHeadBlock: 141 });
+    expect(extractMetaView(data)).toEqual({ block: 1000, hash: "0xbeef" });
+    expect(extractMetaView(patched)).toEqual({ block: 90, hash: "0xold" });
   });
 });

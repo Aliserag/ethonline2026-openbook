@@ -95,4 +95,4 @@ if grep -q "const SELLER = \"$SELLER_PLACEHOLDER\"" "$SELLER_FILE"; then
 fi
 "$GRAPH_BIN" auth "$GRAPH_STUDIO_DEPLOY_KEY" || { echo "FAIL: graph auth errored"; exit 1; }
 "$GRAPH_BIN" deploy "$SUBGRAPH_NAME" --node https://api.studio.thegraph.com/deploy/ --deploy-key "$GRAPH_STUDIO_DEPLOY_KEY" --version-label "${VERSION_LABEL:-v0.0.1}" < /dev/null || { echo "FAIL: graph deploy errored"; exit 1; }
-echo "PASS: openbook-pnl deployed — see Studio for sync status and the /query/<KEY> URL."
+echo "PASS: $SUBGRAPH_NAME deployed — see Studio for sync status and the /query/<KEY> URL."
