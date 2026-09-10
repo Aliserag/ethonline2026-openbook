@@ -372,7 +372,8 @@ export default function App() {
         </div>
       </header>
 
-      <p className="envline">
+      <main>
+        <p className="envline">
         <span>{hasGraphKey ? <b className="yes">GRAPH_GATEWAY_KEY set</b> : <b className="no">GRAPH_GATEWAY_KEY unset</b>}</span>
         <span>{env.sepoliaRpc ? <b className="yes">SEPOLIA_RPC set</b> : <b className="no">SEPOLIA_RPC unset (viem default)</b>}</span>
         <span>{env.arcRpc ? <b className="yes">ARC_TESTNET_RPC set</b> : <b className="no">ARC_TESTNET_RPC unset (public rpc)</b>}</span>
@@ -672,6 +673,7 @@ export default function App() {
           architecture ↗
         </a>
       </footer>
+    </main>
     </>
   );
 }
