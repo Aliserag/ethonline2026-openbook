@@ -515,9 +515,15 @@ function toolText(result: Record<string, unknown>): string {
 
 // --- live Gateway tests (key-guarded) -------------------------------------------------
 
-const hasKey = process.env.GRAPH_GATEWAY_KEY !== undefined && process.env.GRAPH_GATEWAY_KEY.length > 0;
+// Live tests are opt-in (RUN_LIVE=1) — bun auto-loads .env into process.env,
+// so a placeholder/stale GRAPH_GATEWAY_KEY must never flip the suite to live.
 
-describe.skipIf(!hasKey)("live Gateway (requires GRAPH_GATEWAY_KEY - skipped when absent)", () => {
+const hasKey =
+  process.env.RUN_LIVE === "1" &&
+  process.env.GRAPH_GATEWAY_KEY !== undefined &&
+  process.env.GRAPH_GATEWAY_KEY.length > 0;
+
+describe.skipIf(!hasKey)("live Gateway (opt-in: RUN_LIVE=1 + GRAPH_GATEWAY_KEY)", () => {
   const liveApp: OpenBookApp = createApp(configOf("openbook.json"), {
     env: {
       GRAPH_GATEWAY_KEY: process.env.GRAPH_GATEWAY_KEY ?? "",
