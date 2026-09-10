@@ -21,7 +21,7 @@ import { env, hasAlchemyKey, hasGraphKey } from "./env";
 import { CONFIG, defaultQueryFor, type DatasetConfig } from "./config";
 import { arcWalletClient, ensureArcChain } from "./arc";
 import { explorerUrl, truncateHash, usdc6 } from "./format";
-import { fetchPnl, type PnlRow } from "./pnl";
+import { fetchPnl, type PnlRow, type RefundEvent } from "./pnl";
 import { createEnsTextReader, type EnsTextReader } from "../../mcp/src/ens";
 import { gatewayQuery, stripMeta } from "../../mcp/src/gateway";
 import { defaultChainHeadResolver } from "../../mcp/src/chainhead";
@@ -210,6 +210,7 @@ export default function App() {
   const [settling, setSettling] = useState(false);
   const [settle, setSettle] = useState<SettleState | null>(null);
   const [pnl, setPnl] = useState<PnlRow[] | null>(null);
+  const [refundEvents, setRefundEvents] = useState<RefundEvent[]>([]);
   const [pnlMeta, setPnlMeta] = useState<number | null>(null);
   const [pnlHead, setPnlHead] = useState<number | null>(null);
   const [pnlError, setPnlError] = useState<string | null>(null);
@@ -264,6 +265,7 @@ export default function App() {
       .then(([result, head]) => {
         if (cancelled) return;
         setPnl(result.rows);
+        setRefundEvents(result.refundEvents);
         setPnlMeta(result.metaBlock);
         setPnlHead(Number(head));
       })
@@ -851,6 +853,26 @@ export default function App() {
                       <span className="fig net">{usdc6(sum(pnl, (r) => r.net))} USDC</span>
                     </li>
                   </ul>
+                )}
+                {refundEvents.length > 0 && (
+                  <div className="refunds-live">
+                    <p className="cap">money moved backwards — watch one (no wallet needed)</p>
+                    <ul className="running">
+                      {refundEvents.map((ev) => (
+                        <li key={ev.id}>
+                          <span className="cap">job {ev.jobId} · {ev.reason}</span>
+                          <a
+                            className="fig refunded"
+                            href={explorerUrl(ev.id.slice(0, 66))}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            Refunded ↗
+                          </a>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
                 )}
                 <p className="statline">
                   _meta block {pnlMeta ?? "—"} · chain head {pnlHead ?? "—"} · daily rows{" "}

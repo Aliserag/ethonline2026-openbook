@@ -15,8 +15,15 @@ export interface PnlRow {
   net: string;
 }
 
+export interface RefundEvent {
+  id: string;
+  jobId: string;
+  reason: string;
+}
+
 export interface PnlResult {
   rows: PnlRow[];
+  refundEvents: RefundEvent[];
   metaBlock: number | null;
 }
 
@@ -40,5 +47,20 @@ export async function fetchPnl(key?: string, fetchImpl?: FetchLike): Promise<Pnl
       }
     }
   }
-  return { rows, metaBlock: meta.block };
+  const refundEvents: RefundEvent[] = [];
+  if (typeof data === "object" && data !== null) {
+    const raw = (data as Record<string, unknown>)["refundIssueds"];
+    if (Array.isArray(raw)) {
+      for (const entry of raw) {
+        if (typeof entry !== "object" || entry === null) continue;
+        const ev = entry as Record<string, unknown>;
+        refundEvents.push({
+          id: typeof ev["id"] === "string" ? ev["id"] : String(ev["id"]),
+          jobId: typeof ev["jobId"] === "string" ? ev["jobId"] : String(ev["jobId"]),
+          reason: typeof ev["reason"] === "string" ? ev["reason"] : String(ev["reason"]),
+        });
+      }
+    }
+  }
+  return { rows, refundEvents, metaBlock: meta.block };
 }
