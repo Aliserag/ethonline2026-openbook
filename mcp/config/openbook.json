@@ -17,7 +17,7 @@
       "id": "aave-v3-arbitrum-lending",
       "subgraphId": "4xyasjQeREe7PxnF6wVdobZvCw5mhoHZq3T7guRpuNPf",
       "schema": "lending/3.1.0",
-      "description": "Aave V3 lending markets on Arbitrum (Messari lending/3.1.0, Start Fresh pin)",
+      "description": "Aave V3 lending markets on Arbitrum (Messari lending schema)",
       "freshness": { "maxAge": 50 },
       "priceUsdc": 100000
     },
@@ -25,7 +25,7 @@
       "id": "uniswap-v3-arbitrum-dex",
       "subgraphId": "FQ6JYszEKApsBpAmiHesRsd9Ygc6mzmpNRANeVQFYoVX",
       "schema": "dex-amm/4.0.1",
-      "description": "Uniswap V3 AMM pools on Arbitrum (Messari dex-amm/4.0.1, Start Fresh pin)",
+      "description": "Uniswap V3 AMM pools on Arbitrum (Messari dex schema)",
       "freshness": { "maxAge": 50 },
       "priceUsdc": 100000
     }

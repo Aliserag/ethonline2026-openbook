@@ -904,13 +904,15 @@ export default function App() {
             </span>
           </div>
           <div className="tape__body">
-            <div className="tape__scale">
-              <FreshnessRuler delivery={delivery} minBlock={job?.minBlock ?? null} />
-              <div className="tape__ticks">
-                <span>SLA floor</span>
-                <span>delivered ▸ chain head</span>
+            {delivery !== null && (
+              <div className="tape__scale">
+                <FreshnessRuler delivery={delivery} minBlock={job?.minBlock ?? null} />
+                <div className="tape__ticks">
+                  <span>SLA floor</span>
+                  <span>delivered ▸ chain head</span>
+                </div>
               </div>
-            </div>
+            )}
             <div className="tape__events" role="status" aria-live="polite">
               {tapeEvents.map((event, index) => (
                 <span key={`${event.kind}-${index}`} className={`ev ${event.kind}`}>
