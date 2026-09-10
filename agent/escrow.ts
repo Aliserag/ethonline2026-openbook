@@ -18,10 +18,11 @@
  *    `expiredAt <= now + 5min` with `ExpiryTooShort`). The plan's sketch said
  *    "block.number + expiryBlocks" — that predates the verification and would
  *    revert; we therefore take `expirySeconds` from `block.timestamp`.
- *  - the mempool enforces a 20 Gwei `maxFeePerGas` floor (silently drops lower
- *    caps) and the live base fee FLOATS (25 Gwei observed 2026-09-09) — a
- *    pinned cap above the floor but below the live base reverts every write.
- *    Fees are read live via arcFees(), never pinned.
+ *  - the mempool enforces a 20 Gwei `maxFeePerGas` floor (verified:
+ *    baseFeePerGas is pinned at exactly 20 Gwei); the RPC's SUGGESTED price
+ *    (eth_gasPrice) floats above it (25 Gwei observed 2026-09-09) — fees are
+ *    read live via arcFees() rather than pinned, so a future base-fee move
+ *    can never revert a write.
  *  - write() passes the ACCOUNT OBJECT (never a bare address) — a bare address
  *    is read as a JSON-RPC account and routes through eth_sendTransaction,
  *    which Arc's RPC does not serve (live failure: MethodNotFoundRpcError).
@@ -91,10 +92,12 @@ export const USDC_ABI = [
 ] as const satisfies Abi;
 
 /**
- * Arc fee model: the mempool enforces a 20 Gwei maxFeePerGas floor, but the
- * live base fee FLOATS (25 Gwei observed 2026-09-09) — a fixed cap above the
- * doc floor but below the live base reverts every write. Never pin: read
- * fees live and keep floor + headroom. arcFees() is the single source.
+ * Arc fee model: the mempool enforces a 20 Gwei maxFeePerGas floor (verified:
+ * baseFeePerGas is pinned at exactly 20 Gwei), while the RPC's SUGGESTED price
+ * (eth_gasPrice, base+tip) floats (25 Gwei observed 2026-09-09). A fixed cap
+ * stays valid only while the base fee holds — reading fees live via
+ * estimateFeesPerGas keeps every write valid if the pin ever moves. arcFees()
+ * is the single source.
  */
 export async function arcFees(publicClient: PublicClient): Promise<{
   maxFeePerGas: bigint;
