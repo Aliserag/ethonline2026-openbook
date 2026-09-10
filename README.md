@@ -19,6 +19,12 @@ committed at payment time — freshness block height, deliverable hash, deadline
 Arc's ERC-8183 escrow standard. Settlement checks them deterministically. **Miss the SLA and
 the refund executes onchain, automatically.** Money flows both ways.
 
+**Watch the money move backwards (one click, no wallet):** a delivery pinned to a stale
+`_meta` block got `REJECT (STALE_DATA)` and the escrow refunded the buyer on its own —
+[Refunded tx 0x25e7805a…6063f on ArcScan](https://testnet.arcscan.app/tx/0x25e7805ae79fd8320ccbc74d90dead9d87b082fd299ecfe5a5949a968e16063f),
+indexed in the agent's books ([live P&L panel](https://ethonline2026-openbook.vercel.app) —
+refunds column, no keys needed; [raw subgraph](https://api.studio.thegraph.com/query/1760032/open-book/version/latest)).
+
 ## Architecture
 
 See [docs/architecture.md](docs/architecture.md). The three sponsors are organs, not stickers:
