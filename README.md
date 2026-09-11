@@ -58,7 +58,10 @@ are organs, not stickers:
 - **The Graph (the product):** `sla-subgraph-mcp` — a generic MCP server with a
   packaged, node-runnable bin (npm publishing is the one-line post-freeze step)
   that turns any subgraph into a paid, freshness-gated product; OpenBook is the reference
-  deployment. Plus the `open-book` Studio subgraph on **arc-testnet** indexing every
+  deployment. **The difference from a read-only MCP wrapper is where the freshness gate
+  sits: it decides whether money moves.** Stale data is never charged, and a missed SLA
+  refunds the buyer onchain — provenance that *costs* the seller, not a footnote on an
+  answer. Plus the `open-book` Studio subgraph on **arc-testnet** indexing every
   payment/refund/policy event — the agent's audited books.
 - **ENS (storefront + business license):** `openbook.eth` on ENSv2 Sepolia publishes menu,
   pricing, SLA, and payee as text records; buyers hard-fail without resolution

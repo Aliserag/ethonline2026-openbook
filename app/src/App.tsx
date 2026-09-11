@@ -247,6 +247,7 @@ export default function App() {
   const [pnlNonce, setPnlNonce] = useState(0);
   const [payError, setPayError] = useState<string | null>(null);
   const [usdcBalance, setUsdcBalance] = useState<bigint | null>(null);
+  const [balanceError, setBalanceError] = useState<string | null>(null);
   const [queryError, setQueryError] = useState<string | null>(null);
   const [settleError, setSettleError] = useState<string | null>(null);
 
@@ -360,6 +361,7 @@ export default function App() {
   useEffect(() => {
     if (!address) {
       setUsdcBalance(null);
+      setBalanceError(null);
       return;
     }
     let cancelled = false;
@@ -371,10 +373,16 @@ export default function App() {
         args: [address],
       })
       .then((balance) => {
-        if (!cancelled) setUsdcBalance(balance as bigint);
+        if (cancelled) return;
+        setUsdcBalance(balance as bigint);
+        setBalanceError(null);
       })
-      .catch(() => {
-        if (!cancelled) setUsdcBalance(null); // RPC hiccup — the notice just stays hidden
+      .catch((error) => {
+        if (cancelled) return;
+        // Never hide a failed read: a caller who cannot see their balance must be
+        // told why, or the faucet guidance silently disappears on an RPC hiccup.
+        setUsdcBalance(null);
+        setBalanceError(error instanceof Error ? error.message.slice(0, 60) : String(error).slice(0, 60));
       });
     return () => {
       cancelled = true;
@@ -747,6 +755,14 @@ export default function App() {
               ) : (
                 <div className="notice ok" role="status">
                   <strong>{quote.amountUsdc} USDC/query</strong> — quoted from ENS, guaranteed fresh
+                  <button
+                    type="button"
+                    className="ob-refresh"
+                    onClick={handleQuote}
+                    aria-label="re-read the quote from the ENS records"
+                  >
+                    ↺ re-quote
+                  </button>
                   <div className="mono">
                     SLA: min block lag {quote.minBlockLag} · latency {quote.maxLatencyMs}ms · payee{" "}
                     {truncateHash(quote.payee)}
@@ -790,6 +806,15 @@ export default function App() {
                     (pick <em>Arc Testnet</em>, paste your address). Everything above — the quote and the books —
                     works without it.
                   </div>
+                )}
+                {isConnected && balanceError !== null && (
+                  <p className="caption" role="status" style={{ marginTop: 8 }}>
+                    could not read your Arc USDC balance ({balanceError}) — the pay button still works; if it
+                    fails on funds, use{" "}
+                    <a href="https://faucet.circle.com" target="_blank" rel="noreferrer">
+                      faucet.circle.com ↗
+                    </a>
+                  </p>
                 )}
                 {payError !== null && (
                   <div className="notice error" role="alert">

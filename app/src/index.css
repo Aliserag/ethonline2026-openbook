@@ -1266,6 +1266,24 @@ a:hover { color: var(--ink); }
   .tape__events .ev { white-space: normal; }
   .ruler .needle .lbl { font-size: 9px; }
   .running .fig.hero { font-size: 24px; }
+
+  /* touch targets: 44px minimum for controls, breathing room for inline actions */
+  button.primary,
+  button.ghost,
+  button.ob-refresh {
+    min-height: 44px;
+    padding-top: 10px;
+    padding-bottom: 10px;
+  }
+
+  a.fig,
+  .caption a,
+  .notice a,
+  .intro a,
+  .foot a {
+    display: inline-block;
+    padding: 6px 0;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
