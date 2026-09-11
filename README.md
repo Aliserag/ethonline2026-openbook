@@ -1,5 +1,7 @@
 # OpenBook — Chargebacks for the Machine Economy
 
+[![ci](https://github.com/Aliserag/OpenBook/actions/workflows/ci.yml/badge.svg)](https://github.com/Aliserag/OpenBook/actions/workflows/ci.yml)
+
 > An autonomous agent that sells freshness-guaranteed onchain data queries, pays its own
 > costs, and publishes its P&L onchain. Built for ETHOnline 2026 (Sep 4–16).
 
@@ -29,7 +31,11 @@ refunds column, no keys needed; [raw subgraph](https://api.studio.thegraph.com/q
 
 ## Architecture
 
-See [docs/architecture.md](docs/architecture.md). The three sponsors are organs, not stickers:
+![OpenBook architecture — buyers, the ENSv2 storefront, Arc rails, and The Graph data plane](docs/images/architecture.png)
+
+Rendered from the mermaid source in [docs/architecture.md](docs/architecture.md) (that file
+carries the full flow, the deterministic demo path, and the trust model). The three sponsors
+are organs, not stickers:
 
 - **Arc (rail + cash register):** ERC-8004 agent identity, USDC nanopayments, ERC-8183
   escrow settlement, custom policy-gated treasury (`PolicyWallet.sol` with onchain
