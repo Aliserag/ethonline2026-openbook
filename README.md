@@ -16,6 +16,15 @@ Payment is the last mile of agent autonomy. Agents can hold keys and sign transa
 counterparties can't trust them: no service guarantees, no refunds, no recourse when the data
 is stale. Everyone is building payment rails; nobody is building the control layer.
 
+**Why now:** 54% of organizations are already deploying AI agents
+([KPMG U.S. AI Pulse, Q1 2026](https://kpmg.com/us/en/media/blogs/2026/q1-ai-pulse-3.html)) and
+agentic commerce is projected at [$1.5T globally by 2030](https://www.juniperresearch.com/press/agentic-commerce-set-to-generate-15-trillion-globally-by-2030-as-payments-infrastructure-leaders-revealed/),
+yet [27% of consumers trust no organization to run an AI shopping agent and 24% will never
+delegate a purchase to one](https://www.checkout.com/newsroom/consumer-demand-for-ai-shopping-is-forming-fast-but-trust-for-agentic-commerce-is-still-catching-up).
+The constraint is recourse, not capability. **Buyers** — any agent, and the operator funding
+it — get recourse they can verify without trusting the seller; **sellers** of paid data get a
+freshness guarantee they can charge for.
+
 OpenBook's mechanic: **SLA-bound payments.** Every query carries verifiable conditions
 committed at payment time — freshness block height, deliverable hash, deadline — through
 Arc's ERC-8183 escrow standard. Settlement checks them deterministically. **Miss the SLA and
