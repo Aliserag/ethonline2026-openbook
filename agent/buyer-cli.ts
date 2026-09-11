@@ -50,6 +50,7 @@ import {
   attestDelivery,
   ERC8183,
   createJobWithSla,
+  escrowAddress,
   setEscrowAddress,
   submitDeliverable,
   type Sla,
