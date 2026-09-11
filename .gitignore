@@ -40,3 +40,6 @@ scripts/deck-to-pdf.sh
 
 # reviewer-agent browser sessions
 .playwright-cli/
+
+# pre-rewrite safety bundle
+.git-backups/
