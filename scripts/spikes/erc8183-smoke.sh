@@ -38,7 +38,7 @@ STATUS_NAME=(Open Funded Submitted Completed Rejected Expired)
 
 doc_mode() {
   echo "SKIP: wallet ${ADDR:-<none>} has no funded USDC on Arc testnet — ERC-8183 smoke waits for user funding."
-  echo "Funding steps: docs/keys-needed.md (web faucet or Circle drips API)."
+  echo "Funding steps: the setup notes (web faucet or Circle drips API)."
   echo ""
   echo "Exact commands once funded (run from repo root; assumes single key = client = provider = evaluator):"
   cat <<'EOF'

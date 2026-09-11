@@ -10,7 +10,7 @@ dataSources:
     name: ArcUSDC
     network: arc-testnet
     source:
-      # Native USDC ERC-20 interface on Arc Testnet (verified: resources/arc/README.md)
+      # Native USDC ERC-20 interface on Arc Testnet (verified: the Arc resource notes)
       address: "0x3600000000000000000000000000000000000000"
       abi: ERC20
       # startBlock just below the block observed while writing the spike (61291399) — keeps sync short

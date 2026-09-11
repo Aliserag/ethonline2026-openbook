@@ -6,7 +6,7 @@
  *  - funded lifecycle: createJob → setBudget → approve → fund → submit → complete.
  *    Skipped unless ARC_TESTNET_PK is present AND the wallet holds >= MIN_BALANCE
  *    USDC on Arc testnet (the key in .env is the Task 0 throwaway that is only
- *    funded after a faucet drip — docs/keys-needed.md §2). The suite must pass
+ *    funded after a faucet drip — the setup notes §2). The suite must pass
  *    keyless/fundless.
  */
 import { describe, expect, it } from "bun:test";
@@ -133,7 +133,7 @@ if (buyerPk && providerPk) {
     lifecycleReady = balance >= MIN_BALANCE;
     if (!lifecycleReady) {
       console.warn(
-        `SKIP lifecycle test: buyer ${account.address} holds ${balance} (6-dec) USDC — need >= ${MIN_BALANCE}. Fund via faucet.circle.com (docs/keys-needed.md §2) then re-run.`,
+        `SKIP lifecycle test: buyer ${account.address} holds ${balance} (6-dec) USDC — need >= ${MIN_BALANCE}. Fund via faucet.circle.com (the setup notes §2) then re-run.`,
       );
     }
   } catch (err) {
@@ -141,7 +141,7 @@ if (buyerPk && providerPk) {
   }
 } else {
   console.warn(
-    "SKIP lifecycle test: ARC_TESTNET_PK and/or ARC_RECIPIENT_PK not set (docs/keys-needed.md §3).",
+    "SKIP lifecycle test: ARC_TESTNET_PK and/or ARC_RECIPIENT_PK not set (the setup notes §3).",
   );
 }
 

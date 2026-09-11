@@ -427,7 +427,7 @@ export default function App() {
       const message = error instanceof Error ? error.message : String(error);
       setQueryError(
         /auth|key|401|403|not found/i.test(message)
-          ? "The Graph gateway rejected the key — check VITE_GRAPH_GATEWAY_KEY (fresh Studio key, docs/keys-needed.md §4)."
+          ? "The Graph gateway rejected the key — check VITE_GRAPH_GATEWAY_KEY (fresh Studio key, the setup notes §4)."
           : `Query failed: ${message.slice(0, 140)}`,
       );
     } finally {
@@ -611,7 +611,7 @@ export default function App() {
                       <li>
                         Register the name and records with <code>scripts/ens/setup.sh</code> (writes
                         menu, price, SLA, payee).
-                        <Tip text="The setup script needs a Sepolia key with test ETH + free MockUSDC. Details in docs/keys-needed.md." />
+                        <Tip text="The setup script needs a Sepolia key with test ETH + free MockUSDC. Details in the setup notes." />
                       </li>
                       <li>Reload this page — the table below fills with live records.</li>
                       <li>Step 2 unlocks: prices are read from the name, not hard-coded.</li>

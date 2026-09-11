@@ -386,7 +386,7 @@ export async function main(argv: string[]): Promise<void> {
     console.log(
       `[seller] SKIP: missing ${!operatorKey ? "provider key (" + config.operatorKey + "/ARC_TESTNET_PK)" : ""}` +
         `${!operatorKey && !gatewayKey ? " and " : ""}${!gatewayKey ? "GRAPH_GATEWAY_KEY" : ""} — ` +
-        `the seller loop serves live Gateway data and signs onchain submits; keyless runs exit here (docs/keys-needed.md).`,
+        `the seller loop serves live Gateway data and signs onchain submits; keyless runs exit here (the setup notes).`,
     );
     return;
   }

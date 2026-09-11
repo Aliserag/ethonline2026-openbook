@@ -2,7 +2,7 @@
 # graph-arc-smoke.sh — OpenBook Task 0, Spike 2: The Graph arc-testnet path.
 # Keyless portion: manifest validation (network arc-testnet, USDC address) + graph codegen + graph build.
 # Key-gated portion (Studio API key): script prints the exact deploy command; outcome is recorded
-# in docs/design/spike-results.md as "awaits key". Plan B if deploy fails: Sepolia shadow ledger.
+# in the spike notes as "awaits key". Plan B if deploy fails: Sepolia shadow ledger.
 # Run: bash scripts/spikes/graph-arc-smoke.sh
 set -uo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"

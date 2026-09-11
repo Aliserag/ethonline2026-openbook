@@ -48,7 +48,7 @@ function printFundingSteps() {
   console.log("  2) fund   https://faucet.circle.com -> connect ARC_TESTNET_ADDR -> Arc Testnet -> USDC");
   console.log("     or Circle drips API (developer key): POST https://api.circle.com/v1/faucet/drips");
   console.log("     body: {\"address\":\"<ARC_TESTNET_ADDR>\",\"blockchain\":\"ARC-TESTNET\",\"native\":true,\"usdc\":true}");
-  console.log("     (probed 2026-09-09: 401 without Bearer <TEST_API_KEY> — see docs/keys-needed.md)");
+  console.log("     (probed 2026-09-09: 401 without Bearer <TEST_API_KEY> — see the setup notes)");
   console.log("  3) re-run this script — expected receipt status 0x1, tx on testnet.arcscan.app");
 }
 

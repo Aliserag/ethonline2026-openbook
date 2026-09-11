@@ -25,6 +25,7 @@ subgraph/spike/generated/
 # Internal strategy / research / planning — kept local, never published
 RUBRIC.md
 SUBMISSION.md
+CLAUDE.md
 resources/
 docs/pitch/
 docs/superpowers/
@@ -35,7 +36,7 @@ docs/submission-checklist.md
 docs/verified-sources.md
 docs/design/spike-results.md
 docs/winner-repo-research.md
+scripts/deck-to-pdf.sh
 
 # reviewer-agent browser sessions
 .playwright-cli/
-CLAUDE.md

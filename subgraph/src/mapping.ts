@@ -51,7 +51,7 @@ const DAY_BLOCKS = BigInt.fromI32(21600);
 // frontend P&L panel). The seller address is the ERC-8004-registered operator,
 // config-pinned.
 // TODO(deploy): deploy-subgraph.sh substitutes $SELLER_ADDRESS for this
-// placeholder before codegen (see scripts/deploy-subgraph.sh + docs/keys-needed.md).
+// placeholder before codegen (see scripts/deploy-subgraph.sh + the setup notes).
 // The zero address = index nothing: keyless-safe default, but a deploy that
 // skips substitution books NO P&L.
 export const SELLER = "0x0000000000000000000000000000000000000000";

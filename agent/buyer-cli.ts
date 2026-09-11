@@ -454,7 +454,7 @@ export async function main(argv: string[]): Promise<void> {
   if (!options.onlyQuote && (!hasBuyerKey || !hasGatewayKey)) {
     console.log(
       `[buyer] SKIP: ${!hasBuyerKey ? "ARC_TESTNET_PK" : ""}${!hasBuyerKey && !hasGatewayKey ? " and " : ""}${!hasGatewayKey ? "GRAPH_GATEWAY_KEY" : ""} ` +
-        `missing — pay/deliver/verify are keyed steps; run --only-quote keyless, or set the keys (docs/keys-needed.md).`,
+        `missing — pay/deliver/verify are keyed steps; run --only-quote keyless, or set the keys (the setup notes).`,
     );
     return;
   }

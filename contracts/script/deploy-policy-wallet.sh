@@ -3,7 +3,7 @@
 # Keyless-safe: NEVER broadcasts. Checks $ARC_TESTNET_PK + deployer funding,
 # prints the exact `forge create --broadcast` command once both exist, and
 # exits 0 with "awaiting key"/"awaiting funding" otherwise (no keys yet —
-# see docs/keys-needed.md).
+# see the setup notes).
 #
 # Env overrides:
 #   ARC_TESTNET_PK    deployer key (required to broadcast; optional here)
@@ -30,7 +30,7 @@ PER_TX="${PER_TX_CAP:-1000000}"
 DAILY="${DAILY_CAP:-10000000}"
 
 if [[ -z "${ARC_TESTNET_PK:-}" ]]; then
-  echo "awaiting key: \$ARC_TESTNET_PK is unset (drip a testnet key at https://faucet.circle.com — see docs/keys-needed.md)"
+  echo "awaiting key: \$ARC_TESTNET_PK is unset (drip a testnet key at https://faucet.circle.com — see the setup notes)"
   exit 0
 fi
 if [[ -z "$AGENT" ]]; then
