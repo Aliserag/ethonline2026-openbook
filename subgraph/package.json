@@ -4,9 +4,9 @@
   "version": "0.1.0",
   "description": "OpenBook P&L subgraph (network: arc-testnet) — ERC-8183 commerce + PolicyWallet economics",
   "scripts": {
-    "codegen": "graph codegen",
-    "build": "graph build",
-    "test": "graph test",
+    "codegen": "npx --yes @graphprotocol/graph-cli@0.98.1 codegen",
+    "build": "npx --yes @graphprotocol/graph-cli@0.98.1 build",
+    "test": "npx --yes @graphprotocol/graph-cli@0.98.1 test",
     "deploy:studio": "../scripts/deploy-subgraph.sh"
   },
   "devDependencies": {
