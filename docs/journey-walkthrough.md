@@ -56,7 +56,7 @@ loop (6 passes → SATISFIED). Every journey is keyed to observable evidence.
 - Tab order: Connect wallet → SLA tip → step cards in order; tooltips open on focus;
   focus-visible outline; aria-live tape announces settlements; role=status on notices.
 
-## Gated for the funded run (docs/keys-needed.md)
-- Live Gateway queries + P&L rows: needs the Studio key (docs/keys-needed.md §4).
+## Gated for the funded run (the funded-stack notes)
+- Live Gateway queries + P&L rows: needs the Studio key (the funded-stack notes §4).
 - Pay/settle in browser: needs an injected wallet on Arc testnet (MetaMask add-chain 5042002).
 - ENS records set: needs SEPOLIA_PK + Sepolia ETH + MockUSDC mint (scripts/ens/setup.sh).

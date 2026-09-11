@@ -22,8 +22,20 @@ subgraph/spike/generated/
 # SDD scratch (gitignored)
 .superpowers/
 
-# Internal research/analysis — kept local, never published
+# Internal strategy / research / planning — kept local, never published
+RUBRIC.md
+SUBMISSION.md
+resources/
+docs/pitch/
+docs/superpowers/
+docs/presentation-research.md
+docs/funded-run-status.md
+docs/keys-needed.md
+docs/submission-checklist.md
+docs/verified-sources.md
+docs/design/spike-results.md
 docs/winner-repo-research.md
 
 # reviewer-agent browser sessions
 .playwright-cli/
+CLAUDE.md

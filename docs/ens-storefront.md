@@ -178,7 +178,7 @@ the production reader uses exactly this `getEnsText`-with-`sepolia` path
 Replace in `scripts/ens/records.json` before executing (setup.sh hard-refuses `CHANGEME:`):
 
 > **✅ Executed 2026-09-10** — all five replacements landed and the records are
-> live onchain (10/10 verified; see `docs/funded-run-status.md`). This list is
+> live onchain (10/10 verified; see `the funded-run notes`). This list is
 > kept as the reproducible procedure for a fresh name.
 
 1. `CHANGEME:POLICY_WALLET_ADDR` → Task 2 `PolicyWallet` deploy address (or the ERC-8183
