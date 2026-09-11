@@ -530,15 +530,13 @@ export default function App() {
         <p className="envline" aria-label="environment status">
           <span>
             <span className={hasGraphKey ? "dot yes" : "dot no"} aria-hidden="true" />
-            {hasGraphKey ? "GRAPH_GATEWAY_KEY set" : "GRAPH_GATEWAY_KEY unset"}
+            {hasGraphKey ? "live delivery: on" : "live delivery: needs a key"}
+            <Tip text="query_dataset runs through The Graph Gateway, which needs a free API key. The quote and the books work without it. Devs: set VITE_GRAPH_GATEWAY_KEY." />
           </span>
           <span>
-            <span className={env.sepoliaRpc ? "dot yes" : "dot"} aria-hidden="true" />
-            {env.sepoliaRpc ? "SEPOLIA_RPC set" : "SEPOLIA_RPC unset (viem default — ok)"}
-          </span>
-          <span>
-            <span className={env.arcRpc ? "dot yes" : "dot"} aria-hidden="true" />
-            {env.arcRpc ? "ARC_TESTNET_RPC set" : "ARC_TESTNET_RPC unset (public rpc — ok)"}
+            <span className="dot yes" aria-hidden="true" />
+            onchain reads: public rpc
+            <Tip text="ENS reads default to public Sepolia; the ledger reads public Arc RPC. Devs: override with SEPOLIA_RPC / ARC_TESTNET_RPC." />
           </span>
           <span>
             <span className={isConnected ? "dot yes" : "dot no"} aria-hidden="true" />
