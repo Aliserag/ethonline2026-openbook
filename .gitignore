@@ -23,6 +23,8 @@ subgraph/spike/generated/
 .superpowers/
 
 # Internal strategy / research / planning — kept local, never published
+RUNBOOK.md
+docs/demo-script.md
 RUBRIC.md
 SUBMISSION.md
 CLAUDE.md

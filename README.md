@@ -6,7 +6,7 @@
 > costs, and publishes its P&L onchain. Built for ETHOnline 2026 (Sep 4–16).
 
 **Bounties targeted (one project, three sponsors):**
-- **Arc — Best Agentic Economy Application with Circle Agent Stack** ($3,500; +$2,500 if deployed to Arc Mainnet by Sep 30 — see [RUNBOOK.md](RUNBOOK.md))
+- **Arc — Best Agentic Economy Application with Circle Agent Stack** ($3,500; +$2,500 for a mainnet deployment by Sep 30)
 - **The Graph — Best AI Tooling or AI Use Case with The Graph (Start Fresh)** ($5,000 pool)
 - **ENS — Best Use of ENSv2** ($4,500)
 
@@ -154,4 +154,4 @@ fresh clone — not inferred from the code.
 
 ## Status
 
-Submission-ready build for ETHOnline 2026 (Sep 4–16); deployed pieces live on Arc testnet and Sepolia (see [RUNBOOK.md](RUNBOOK.md)).
+Submission-ready build for ETHOnline 2026 (Sep 4–16); deployed pieces live on Arc testnet and Sepolia.

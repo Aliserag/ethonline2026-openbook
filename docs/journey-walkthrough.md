@@ -42,7 +42,7 @@ loop (6 passes → SATISFIED). Every journey is keyed to observable evidence.
 ## J7 — The Tape ✅ (idle)
 - Idle: status "idle", one event "tape idle — awaiting settlement activity", no ghost scale.
 - Delivered/settled/refunded/stale states render conditionally (code-verified; the stale
-  path is the deterministic stale-proxy money shot in docs/demo-script.md).
+  path is the deterministic stale-proxy money shot).
 
 ## J8 — Mobile (390px) ✅
 - Zero horizontal overflow; wallet action topmost (grid areas, DOM-first); cards stack;
