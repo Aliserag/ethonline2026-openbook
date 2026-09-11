@@ -128,6 +128,30 @@ Full tool reference + the one-command live-data path:
 | Agent identity | ERC-8004 **agentId 894065** on Arc testnet |
 | Audited books | `open-book` subgraph — `https://api.studio.thegraph.com/query/1760032/open-book/version/latest` (public) |
 
+## What's proven, and what isn't
+
+Every claim in this README was checked by reading it back from the chain, the gateway, or a
+fresh clone — not inferred from the code.
+
+| Proven | How you can check it |
+| --- | --- |
+| The judge path works with **no keys** | fresh clone → the stdio command above returns a quote (`"source": "ENS"`) and the indexed P&L in under a second |
+| A stale delivery **refunded the buyer onchain, automatically** | the [Refunded tx](https://testnet.arcscan.app/tx/0x25e7805ae79fd8320ccbc74d90dead9d87b082fd299ecfe5a5949a968e16063f) and the `refunds` row in the live P&L |
+| Treasury policy is enforced **onchain** | `PolicyWallet` verified on ArcScan; `PolicyBlocked` rows indexed by the subgraph |
+| Contracts and tests are real | 20 forge tests · 71 unit tests · 3-job CI (badge above) |
+
+**Not proven — stated plainly:**
+
+- **No third party has paid yet.** Every transaction so far is our own wallets.
+  `scripts/onboard-buyer.sh` makes it one command for anyone (~10 min, testnet USDC).
+- **The seller is a deterministic watch loop**, not an LLM reasoning agent. The autonomy
+  claimed here is over *settlement*, not inference.
+- **The latency bound is buyer-attested** (reputation-layer only); the freshness *block*
+  bound is the one the onchain `SlaHook` enforces.
+- The escrow and identity contracts are Circle's ERC-8183 / ERC-8004 **reference
+  deployments**; the custom work is `PolicyWallet.sol`, `SlaHook.sol`, the MCP seller, and
+  the ENSv2 storefront.
+
 ## Status
 
 Submission-ready build for ETHOnline 2026 (Sep 4–16); deployed pieces live on Arc testnet and Sepolia (see [RUNBOOK.md](RUNBOOK.md)).
