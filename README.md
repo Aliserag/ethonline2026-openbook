@@ -34,7 +34,10 @@ See [docs/architecture.md](docs/architecture.md). The three sponsors are organs,
 - **Arc (rail + cash register):** ERC-8004 agent identity, USDC nanopayments, ERC-8183
   escrow settlement, custom policy-gated treasury (`PolicyWallet.sol` with onchain
   `PolicyBlocked` events — Circle's built-in policies are mainnet-only; ours is the
-  testnet-demoable path).
+  testnet-demoable path), and **onchain SLA adjudication** (`SlaHook.sol` — an
+  EIP-8183 hook that blocks `complete()` unless the freshness proof covers the
+  submitted deliverable and clears the floor; proven live: a stale completion
+  reverts `SlaNotMet`, the refund path stays open).
 - **The Graph (the product):** `sla-subgraph-mcp` — a generic MCP server with a
   packaged, node-runnable bin (npm publishing is the one-line post-freeze step)
   that turns any subgraph into a paid, freshness-gated product; OpenBook is the reference
@@ -48,7 +51,7 @@ See [docs/architecture.md](docs/architecture.md). The three sponsors are organs,
 
 ## Repo layout
 
-- `contracts/` — PolicyWallet.sol (+ tests)
+- `contracts/` — PolicyWallet.sol (policy treasury) + SlaHook.sol (onchain SLA adjudication) + tests
 - `agent/` — agent loop, ERC-8183 settlement spine, buyer CLI
 - `mcp/` — `sla-subgraph-mcp` (the Graph tooling entry) + `SKILL.md`
 - `subgraph/` — the P&L subgraph source (deployed to Studio as `open-book`, Arc testnet)
