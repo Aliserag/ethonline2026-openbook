@@ -24,6 +24,7 @@ flowchart LR
 
     subgraph Arc["Arc Testnet (5042002)"]
         J["ERC-8183 AgenticCommerce escrow<br/>createJob(packSla) → setBudget → approve → fund<br/>→ submit(payloadHash) → complete/reject → claimRefund"]
+        HOOK["SlaHook.sol — ours (EIP-8183 IACPHook)<br/>beforeAction(complete) verifies the attestation<br/>covers the payloadHash ∧ metaBlock ≥ minBlock<br/>else revert SlaNotMet(metaBlock, minBlock)"]
         W["PolicyWallet treasury<br/>perTxCap · dailyCap · allowlist · block-day buckets<br/>WithdrawalExecuted / PolicyBlocked"]
         ID["ERC-8004 IdentityRegistry<br/>agent identity"]
         USDC[(USDC · 6-dec ERC-20 view)]
@@ -53,6 +54,8 @@ flowchart LR
     S -->|"query_dataset (seller side)"| GW
     SEL[agent/seller.ts<br/>watch → query → submit → log revenue] --> J
     BC -->|"verify_delivery → complete / reject+refund"| J
+    J -->|"complete() consults the hook first"| HOOK
+    HOOK -.->|"SlaNotMet → complete() reverts, refund is the only path"| J
     J --> USDC
     J -->|"PaymentReleased / Refunded / Job*"| PNL
     W --> USDC
@@ -103,6 +106,12 @@ money shot every time.
 - SLA conditions (freshness block, deliverable hash, deadline) are committed at
   payment time in the ERC-8183 job description; the deliverable hash is
   committed at `submit`.
+- **The SLA is enforced onchain, not by the client.** `SlaHook.sol` (ours — an
+  EIP-8183 `IACPHook`) is consulted before `complete()`: it re-derives the
+  verdict from the committed attestation (`metaBlock >= minBlock` ∧ the proof
+  covers the submitted `payloadHash`) and reverts `SlaNotMet(metaBlock, minBlock)`
+  otherwise. A seller therefore *cannot* take money for a stale delivery, even if
+  the buyer's CLI is compromised or replaced — the refund path stays open.
 - The verdict (`verify_delivery`) is deterministic open code:
   `metaBlock >= minBlock` and a well-formed payload hash. Anyone can re-run it.
 - Timeout defaults to the buyer: `claimRefund()` after `expiredAt`. The seller
