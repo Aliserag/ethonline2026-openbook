@@ -329,16 +329,22 @@ export default function App() {
     };
   }, []);
 
+  const flowBusy = paying || querying || settling;
+
   // Switching datasets invalidates the previous quote/delivery/verdict — the pay
-  // button must never fund the previous dataset's price.
-  useEffect(() => {
+  // button must never fund the previous dataset's price. Refused while a flow is in
+  // flight (paying/querying/settling): a funded job or a half-signed tx must never be
+  // orphaned by a stray click.
+  const handleDatasetChange = (nextId: string): void => {
+    if (flowBusy) return;
+    setDatasetId(nextId);
     setQuote(null);
     setDelivery(null);
     setSettle(null);
     setSettleError(null);
     setQueryError(null);
     setPayError(null);
-  }, [datasetId]);
+  };
 
   const handleQuote = (): void => {
     if (ens === null || ens.hardFail !== null) return;
@@ -703,13 +709,24 @@ export default function App() {
                   dataset
                   <Tip text="Two standardized Messari subgraphs — the same query shape runs on both. That's The Graph's schema leverage." />
                 </label>
-                <select id="dataset" value={datasetId} onChange={(event) => setDatasetId(event.target.value)}>
+                <select
+                  id="dataset"
+                  value={datasetId}
+                  disabled={flowBusy}
+                  aria-describedby="dataset-lock"
+                  onChange={(event) => handleDatasetChange(event.target.value)}
+                >
                   {CONFIG.datasets.map((d) => (
                     <option key={d.id} value={d.id}>
                       {d.id} — {d.description}
                     </option>
                   ))}
                 </select>
+                {flowBusy && (
+                  <p className="caption" id="dataset-lock">
+                    locked while a payment is in flight — a funded job must stay in view
+                  </p>
+                )}
               </div>
               {quote === null ? (
                 <>
