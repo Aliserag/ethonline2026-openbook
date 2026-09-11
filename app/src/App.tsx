@@ -16,7 +16,7 @@
 import { useEffect, useMemo, useState, type JSX } from "react";
 import { useAccount, useConnect } from "wagmi";
 import { createPublicClient, http, keccak256, toBytes, type PublicClient } from "viem";
-import { arcTestnet } from "./wagmi";
+import { arcChain } from "./wagmi";
 import { env, hasAlchemyKey, hasGraphKey } from "./env";
 import { CONFIG, defaultQueryFor, type DatasetConfig } from "./config";
 import { arcWalletClient, ensureArcChain } from "./arc";
@@ -25,8 +25,13 @@ import { fetchPnl, type PnlRow, type RefundEvent } from "./pnl";
 import { createEnsTextReader, type EnsTextReader } from "../../mcp/src/ens";
 import { gatewayQuery, stripMeta } from "../../mcp/src/gateway";
 import { defaultChainHeadResolver } from "../../mcp/src/chainhead";
-import { createJobWithSla, ERC8183, USDC, USDC_ABI, type Sla } from "../../agent/escrow";
+import { createJobWithSla, ERC8183, setUsdcAddress, usdcAddress, USDC_ABI, type Sla } from "../../agent/escrow";
 import { verifyDelivery } from "../../mcp/src/escrow";
+
+// Chain-specific USDC (VITE_USDC_ADDRESS) — mainnet override for the escrow module.
+if (env.usdcAddress !== undefined && /^0x[0-9a-fA-F]{40}$/.test(env.usdcAddress)) {
+  setUsdcAddress(env.usdcAddress as `0x${string}`);
+}
 
 interface StorefrontState {
   records: { key: string; value: string | null }[];
@@ -252,7 +257,7 @@ export default function App() {
     [],
   );
   const publicClient = useMemo<PublicClient>(
-    () => createPublicClient({ chain: arcTestnet, transport: http(env.arcRpc) }),
+    () => createPublicClient({ chain: arcChain, transport: http(env.arcRpc) }),
     [],
   );
 
@@ -321,7 +326,7 @@ export default function App() {
     let cancelled = false;
     publicClient
       .readContract({
-        address: USDC,
+        address: usdcAddress(),
         abi: USDC_ABI,
         functionName: "balanceOf",
         args: [address],
@@ -534,7 +539,7 @@ export default function App() {
           </div>
         </div>
         <div className="chainbadges">
-          <span>arc · 5042002</span>
+          <span>arc · {arcChain.id}</span>
           <span>ensv2 · sepolia</span>
           <span>the graph · gateway</span>
           <span>{CONFIG.ens}</span>
@@ -1036,7 +1041,7 @@ export default function App() {
           )
         </span>
         <a
-          href="https://github.com/Aliserag/ethonline2026-openbook/blob/main/docs/architecture.md"
+          href="https://github.com/Aliserag/OpenBook/blob/main/docs/architecture.md"
           target="_blank"
           rel="noreferrer"
         >

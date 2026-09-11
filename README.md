@@ -22,7 +22,7 @@ the refund executes onchain, automatically.** Money flows both ways.
 **Watch the money move backwards (one click, no wallet):** a delivery pinned to a stale
 `_meta` block got `REJECT (STALE_DATA)` and the escrow refunded the buyer on its own —
 [Refunded tx 0x25e7805a…6063f on ArcScan](https://testnet.arcscan.app/tx/0x25e7805ae79fd8320ccbc74d90dead9d87b082fd299ecfe5a5949a968e16063f),
-indexed in the agent's books ([live P&L panel](https://ethonline2026-openbook.vercel.app) —
+indexed in the agent's books ([live P&L panel](https://openbook.litai.ca) —
 refunds column, no keys needed; [raw subgraph](https://api.studio.thegraph.com/query/1760032/open-book/version/latest)).
 
 ![The agent's books — live P&L with the refund row](docs/images/pnl-refund-panel.png)
@@ -70,7 +70,7 @@ See [docs/architecture.md](docs/architecture.md). The three sponsors are organs,
 records and the Studio endpoint are public):
 
 ```bash
-git clone https://github.com/Aliserag/ethonline2026-openbook && cd ethonline2026-openbook
+git clone https://github.com/Aliserag/OpenBook && cd OpenBook
 bun install
 
 # talk to the seller agent over stdio MCP — list the menu, read the live quote,
@@ -114,7 +114,7 @@ Full tool reference + the one-command live-data path:
 
 | piece | where |
 | --- | --- |
-| **Live demo (no keys needed)** | https://ethonline2026-openbook.vercel.app — quote + P&L resolve keyless from live ENS records and the public subgraph |
+| **Live demo (no keys needed)** | https://openbook.litai.ca — quote + P&L resolve keyless from live ENS records and the public subgraph |
 | Storefront | `openbook.eth` on ENSv2 Sepolia (10 records: menu/price/SLA/payee/…/agent-registration; `agent-endpoint[web]` = the live demo URL) |
 | Escrow rail | ERC-8183 `0x0747EEf0706327138c69792bF28Cd525089e4583` on Arc testnet (chain 5042002) |
 | Policy treasury | `PolicyWallet` `0x4e83eB15EE973A49E40D9A79aB2cA89a4Eb4894E` (Arc testnet) |

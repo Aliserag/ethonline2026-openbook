@@ -12,27 +12,27 @@ import {
   type EIP1193Provider,
   type WalletClient,
 } from "viem";
-import { arcTestnet } from "./wagmi";
+import { arcChain } from "./wagmi";
 
 export function getProvider(): EIP1193Provider | undefined {
   return (window as unknown as { ethereum?: EIP1193Provider }).ethereum;
 }
 
-/** EIP-3085 wallet_addEthereumChain params for Arc testnet (per-user chain add). */
+/** EIP-3085 wallet_addEthereumChain params for the active Arc chain (per-user chain add). */
 function arcChainParams(): Record<string, unknown> {
   return {
-    chainId: `0x${arcTestnet.id.toString(16)}`,
-    chainName: arcTestnet.name,
-    nativeCurrency: arcTestnet.nativeCurrency,
-    rpcUrls: [arcTestnet.rpcUrls.default.http[0]],
-    blockExplorerUrls: arcTestnet.blockExplorers?.default !== undefined
-      ? [arcTestnet.blockExplorers.default.url]
+    chainId: `0x${arcChain.id.toString(16)}`,
+    chainName: arcChain.name,
+    nativeCurrency: arcChain.nativeCurrency,
+    rpcUrls: [arcChain.rpcUrls.default.http[0]],
+    blockExplorerUrls: arcChain.blockExplorers?.default !== undefined
+      ? [arcChain.blockExplorers.default.url]
       : [],
   };
 }
 
 /**
- * Ensure the connected wallet knows Arc testnet: switch, and add the chain
+ * Ensure the connected wallet knows the active Arc chain: switch, and add the chain
  * first when the wallet replies 4902 (WalletConnect and some injected wallets
  * have no Arc entry). Safe to call repeatedly.
  */
@@ -43,13 +43,13 @@ export async function ensureArcChain(): Promise<void> {
   try {
     await request({
       method: "wallet_switchEthereumChain",
-      params: [{ chainId: `0x${arcTestnet.id.toString(16)}` }],
+      params: [{ chainId: `0x${arcChain.id.toString(16)}` }],
     });
   } catch {
     await request({ method: "wallet_addEthereumChain", params: [arcChainParams()] });
     await request({
       method: "wallet_switchEthereumChain",
-      params: [{ chainId: `0x${arcTestnet.id.toString(16)}` }],
+      params: [{ chainId: `0x${arcChain.id.toString(16)}` }],
     });
   }
 }
@@ -76,7 +76,7 @@ export function arcWalletClient(address: Address, trace?: string[]): WalletClien
   const provider = getProvider();
   if (!provider) throw new Error("no injected wallet (MetaMask/Rabby) — install one and connect");
   return createWalletClient({
-    chain: arcTestnet,
+    chain: arcChain,
     transport: trace ? tracingTransport(provider, trace) : custom(provider),
     account: address,
   });

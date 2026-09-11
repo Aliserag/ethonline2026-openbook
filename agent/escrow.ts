@@ -70,6 +70,22 @@ export function escrowAddress(): Address {
 /** USDC ERC-20 view on Arc testnet — 6 decimals, same balance as native gas (never sum the two views). */
 export const USDC: Address = "0x3600000000000000000000000000000000000000";
 
+/**
+ * The USDC ERC-20 this process approves/reads. Defaults to the Arc testnet
+ * predeploy; set via `setUsdcAddress` (buyer-cli reads OPENBOOK_USDC) when a
+ * network uses a different USDC address — e.g. Arc mainnet. 6 decimals
+ * either way; never the 18-decimal gas view.
+ */
+let usdcOverride: Address | null = null;
+
+export function setUsdcAddress(address: Address | null): void {
+  usdcOverride = address;
+}
+
+export function usdcAddress(): Address {
+  return usdcOverride ?? USDC;
+}
+
 export const ZERO_ADDRESS: Address = "0x0000000000000000000000000000000000000000";
 
 /** Public Arc testnet RPC (chain 5042002). */
@@ -303,7 +319,7 @@ export async function createJobWithSla(
   });
   // 3. BUYER approves USDC — 6 decimals, never 18 (verified Task 0)
   await sendAndConfirm(publicClient, buyer, {
-    address: USDC,
+    address: usdcAddress(),
     abi: USDC_ABI,
     functionName: "approve",
     args: [escrowAddress(), amount6dec],

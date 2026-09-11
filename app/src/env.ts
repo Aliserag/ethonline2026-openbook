@@ -9,6 +9,12 @@ export const env = {
   sepoliaRpc: (import.meta.env.VITE_SEPOLIA_RPC as string | undefined) ?? undefined,
   /** Optional Arc testnet RPC; unset -> https://rpc.testnet.arc.io (public) */
   arcRpc: (import.meta.env.VITE_ARC_TESTNET_RPC as string | undefined) ?? undefined,
+  /** Arc chain identity — override for mainnet (e.g. 5042) without code edits. */
+  arcChainId: Number(import.meta.env.VITE_ARC_CHAIN_ID ?? "5042002"),
+  arcChainName: (import.meta.env.VITE_ARC_CHAIN_NAME as string | undefined) ?? "Arc Testnet",
+  arcExplorer: (import.meta.env.VITE_ARC_EXPLORER as string | undefined) ?? "https://testnet.arcscan.app",
+  /** USDC ERC-20 on the active chain — override for mainnet. */
+  usdcAddress: (import.meta.env.VITE_USDC_ADDRESS as string | undefined) ?? undefined,
   /** The Graph Studio key: gates the delivery query (the open-book P&L endpoint is public) */
   graphKey: (import.meta.env.VITE_GRAPH_GATEWAY_KEY as string | undefined) ?? "",
   /** Alchemy key: the freshness head reference (Gateway _meta has no

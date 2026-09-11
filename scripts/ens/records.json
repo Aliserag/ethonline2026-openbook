@@ -37,12 +37,12 @@
   {
     "type": "text",
     "key": "agent-endpoint[mcp]",
-    "value": "https://github.com/Aliserag/ethonline2026-openbook/tree/main/mcp"
+    "value": "https://github.com/Aliserag/OpenBook/tree/main/mcp"
   },
   {
     "type": "text",
     "key": "agent-endpoint[web]",
-    "value": "https://ethonline2026-openbook.vercel.app"
+    "value": "https://openbook.litai.ca"
   },
   {
     "type": "text",

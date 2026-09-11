@@ -1,18 +1,31 @@
 import { createConfig, http, injected } from "wagmi";
 import { arcTestnet } from "wagmi/chains";
+import { defineChain } from "viem";
 import { env } from "./env";
 
 /**
- * The whole demo lives on Arc testnet (5042002). HTTP transport only;
- * injected (MetaMask/Rabby) connector — WalletConnect has no Arc entry, so
- * per-user chain-add is handled by ensureArcChain() before any write.
+ * The active Arc chain. Defaults to Arc testnet (5042002) from wagmi/chains;
+ * set VITE_ARC_CHAIN_ID / VITE_ARC_CHAIN_NAME / VITE_ARC_EXPLORER /
+ * VITE_ARC_TESTNET_RPC to target Arc mainnet once its anchors are published —
+ * no code edit (ensureArcChain() and the UI both derive from this object).
  */
+const arcChain =
+  env.arcChainId === arcTestnet.id
+    ? arcTestnet
+    : defineChain({
+        id: env.arcChainId,
+        name: env.arcChainName,
+        nativeCurrency: { name: "USDC", symbol: "USDC", decimals: 18 },
+        rpcUrls: { default: { http: [env.arcRpc ?? "https://rpc.testnet.arc.io"] } },
+        blockExplorers: { default: { name: "ArcScan", url: env.arcExplorer } },
+      });
+
 export const wagmiConfig = createConfig({
-  chains: [arcTestnet],
+  chains: [arcChain],
   transports: {
-    [arcTestnet.id]: http(env.arcRpc),
+    [arcChain.id]: http(env.arcRpc),
   },
   connectors: [injected()],
 });
 
-export { arcTestnet };
+export { arcChain };

@@ -52,6 +52,7 @@ import {
   createJobWithSla,
   escrowAddress,
   setEscrowAddress,
+  setUsdcAddress,
   submitDeliverable,
   type Sla,
 } from "./escrow";
@@ -252,6 +253,10 @@ export async function runBuyerFlow(
   const escrowEnv = env["OPENBOOK_ESCROW"];
   if (escrowEnv !== undefined && /^0x[0-9a-fA-F]{40}$/.test(escrowEnv)) {
     setEscrowAddress(escrowEnv as `0x${string}`);
+  }
+  const usdcEnv = env["OPENBOOK_USDC"];
+  if (usdcEnv !== undefined && /^0x[0-9a-fA-F]{40}$/.test(usdcEnv)) {
+    setUsdcAddress(usdcEnv as `0x${string}`);
   }
   const hookAddress = (options.hook ?? env["OPENBOOK_HOOK"]) as `0x${string}` | undefined;
   if (hookAddress !== undefined && !/^0x[0-9a-fA-F]{40}$/.test(hookAddress)) {

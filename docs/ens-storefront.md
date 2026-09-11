@@ -71,8 +71,8 @@ machine-readable records.
 | `svc.operator` | `0x64A78b6d5e99274d01D1d0A70B180A73AAEb8d21` (live) | Operator / agent address |
 | `svc.pnl` | `https://api.studio.thegraph.com/query/1760032/open-book/version/latest` (live) | Task 4 Studio subgraph endpoint (`get_pnl`, Task 7 dashboard) |
 | `agent-context` | `OpenBook: …ERC-8004 agent 894065 on Arc.` *(ENSIP-26, live)* | Agent self-description for any AI client |
-| `agent-endpoint[mcp]` | `https://github.com/Aliserag/ethonline2026-openbook/tree/main/mcp` *(live)* | MCP endpoint (`sse`/streamable) |
-| `agent-endpoint[web]` | `https://ethonline2026-openbook.vercel.app` *(live)* | Buyer frontend |
+| `agent-endpoint[mcp]` | `https://github.com/Aliserag/OpenBook/tree/main/mcp` *(live)* | MCP endpoint (`sse`/streamable) |
+| `agent-endpoint[web]` | `https://openbook.litai.ca` *(live)* | Buyer frontend |
 | `agent-registration[0x00010000034cef52148004a818bfb912233c491871b3d84c89a494bd9e][894065]` | `1` (live) *(ENSIP-25)* | Binds `openbook.eth` ↔ ERC-8004 agent entry (`<registry>` = ERC-7930 interoperable address of the Arc registry; value is a non-empty attestation) |
 
 `records-prep.json` is the **atomic init subset** (only the three records already final at
