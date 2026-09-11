@@ -243,6 +243,8 @@ export default function App() {
   const [pnlMeta, setPnlMeta] = useState<number | null>(null);
   const [pnlHead, setPnlHead] = useState<number | null>(null);
   const [pnlError, setPnlError] = useState<string | null>(null);
+  const [pnlUpdatedAt, setPnlUpdatedAt] = useState<Date | null>(null);
+  const [pnlNonce, setPnlNonce] = useState(0);
   const [payError, setPayError] = useState<string | null>(null);
   const [usdcBalance, setUsdcBalance] = useState<bigint | null>(null);
   const [queryError, setQueryError] = useState<string | null>(null);
@@ -298,6 +300,8 @@ export default function App() {
         setRefundEvents(result.refundEvents);
         setPnlMeta(result.metaBlock);
         setPnlHead(Number(head));
+        setPnlError(null);
+        setPnlUpdatedAt(new Date());
       })
       .catch((error) => {
         if (!cancelled) setPnlError(error instanceof Error ? error.message : String(error));
@@ -305,7 +309,36 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [publicClient]);
+  }, [publicClient, pnlNonce]);
+
+  // The brand is a printer, not a screenshot: the ledger refreshes itself every
+  // 15s (and immediately when the tab comes back), so rows, block deltas and the
+  // "updated" stamp move without a click. Every 2026 winner's live surface does
+  // this — Atlas polls 41 requests, AgentGate shows "updated HH:MM:SS" + ↺.
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (document.visibilityState === "visible") setPnlNonce((n) => n + 1);
+    }, 15_000);
+    const onVisible = (): void => {
+      if (document.visibilityState === "visible") setPnlNonce((n) => n + 1);
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, []);
+
+  // Switching datasets invalidates the previous quote/delivery/verdict — the pay
+  // button must never fund the previous dataset's price.
+  useEffect(() => {
+    setQuote(null);
+    setDelivery(null);
+    setSettle(null);
+    setSettleError(null);
+    setQueryError(null);
+    setPayError(null);
+  }, [datasetId]);
 
   const handleQuote = (): void => {
     if (ens === null || ens.hardFail !== null) return;
@@ -437,6 +470,7 @@ export default function App() {
 
   const handleSettle = async (): Promise<void> => {
     if (!address || job === null || delivery === null || delivery.metaBlock === null) return;
+    setSettleError(null);
     setSettling(true);
     try {
       await ensureArcChain();
@@ -505,6 +539,15 @@ export default function App() {
     tapeEvents.push({ text: `QUOTED ${quote.amountUsdc} USDC/query · SLA lag ${quote.minBlockLag} · latency ${quote.maxLatencyMs}ms`, kind: "idle" as const });
   } else {
     tapeEvents.push({ text: "tape idle — awaiting settlement activity", kind: "idle" as const });
+  }
+
+  // chain-derived lines: refunds the subgraph indexed, so the tape prints events
+  // that happened outside this tab too — and moves on its own once polled.
+  for (const ev of refundEvents.slice(0, 3)) {
+    tapeEvents.push({
+      text: `REFUNDED job ${ev.jobId} — ${ev.reason} · indexed onchain`,
+      kind: "refunded" as const,
+    });
   }
 
   return (
@@ -887,6 +930,7 @@ export default function App() {
           <aside className="summary">
             <section
               className="stepcard"
+              aria-busy={pnl === null && pnlError === null}
               data-state={pnlError !== null ? "failed" : pnl !== null && pnl.length > 0 ? "done" : "idle"}
             >
               <div className="stepcard__head">
@@ -900,7 +944,7 @@ export default function App() {
                   </p>
                 </div>
                 <span className="stepstate">
-                  {pnlError !== null ? "error" : pnl !== null && pnl.length > 0 ? "live" : "waiting"}
+                  {pnlError !== null ? "error" : pnl === null ? "loading…" : pnl.length > 0 ? "live" : "waiting"}
                 </span>
               </div>
               <div className="body">
@@ -912,7 +956,7 @@ export default function App() {
                   <ul className="running">
                     <li>
                       <span className="cap">revenue</span>
-                      <span className="fig settled">{usdc6(sum(pnl, (r) => r.revenue))} USDC</span>
+                      <span className="fig settled hero">{usdc6(sum(pnl, (r) => r.revenue))} USDC</span>
                     </li>
                     <li>
                       <span className="cap">costs</span>
@@ -920,11 +964,11 @@ export default function App() {
                     </li>
                     <li>
                       <span className="cap">refunds</span>
-                      <span className="fig refunded">{usdc6(sum(pnl, (r) => r.refunds))} USDC</span>
+                      <span className="fig refunded hero">{usdc6(sum(pnl, (r) => r.refunds))} USDC</span>
                     </li>
                     <li>
                       <span className="cap">net</span>
-                      <span className="fig net">{usdc6(sum(pnl, (r) => r.net))} USDC</span>
+                      <span className="fig net hero">{usdc6(sum(pnl, (r) => r.net))} USDC</span>
                     </li>
                   </ul>
                 )}
@@ -949,8 +993,26 @@ export default function App() {
                   </div>
                 )}
                 <p className="statline">
-                  _meta block {pnlMeta ?? "—"} · chain head {pnlHead ?? "—"} · daily rows{" "}
-                  {pnl !== null ? String(pnl.length) : "—"}
+                  <span className={pnlError !== null ? "ob-live off" : "ob-live"} aria-hidden="true" />
+                  live · _meta block {pnlMeta ?? "—"} · chain head {pnlHead ?? "—"}
+                  {pnlMeta !== null && pnlHead !== null
+                    ? ` (Δ ${Math.max(0, pnlHead - pnlMeta)} blocks behind head)`
+                    : ""}{" "}
+                  · daily rows {pnl !== null ? String(pnl.length) : "—"}
+                  {pnlUpdatedAt !== null && (
+                    <>
+                      {" · "}
+                      <span className="live-stamp">updated {pnlUpdatedAt.toLocaleTimeString()}</span>
+                      <button
+                        type="button"
+                        className="ob-refresh"
+                        onClick={() => setPnlNonce((n) => n + 1)}
+                        aria-label="refresh the agent's books"
+                      >
+                        ↺ refresh
+                      </button>
+                    </>
+                  )}
                 </p>
               </div>
             </section>
@@ -990,7 +1052,11 @@ export default function App() {
                     </tbody>
                   </table>
                 ) : (
-                  <p className="notice">daily rows appear here once settlements land.</p>
+                  <p className="notice">
+                    {pnl === null
+                      ? "loading the ledger…"
+                      : "daily rows appear here once settlements land."}
+                  </p>
                 )}
               </div>
             </section>
@@ -1001,6 +1067,16 @@ export default function App() {
           <div className="tape__head">
             <span className="tape__title">The Tape — settlement printer</span>
             <span className="tape__status">
+              <span
+                className={
+                  settle !== null
+                    ? "ob-live"
+                    : delivery !== null && delivery.freshness === "stale"
+                      ? "ob-live stale"
+                      : "ob-live off"
+                }
+                aria-hidden="true"
+              />
               {settle !== null
                 ? `settled ${settle.verdict}`
                 : delivery !== null

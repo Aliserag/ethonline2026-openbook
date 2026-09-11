@@ -1165,6 +1165,109 @@ textarea {
   outline-offset: 2px;
 }
 
+/* ── motion + live signals ───────────────────────────────────────────────────
+   Evidence: every 2026 first-place winner measured runs 12–125 CSS transitions,
+   1–10 keyframes and a pulsing live dot (AgentGate `pulse-live`, Atlas `blip`,
+   Onda `onda-blink`); OpenBook shipped zero keyframes and two opacity fades. */
+
+@keyframes ob-pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50%      { transform: scale(1.55); opacity: 0.45; }
+}
+
+@keyframes ob-snap {
+  from { transform: translateY(6px); opacity: 0; }
+  to   { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes ob-slide {
+  from { transform: translateX(-8px); opacity: 0; }
+  to   { transform: translateX(0); opacity: 1; }
+}
+
+/* the live dot — the single most repeated idiom in the winning set */
+.ob-live {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--settled);
+  animation: ob-pulse 2s ease-in-out infinite;
+  vertical-align: middle;
+}
+
+.ob-live.stale { background: var(--stale); }
+.ob-live.off { background: var(--rule-strong); animation: none; }
+
+/* panels enter (Atlas: SECTION.panel snap-in, 0.26s) */
+.stepcard { animation: ob-snap 260ms ease both; }
+
+/* the tape prints: each event slides in as it lands (Atlas `snap`, Onda `slide-in-right`) */
+.tape__events .ev { animation: ob-slide 280ms ease both; }
+
+/* hero figures — winners show 5–29 numerals ≥36px; our ledger showed none */
+.running .fig.hero {
+  font-family: var(--mono);
+  font-size: clamp(23px, 3vw, 33px);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  line-height: 1.15;
+}
+
+/* controls answer the pointer (winners transition border/background/transform) */
+button.primary,
+button.ghost {
+  transition: transform 120ms ease, background-color 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+
+button.primary:hover:not(:disabled),
+button.ghost:hover:not(:disabled) { transform: translateY(-1px); }
+
+button.primary:active:not(:disabled),
+button.ghost:active:not(:disabled) { transform: translateY(0); }
+
+/* "updated HH:MM:SS" + manual refresh (AgentGate ships exactly this pair) */
+.live-stamp { font-family: var(--mono); font-size: 10.5px; color: var(--muted); letter-spacing: 0.02em; }
+
+button.ob-refresh {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--accent);
+  background: none;
+  border: 0;
+  padding: 0 0 0 6px;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+button.ob-refresh:hover { color: var(--ink); }
+
+/* rows, chips and links answer the pointer too — the winning set runs 29–31
+   transitions because every surface responds, not just buttons */
+.running li,
+.ledger tbody tr,
+.stepstate,
+.chainbadges span,
+.envline span,
+.tape__events .ev {
+  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease, opacity 120ms ease;
+}
+
+.running li:hover,
+.ledger tbody tr:hover { background: rgba(42, 75, 143, 0.06); }
+
+a { transition: color 120ms ease, opacity 120ms ease; }
+a:hover { color: var(--ink); }
+
+/* phones (390px): the signature tape must not truncate and the hero must scale */
+@media (max-width: 600px) {
+  h1 { font-size: clamp(24px, 7.5vw, 32px); }
+  .tape__events .ev { white-space: normal; }
+  .ruler .needle .lbl { font-size: 9px; }
+  .running .fig.hero { font-size: 24px; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
