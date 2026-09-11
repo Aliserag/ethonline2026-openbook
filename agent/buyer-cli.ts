@@ -47,8 +47,10 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   ARC_RPC_URL,
+  attestDelivery,
   ERC8183,
   createJobWithSla,
+  setEscrowAddress,
   submitDeliverable,
   type Sla,
 } from "./escrow";
@@ -244,6 +246,16 @@ export async function runBuyerFlow(
   if (options.onlyQuote) return { quote };
 
   // 2. pay — buyer funds the escrow; provider signs setBudget
+  // Escrow target: OPENBOOK_ESCROW flips the whole escrow module (e.g. to a
+  // dedicated instance whose admin whitelists the onchain SLA hook).
+  const escrowEnv = env["OPENBOOK_ESCROW"];
+  if (escrowEnv !== undefined && /^0x[0-9a-fA-F]{40}$/.test(escrowEnv)) {
+    setEscrowAddress(escrowEnv as `0x${string}`);
+  }
+  const hookAddress = (options.hook ?? env["OPENBOOK_HOOK"]) as `0x${string}` | undefined;
+  if (hookAddress !== undefined && !/^0x[0-9a-fA-F]{40}$/.test(hookAddress)) {
+    throw new Error(`buyer-cli: invalid hook address '${hookAddress}'`);
+  }
   const rpcUrl = env["ARC_TESTNET_RPC"] ?? ARC_RPC_URL;
   const buyerPk = requiredEnv(env, "ARC_TESTNET_PK");
   const publicClient = deps.publicClient ?? createPublicClient({ chain: arcTestnet, transport: http(rpcUrl) });
@@ -270,8 +282,9 @@ export async function runBuyerFlow(
     sla,
     amount6dec: BigInt(amount),
     expirySeconds: options.expirySeconds ?? 3600,
+    hook: hookAddress,
   });
-  log(`paid: jobId=${jobId} amount=${quote.amountUsdc} USDC escrow=${ERC8183}`);
+  log(`paid: jobId=${jobId} amount=${quote.amountUsdc} USDC escrow=${escrowAddress()}`);
 
   // recover the fund tx hash from the JobFunded log mined after `head`
   let fundHash: string | undefined;
@@ -303,6 +316,24 @@ export async function runBuyerFlow(
   }
   await submitDeliverable(publicClient, providerWallet, jobId, delivery.payloadHash);
   log(`submitted: jobId=${jobId} payloadHash=${delivery.payloadHash} metaBlock=${delivery.metaBlock}`);
+
+  // Onchain SLA adjudication (optional): when a hook is configured, the
+  // operator posts the freshness proof BEFORE settlement. A fresh delivery
+  // attests metaBlock >= floor and complete() passes the hook; a stale one
+  // would carry a below-floor attestation and complete() REVERTS onchain —
+  // the hook is the enforcement, not the client.
+  if (hookAddress !== undefined) {
+    await attestDelivery(
+      publicClient,
+      providerWallet,
+      hookAddress,
+      jobId,
+      delivery.payloadHash,
+      delivery.metaBlock,
+      sla.minBlock,
+    );
+    log(`attested: hook=${hookAddress} metaBlock=${delivery.metaBlock} minBlock=${sla.minBlock}`);
+  }
 
   // 4.+5. verify (deterministic) → settle or refund (evaluator = buyer key)
   const verifyResult = await verifyDelivery(
@@ -352,6 +383,8 @@ interface CliOptions {
   expirySeconds?: number;
   onlyQuote: boolean;
   json: boolean;
+  /** optional SlaHook address — enables onchain SLA adjudication for the job */
+  hook?: string;
 }
 
 function parseCli(argv: string[]): CliOptions {
@@ -377,6 +410,8 @@ function parseCli(argv: string[]): CliOptions {
   if (staleProxyUrl !== undefined) options.staleProxyUrl = staleProxyUrl;
   const expiry = value("--expiry");
   if (expiry !== undefined) options.expirySeconds = Number.parseInt(expiry, 10);
+  const hook = value("--hook");
+  if (hook !== undefined) options.hook = hook;
   if (args.includes("--stale")) options.stale = true;
   if (args.includes("--only-quote")) options.onlyQuote = true;
   if (args.includes("--json")) options.json = true;

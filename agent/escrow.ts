@@ -50,6 +50,23 @@ export const ERC8183_ABI = erc8183AbiRaw as Abi;
 /** ERC-8183 AgenticCommerce reference deployment on Arc testnet (Task 0-verified). */
 export const ERC8183: Address = "0x0747EEf0706327138c69792bF28Cd525089e4583";
 
+/**
+ * The escrow this process writes to. Defaults to the shared reference
+ * deployment; set via `setEscrowAddress` (buyer-cli reads OPENBOOK_ESCROW) to
+ * target a dedicated instance — e.g. one whose admin can whitelist the
+ * onchain SLA hook (`contracts/src/SlaHook.sol`). Reads and writes inside
+ * this module go through `escrowAddress()` so a single override flips them all.
+ */
+let escrowOverride: Address | null = null;
+
+export function setEscrowAddress(address: Address | null): void {
+  escrowOverride = address;
+}
+
+export function escrowAddress(): Address {
+  return escrowOverride ?? ERC8183;
+}
+
 /** USDC ERC-20 view on Arc testnet — 6 decimals, same balance as native gas (never sum the two views). */
 export const USDC: Address = "0x3600000000000000000000000000000000000000";
 
@@ -181,7 +198,7 @@ export const JOB_STATUS = ["Open", "Funded", "Submitted", "Completed", "Rejected
 /** Onchain view of a job (getJob). Normalizes array vs struct decoding across viem versions. */
 export async function getJob(publicClient: PublicClient, jobId: bigint): Promise<JobView> {
   const raw = (await publicClient.readContract({
-    address: ERC8183,
+    address: escrowAddress(),
     abi: ERC8183_ABI,
     functionName: "getJob",
     args: [jobId],
@@ -257,7 +274,7 @@ export async function createJobWithSla(
 
   // 1. BUYER creates the job — description carries the packed SLA
   const createHash = await write(publicClient, buyer, {
-    address: ERC8183,
+    address: escrowAddress(),
     abi: ERC8183_ABI,
     functionName: "createJob",
     args: [providerAccount.address, evaluator, expiredAt, packSla(sla), hook],
@@ -267,7 +284,7 @@ export async function createJobWithSla(
   });
   const jobLog = createReceipt.logs.find(
     (log) =>
-      log.address.toLowerCase() === ERC8183.toLowerCase() &&
+      log.address.toLowerCase() === escrowAddress().toLowerCase() &&
       log.topics[0] === JOB_CREATED_TOPIC,
   );
   if (!jobLog?.topics[1]) {
@@ -279,7 +296,7 @@ export async function createJobWithSla(
   //    (sendAndConfirm serializes the legs: fund can NEVER land before budget
   //    on a different sender — the live failure mode was a raced revert)
   await sendAndConfirm(publicClient, provider, {
-    address: ERC8183,
+    address: escrowAddress(),
     abi: ERC8183_ABI,
     functionName: "setBudget",
     args: [jobId, amount6dec, "0x"],
@@ -289,11 +306,11 @@ export async function createJobWithSla(
     address: USDC,
     abi: USDC_ABI,
     functionName: "approve",
-    args: [ERC8183, amount6dec],
+    args: [escrowAddress(), amount6dec],
   });
   // 4. BUYER funds — job moves to Funded (status 1)
   await sendAndConfirm(publicClient, buyer, {
-    address: ERC8183,
+    address: escrowAddress(),
     abi: ERC8183_ABI,
     functionName: "fund",
     args: [jobId, "0x"],
@@ -303,6 +320,45 @@ export async function createJobWithSla(
 }
 
 /** Provider submits the deliverable hash → Submitted (status 2). */
+/**
+ * SlaHook (contracts/src/SlaHook.sol) — the onchain SLA adjudication hook.
+ * `attest` posts the freshness proof the hook checks at complete(): the
+ * completion is blocked unless the attestation covers the submitted
+ * deliverable AND metaBlock >= minBlock.
+ */
+export const SLA_HOOK_ABI = [
+  {
+    name: "attest",
+    type: "function",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "jobId", type: "uint256" },
+      { name: "deliverable", type: "bytes32" },
+      { name: "metaBlock", type: "uint256" },
+      { name: "minBlock", type: "uint256" },
+    ],
+    outputs: [],
+  },
+] as const;
+
+/** Post the freshness attestation the SlaHook binds completion to. */
+export async function attestDelivery(
+  publicClient: PublicClient,
+  wallet: WalletClient,
+  hook: Address,
+  jobId: bigint,
+  deliverable: `0x${string}`,
+  metaBlock: number | bigint,
+  minBlock: number | bigint,
+): Promise<void> {
+  await sendAndConfirm(publicClient, wallet, {
+    address: hook,
+    abi: SLA_HOOK_ABI as Abi,
+    functionName: "attest",
+    args: [jobId, deliverable, BigInt(metaBlock), BigInt(minBlock)],
+  });
+}
+
 export async function submitDeliverable(
   publicClient: PublicClient,
   walletClient: WalletClient,
@@ -310,7 +366,7 @@ export async function submitDeliverable(
   deliverableHash: `0x${string}`,
 ): Promise<TransactionReceipt> {
   return sendAndConfirm(publicClient, walletClient, {
-    address: ERC8183,
+    address: escrowAddress(),
     abi: ERC8183_ABI,
     functionName: "submit",
     args: [jobId, deliverableHash, "0x"],
@@ -325,7 +381,7 @@ export async function complete(
   reasonHash: `0x${string}`,
 ): Promise<TransactionReceipt> {
   return sendAndConfirm(publicClient, walletClient, {
-    address: ERC8183,
+    address: escrowAddress(),
     abi: ERC8183_ABI,
     functionName: "complete",
     args: [jobId, reasonHash, "0x"],
@@ -340,7 +396,7 @@ export async function rejectAndRefund(
   reasonHash: `0x${string}`,
 ): Promise<TransactionReceipt> {
   return sendAndConfirm(publicClient, walletClient, {
-    address: ERC8183,
+    address: escrowAddress(),
     abi: ERC8183_ABI,
     functionName: "reject",
     args: [jobId, reasonHash, "0x"],
@@ -354,7 +410,7 @@ export async function claimTimeout(
   jobId: bigint,
 ): Promise<TransactionReceipt> {
   return sendAndConfirm(publicClient, walletClient, {
-    address: ERC8183,
+    address: escrowAddress(),
     abi: ERC8183_ABI,
     functionName: "claimRefund",
     args: [jobId],
