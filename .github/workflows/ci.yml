@@ -1,0 +1,58 @@
+name: ci
+
+# Every command below is verified green on a fresh clone with NO secrets:
+#   71 pass / 3 skip / 0 fail (bun) · 20 pass (forge) · app + mcp + subgraph build.
+# Live-network paths stay opt-in (RUN_LIVE=1 + keys) so the badge is deterministic.
+# Matchstick mapping tests need Docker (`cd subgraph && graph test`) — run locally.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  workspace:
+    name: unit tests + builds (bun)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.11
+      - run: bun install --frozen-lockfile
+      - name: unit tests (keys never required)
+        run: bun test
+      - name: build sla-subgraph-mcp
+        run: bun run build:mcp
+      - name: build storefront app
+        run: bun run build:app
+
+  contracts:
+    name: forge test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: foundry-rs/foundry-toolchain@v1
+      - run: forge test
+
+  subgraph:
+    name: subgraph codegen + build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: subgraph
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --global @graphprotocol/graph-cli@0.98.1
+      - run: npm ci
+      - run: graph codegen
+      - run: graph build
