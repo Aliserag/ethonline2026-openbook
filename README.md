@@ -96,12 +96,13 @@ cp .env.example .env   # add a free GRAPH_GATEWAY_KEY (thegraph.com/studio)
 bash scripts/onboard-buyer.sh   # fresh key -> faucet wait -> one paid query
 ```
 
-The script generates a buyer key, walks you through the free Arc faucet drip,
-and runs the full loop: ENS quote → escrowed payment → freshness-checked
-delivery → settle. With only your key the CLI signs both sides (single-key
-mode, legal per ERC-8183 — the escrow/refund machinery is fully exercised on
-the live contract). Missed SLA? The escrowed USDC is claimable back after the
-job deadline — the auto-refund is the product.
+The script generates a buyer key, walks you through the free Arc faucet drip
+([faucet.circle.com](https://faucet.circle.com) → pick **Arc Testnet** → paste
+the address it prints), and runs the full loop: ENS quote → escrowed payment →
+freshness-checked delivery → settle. With only your key the CLI signs both
+sides (single-key mode, legal per ERC-8183 — the escrow/refund machinery is
+fully exercised on the live contract). Missed SLA? The escrowed USDC is
+claimable back after the job deadline — the auto-refund is the product.
 
 Full tool reference + the one-command live-data path:
 [mcp/README.md](mcp/README.md). Deploy/verify scripts: `scripts/`.

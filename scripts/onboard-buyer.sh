@@ -44,7 +44,9 @@ BAL="${BAL%% *}"
 if [ "$BAL" -lt 100000 ]; then
   echo
   echo "Fund the buyer (free testnet USDC):"
-  echo "  https://faucet.arc.network  -> paste $ADDR"
+  echo "  1. open  https://faucet.circle.com"
+  echo "  2. pick the network:  Arc Testnet"
+  echo "  3. paste your address: $ADDR"
   echo "waiting for the drip (polling, Ctrl-C to abort)…"
   for _ in $(seq 1 60); do
     sleep 10

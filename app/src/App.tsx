@@ -25,7 +25,7 @@ import { fetchPnl, type PnlRow, type RefundEvent } from "./pnl";
 import { createEnsTextReader, type EnsTextReader } from "../../mcp/src/ens";
 import { gatewayQuery, stripMeta } from "../../mcp/src/gateway";
 import { defaultChainHeadResolver } from "../../mcp/src/chainhead";
-import { createJobWithSla, ERC8183, type Sla } from "../../agent/escrow";
+import { createJobWithSla, ERC8183, USDC, USDC_ABI, type Sla } from "../../agent/escrow";
 import { verifyDelivery } from "../../mcp/src/escrow";
 
 interface StorefrontState {
@@ -215,6 +215,7 @@ export default function App() {
   const [pnlHead, setPnlHead] = useState<number | null>(null);
   const [pnlError, setPnlError] = useState<string | null>(null);
   const [payError, setPayError] = useState<string | null>(null);
+  const [usdcBalance, setUsdcBalance] = useState<bigint | null>(null);
   const [queryError, setQueryError] = useState<string | null>(null);
   const [settleError, setSettleError] = useState<string | null>(null);
 
@@ -286,6 +287,32 @@ export default function App() {
     }
   };
 
+  // A tester's first real blocker is funding: read the wallet's Arc USDC up
+  // front so the faucet guidance appears BEFORE a failed payment, not after.
+  useEffect(() => {
+    if (!address) {
+      setUsdcBalance(null);
+      return;
+    }
+    let cancelled = false;
+    publicClient
+      .readContract({
+        address: USDC,
+        abi: USDC_ABI,
+        functionName: "balanceOf",
+        args: [address],
+      })
+      .then((balance) => {
+        if (!cancelled) setUsdcBalance(balance as bigint);
+      })
+      .catch(() => {
+        if (!cancelled) setUsdcBalance(null); // RPC hiccup — the notice just stays hidden
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [address, publicClient, job]);
+
   const handlePay = async (): Promise<void> => {
     if (!address || quote === null || dataset === undefined) return;
     setPaying(true);
@@ -325,7 +352,7 @@ export default function App() {
         /reject|denied|denied/i.test(message)
           ? "Signature rejected — approve the transactions in your wallet to fund the job, or try again."
           : /insufficient|gas|fund/i.test(message)
-            ? "The wallet needs testnet USDC (USDC is gas on Arc) — see docs/keys-needed.md §2."
+            ? "Your wallet needs testnet USDC — USDC pays gas on Arc. Free at faucet.circle.com (pick Arc Testnet, paste your address)."
             : `Payment failed: ${message.slice(0, 140)}`,
       );
     } finally {
@@ -491,6 +518,15 @@ export default function App() {
       </header>
 
       <main>
+        <p className="intro">
+          <strong>First time here? Start with steps 1 and 2</strong> — the menu, the live quote and
+          the agent's books all read from ENS and the public subgraph with <em>no wallet and no
+          keys</em>. Step 3 (paying) needs an EVM wallet and free testnet USDC from{" "}
+          <a href="https://faucet.circle.com" target="_blank" rel="noreferrer">
+            faucet.circle.com
+          </a>{" "}
+          (pick Arc Testnet). Step 4 lets you watch the SLA verdict settle onchain.
+        </p>
         <p className="envline" aria-label="environment status">
           <span>
             <span className={hasGraphKey ? "dot yes" : "dot no"} aria-hidden="true" />
@@ -656,6 +692,17 @@ export default function App() {
                   <p className="caption" id="pay-caption">
                     Quote first — the price comes from the agent's ENS records.
                   </p>
+                )}
+                {isConnected && quote !== null && usdcBalance !== null && usdcBalance < BigInt(quote.amount) && (
+                  <div className="notice" role="status" style={{ marginTop: 10 }}>
+                    <strong>Your wallet needs testnet USDC to pay</strong> — USDC is also the gas token on Arc.
+                    Free faucet:{" "}
+                    <a href="https://faucet.circle.com" target="_blank" rel="noreferrer">
+                      faucet.circle.com ↗
+                    </a>{" "}
+                    (pick <em>Arc Testnet</em>, paste your address). Everything above — the quote and the books —
+                    works without it.
+                  </div>
                 )}
                 {payError !== null && (
                   <div className="notice error" role="alert">
