@@ -68,7 +68,7 @@ are organs, not stickers:
 - `subgraph/` — the P&L subgraph source (deployed to Studio as `open-book`, Arc testnet)
 - `app/` — minimal Vite + wagmi frontend (storefront → pay → P&L)
 - `scripts/` — ENS setup, spikes, stale-replay proxy
-- `docs/` — architecture, design decisions, demo script, submission copy
+- `docs/` — architecture, design decisions, demo script, submission copy, winner-repo research
 
 ## Quickstart
 
