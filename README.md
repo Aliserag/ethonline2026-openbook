@@ -49,7 +49,10 @@ See [docs/architecture.md](docs/architecture.md). The three sponsors are organs,
   pricing, SLA, and payee as text records; buyers hard-fail without resolution
   ("No ENS, no payment"). The `svc.payee` record names the PolicyWallet as the
   only payee — the storefront can never route money anywhere but the
-  policy-gated treasury.
+  policy-gated treasury. The agent also runs its **own ENSv2 subname registry**
+  (UserRegistry via the VerifiableFactory): each dataset is a subname —
+  `aave-v3-arbitrum-lending.openbook.eth` prices itself, and the quote reads
+  the most specific records through the hierarchical registry.
 
 ## Repo layout
 

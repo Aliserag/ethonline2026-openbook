@@ -77,13 +77,27 @@ const ensFixtures = {
   payee: "0x3600000000000000000000000000000000000000",
 };
 
-/** ENS text reader that returns the given records (null = record not set). */
+/**
+ * ENS text reader that returns the given records (null = record not set).
+ * Dataset subnames (anything that is not the parent) resolve to null — the
+ * ENSv2 namespace override only applies when a subname record exists.
+ */
 function stubEns(records: Partial<typeof ensFixtures> | null) {
   return async (name: string, key: string): Promise<string | null> => {
-    expect(name).toBe("openbook.eth");
+    if (name !== "openbook.eth") return null; // subnames unset unless a test seeds them
     if (!records) return null;
     const bareKey = key.replace(/^svc\./, "");
     return records[bareKey as keyof typeof ensFixtures] ?? null;
+  };
+}
+
+/** ENS reader with a dataset subname override — models the live namespace. */
+function stubEnsWithDatasetSubname(subname: string, overrides: Record<string, string>) {
+  return async (name: string, key: string): Promise<string | null> => {
+    if (name === subname) return overrides[key.replace(/^svc\./, "")] ?? null;
+    if (name !== "openbook.eth") return null;
+    const bareKey = key.replace(/^svc\./, "");
+    return ensFixtures[bareKey as keyof typeof ensFixtures] ?? null;
   };
 }
 
@@ -196,6 +210,21 @@ describe("get_quote (ENS-gated pricing)", () => {
       payee: ensFixtures.payee,
     });
     expect(quote.amountUsdc).toBe("0.10");
+  });
+
+  it("prefers a dataset subname's records over the parent storefront (ENSv2 namespace)", async () => {
+    const app = createApp(configOf("openbook.json"), {
+      env: {},
+      readEnsText: stubEnsWithDatasetSubname("aave-v3-arbitrum-lending.openbook.eth", {
+        price: "0.25 USDC/query",
+        sla: '{"maxBlockLag":7,"maxLatencyMs":900}',
+      }),
+    });
+    const out = await app.getQuote("aave-v3-arbitrum-lending");
+    expect(out.amountUsdc).toBe("0.25");
+    expect(out.priceRecord).toBe("0.25 USDC/query");
+    expect(out.sla.maxBlockLag).toBe(7); // the subname's SLA wins too
+    expect(out.payee).toBe(ensFixtures.payee); // payee still resolves from the parent
   });
 
   it("rejects unknown datasets", async () => {

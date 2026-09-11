@@ -263,6 +263,17 @@ export function createApp(config: OpenBookConfig, deps: AppDeps = {}): OpenBookA
     const dataset = config.datasets.find((d) => d.id === datasetId);
     if (dataset === undefined) throw new Error(`unknown dataset: ${datasetId}`);
     const records = await resolveServiceRecords(config.ens, readEnsText); // hard-fails ENS_RESOLUTION_FAILED
+    // ENSv2 hierarchical namespace: a dataset may publish its own records at
+    // `<dataset>.openbook.eth` — a subname served by the parent's subregistry
+    // (wildcard-capable). The most specific records win; the parent storefront
+    // is the fallback, so new datasets scale without a new deployment.
+    const datasetName = `${datasetId}.${config.ens}`;
+    const [subPrice, subSla] = await Promise.all([
+      readEnsText(datasetName, "svc.price"),
+      readEnsText(datasetName, "svc.sla"),
+    ]);
+    if (subPrice !== null) records.price = subPrice;
+    if (subSla !== null) records.sla = subSla;
     const amount = parsePriceToAmount6dec(records.price as string);
     const sla = parseSlaRecord(records.sla as string);
     const deadlineBlocks = Math.max(1, Math.ceil(sla.maxLatencyMs / ARC_MS_PER_BLOCK));

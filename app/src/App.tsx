@@ -142,6 +142,30 @@ function quoteFromRecords(dataset: DatasetConfig, records: StorefrontState["reco
   };
 }
 
+/**
+ * ENSv2 hierarchical namespace: a dataset may publish its own records at
+ * `<dataset>.openbook.eth`, served by the parent's subregistry. The most
+ * specific records win (per-dataset pricing/SLA); the parent storefront is
+ * the fallback. Mirrors the MCP's getQuote resolution.
+ */
+async function quoteWithNamespace(
+  dataset: DatasetConfig,
+  records: StorefrontState["records"],
+  readEnsText: EnsTextReader,
+): Promise<QuoteView> {
+  const subname = `${dataset.id}.${CONFIG.ens}`;
+  const [subPrice, subSla] = await Promise.all([
+    readEnsText(subname, "svc.price").catch(() => null),
+    readEnsText(subname, "svc.sla").catch(() => null),
+  ]);
+  const merged = records.map((record) => {
+    if (record.key === "svc.price" && subPrice !== null) return { ...record, value: subPrice };
+    if (record.key === "svc.sla" && subSla !== null) return { ...record, value: subSla };
+    return record;
+  });
+  return quoteFromRecords(dataset, merged);
+}
+
 /** Tooltip — the page's vocabulary for judges with zero context. */
 function Tip({ text }: { text: string }): JSX.Element {
   return (
@@ -280,11 +304,11 @@ export default function App() {
 
   const handleQuote = (): void => {
     if (ens === null || ens.hardFail !== null) return;
-    try {
-      setQuote(quoteFromRecords(dataset, ens.records));
-    } catch (error) {
-      setEns({ ...ens, hardFail: error instanceof Error ? error.message : String(error) });
-    }
+    quoteWithNamespace(dataset, ens.records, readEnsText)
+      .then((next) => setQuote(next))
+      .catch((error) => {
+        setEns({ ...ens, hardFail: error instanceof Error ? error.message : String(error) });
+      });
   };
 
   // A tester's first real blocker is funding: read the wallet's Arc USDC up
