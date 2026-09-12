@@ -241,7 +241,7 @@ const staleCommand: Command = {
   name: "sandbox stale",
   args: "[--deadline <secs>]",
   help:
-    "built-to-fail job whose SLA floor is the delivered _meta.block + 1 (this exact deliverable can never clear it): attest it as the hook ATTESTER (role-play, spec §5.3b), capture the SlaNotMet revert from a simulated complete() as evidence, then arm the refund claim",
+    "STAGED refusal for the demo: the SLA floor is written one block above the delivered proof so this job can never clear it (the hook's SlaNotMet check itself is real — the floor is ours; the same code path a real stale miss takes). Attest as the hook ATTESTER (role-play, spec §5.3b), capture the SlaNotMet revert from a simulated complete() as evidence, then arm the refund claim",
   kind: "sandbox",
   run: async (ctx, argv) => {
     const parsed = parseDeadline(argv);
@@ -313,7 +313,7 @@ const staleCommand: Command = {
       schemaHash: keccak256(toBytes(dataset.schema)),
       maxLatencyMs: quote.maxLatencyMs,
     };
-    rows.push(["sla floor", `${floor.toLocaleString("en-US")} = delivered metaBlock + 1 — this exact deliverable (${metaBlock.toLocaleString("en-US")}) can never clear it`]);
+    rows.push(["sla floor", `${floor.toLocaleString("en-US")} = delivered metaBlock + 1 — STAGED one block above the delivered proof (${metaBlock.toLocaleString("en-US")}): a deterministic refusal, the same code path a real miss takes; the hook's SlaNotMet check itself is real`]);
 
     const expirySeconds = clampDeadline(requested);
     if (requested !== expirySeconds) {
@@ -419,7 +419,7 @@ const staleCommand: Command = {
       data: {
         rows,
         note:
-          "rejection captured as evidence, funds still in escrow — run `sandbox claim` after the deadline to execute claimRefund for real (buyer refund, no attester needed)",
+          "the floor was STAGED one block above the delivered proof — a deterministic refusal exercising the real SlaNotMet check; funds still in escrow — run `sandbox claim` after the deadline to execute claimRefund for real (buyer refund, no attester needed)",
       },
     };
   },
