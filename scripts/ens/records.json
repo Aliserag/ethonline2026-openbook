@@ -31,6 +31,11 @@
   },
   {
     "type": "text",
+    "key": "svc.attester",
+    "value": "0x09d4f665E86358A80e4bF0614117B259bAA45d6B"
+  },
+  {
+    "type": "text",
     "key": "agent-context",
     "value": "OpenBook: autonomous agent selling freshness-guaranteed onchain data. Every payment carries an SLA; missed SLA = automatic onchain refund. ERC-8004 agent 894065 on Arc."
   },

@@ -18,7 +18,7 @@ Buyer / MCP (get_quote) ──getEnsText(fresh, key)──▶ UniversalResolverV
                                         OwnedResolver (owner = TREASURY_EOA, full
                                         role bitmap incl. ROLE_SET_TEXT)  ◀── records
                                                         │
-              svc.menu · svc.price · svc.sla · svc.payee · svc.operator · svc.pnl
+              svc.menu · svc.price · svc.sla · svc.payee · svc.operator · svc.pnl · svc.attester
               agent-context · agent-endpoint[mcp] · agent-endpoint[web]
               agent-registration[<ERC-7930 addr>][<AGENT_ID>] = "1"
                                                         │
@@ -70,6 +70,7 @@ machine-readable records.
 | `svc.payee` | `0x4e83eB15EE973A49E40D9A79aB2cA89a4Eb4894E` (PolicyWallet, live) | Revenue recipient; Task 5/6 payouts; **hard-fail when missing** |
 | `svc.operator` | `0x64A78b6d5e99274d01D1d0A70B180A73AAEb8d21` (live) | Operator / agent address |
 | `svc.pnl` | `https://api.studio.thegraph.com/query/1760032/open-book/v0.0.8` (live) | Task 4 Studio subgraph endpoint (`get_pnl`, Task 7 dashboard) |
+| `svc.attester` | `0x09d4f665E86358A80e4bF0614117B259bAA45d6B` (live, [tx](https://sepolia.etherscan.io/tx/0x9815a98f9ab757a8339db2333a100adf3d209f78dd6bb2e11b91d799f9a47466)) | the SlaHook attester and page evaluator: recover the signer of a `/api/deliver` proof and compare with this record or with `SlaHook.attester()` |
 | `agent-context` | `OpenBook: …ERC-8004 agent 894065 on Arc.` *(ENSIP-26, live)* | Agent self-description for any AI client |
 | `agent-endpoint[mcp]` | `https://github.com/Aliserag/OpenBook/tree/main/mcp` *(live)* | MCP endpoint (`sse`/streamable) |
 | `agent-endpoint[web]` | `https://openbook.litai.ca` *(live)* | Buyer frontend |
