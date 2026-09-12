@@ -130,17 +130,6 @@ body {
   line-height: 1.04;
 }
 
-.masthead h1 .ledger-no {
-  display: block;
-  font-family: var(--mono);
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--muted);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  margin-top: 3px;
-}
-
 .tagline {
   margin: 8px 0 0;
   font-size: 16px;
@@ -1872,6 +1861,38 @@ button.tour-entry {
     linear-gradient(var(--paper), var(--paper)),
     repeating-linear-gradient(to right, transparent 0 56px, rgba(138, 133, 120, 0.18) 56px 57px),
     repeating-linear-gradient(to bottom, transparent 0 56px, rgba(138, 133, 120, 0.18) 56px 57px);
+}
+
+/* Lighter landing (Fix C): the system map defaults to a compact strip; the
+   `#map` route restores the full-size canvas. Layout only — the plate, its
+   live probes and the drawer are untouched, and the canvas's viewBox keeps
+   the topology proportional at any height. */
+.map-strip .map__canvas {
+  height: 180px;
+}
+
+.map-route .map__canvas {
+  height: 400px;
+}
+
+.map-expand {
+  margin: 0;
+  padding: 9px 14px;
+  border-top: 1px dashed var(--rule-strong);
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-align: right;
+}
+
+.map-expand a {
+  color: var(--accent);
+}
+
+.map-expand a:hover,
+.map-expand a:focus-visible {
+  color: var(--ink);
 }
 
 .map__edge {

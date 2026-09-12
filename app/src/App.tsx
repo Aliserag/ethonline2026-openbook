@@ -401,6 +401,15 @@ export default function App() {
     };
   }, []);
 
+  // `#map` hash route: renders the system map's canvas full-size; the strip
+  // (compact canvas + `view full map`) is the default landing.
+  const [mapRoute, setMapRoute] = useState<boolean>(() => window.location.hash === "#map");
+  useEffect(() => {
+    const onHash = (): void => setMapRoute(window.location.hash === "#map");
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
+
   const flowBusy = paying || querying || settling;
 
   // Switching datasets invalidates the previous quote/delivery/verdict; the pay
@@ -660,9 +669,7 @@ export default function App() {
             ▤ OB
           </span>
           <div>
-            <h1>
-              OpenBook<span className="ledger-no">the agent's settlement ledger</span>
-            </h1>
+            <h1>OpenBook</h1>
             <p className="tagline">
               The data marketplace for agents, with{" "}
               <span className="accent">
@@ -872,13 +879,7 @@ export default function App() {
                   </button>
                 ) : (
                   <p className="caption">
-                    Paying needs a wallet.{" "}
-                    {connectors.map((connector) => (
-                      <button key={connector.uid} className="ghost" onClick={() => connect({ connector })}>
-                        Connect {connector.name === "Injected" ? "browser wallet" : connector.name}
-                      </button>
-                    ))}{" "}
-                    (or use the Connect wallet button up top). Nothing leaves the escrow until the SLA is checked.
+                    Paying needs a wallet: connect in the header to pay. Nothing leaves the escrow until the SLA is checked.
                   </p>
                 )}
                 {quote === null && isConnected && (
@@ -1283,7 +1284,16 @@ export default function App() {
         </div>
       </main>
 
-      <SystemMap />
+      <div id="map" className={mapRoute ? "map-route" : "map-strip"}>
+        <SystemMap />
+        <p className="map-expand">
+          {mapRoute ? (
+            <a href="#">back to the steps</a>
+          ) : (
+            <a href="#map">view full map</a>
+          )}
+        </p>
+      </div>
 
       <Market />
 
