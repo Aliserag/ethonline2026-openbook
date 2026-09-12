@@ -5,11 +5,10 @@
  *   bun scripts/circle/recycle.ts            # transfer everything the seller holds
  *   bun scripts/circle/recycle.ts --dry-run
  */
-import { createPublicClient, http, parseAbi } from "viem";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { circleEnvFrom, entitySecretCiphertext } from "../../app/worker/circle";
-import { ARC_RPC, USDC, arcTestnet } from "../../app/worker/shared";
+import { circleEnvFrom, entitySecretCiphertext, usdcBalance } from "../../app/worker/circle";
+import { USDC } from "../../app/worker/shared";
 
 const env = Object.fromEntries(
   readFileSync(resolve(import.meta.dir, "../../.env"), "utf8")
@@ -22,8 +21,7 @@ const env = Object.fromEntries(
 );
 const cenv = circleEnvFrom((k) => (k === "CIRCLE_API_KEY" ? (env.CIRCLE_API_KEY ?? env.ARC_TEST_API_KEY) : env[k]));
 if (!cenv) throw new Error("Circle env incomplete in .env (run scripts/circle/provision.ts)");
-const pub = createPublicClient({ chain: arcTestnet, transport: http(ARC_RPC) });
-const bal = await pub.readContract({ address: USDC, abi: parseAbi(["function balanceOf(address) view returns (uint256)"]), functionName: "balanceOf", args: [cenv.sellerAddress] });
+const bal = await usdcBalance(cenv.sellerAddress);
 console.log(`seller holds ${Number(bal) / 1e6} USDC`);
 if (bal === 0n || process.argv.includes("--dry-run")) process.exit(0);
 const res = await fetch("https://api.circle.com/v1/w3s/developer/transactions/transfer", {

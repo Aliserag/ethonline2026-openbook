@@ -249,6 +249,12 @@ export async function circleSubmit(env: CircleEnv, req: CircleSubmitRequest, att
   return { txHash: submit.txHash, seller: env.sellerAddress };
 }
 
+/** USDC (6-dec) balance of an address on Arc, for scripts that must not import viem themselves. */
+export async function usdcBalance(address: Hex): Promise<bigint> {
+  const pub = createPublicClient({ chain: arcTestnet, transport: http(ARC_RPC) });
+  return pub.readContract({ address: USDC, abi: parseAbi(["function balanceOf(address) view returns (uint256)"]), functionName: "balanceOf", args: [address] });
+}
+
 export function circleStatus(env: CircleEnv | null): { enabled: boolean; buyer: Hex | null; seller: Hex | null; gas: string } {
   return env
     ? { enabled: true, buyer: env.buyerAddress, seller: env.sellerAddress, gas: "sponsored by Circle Gas Station (SCA wallets, Arc testnet policy)" }
