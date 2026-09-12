@@ -13,7 +13,7 @@ Sources: the ETHGlobal prize pages for Arc, The Graph and ENS, read on 2026-09-1
 | Circle Wallets (developer-controlled, SCA) | the page's buyer and seller wallets; the browser signs nothing | Live | buyer `0x00e8…59dc`, seller `0xb63f…6ca9`; jobs 84 to 86; `app/worker/circle.ts` |
 | Circle Gas Station | gas for both SCA wallets (Arc testnet default policy) | Live | the seller wallet holds no USDC and still submits (job 86 submit tx `0x66135a8c…`) |
 | App Kit Bridge (CCTP v2) | treasury funds the buyer from another chain | Live | Arbitrum Sepolia burn `0x49ea8d62…`, forwarder mint on Arc `0xe54af84c…` (`scripts/circle/fund-buyer.ts`) |
-| Gateway (Unified Balance) | treasury deposits once, spends on Arc | Deposit live, spend pending finality | deposit on Arbitrum Sepolia `0x577395fb…`; spend retried until the balance is attested |
+| Gateway (Unified Balance) | treasury deposits once on another chain, spends on Arc | Live | deposit on Arbitrum Sepolia `0x577395fb…`, spend on Arc `0xa956aabe…` (1 USDC to the buyer wallet, about ten minutes after the deposit) |
 | Paymaster | not needed: Gas Station sponsors the SCA wallets | Not used | Arc's own docs: gas is USDC; the EIP-3009 relayer path is for plain transfers |
 | Agent Stack (CLI wallet), Nanopayments, x402 | a pay-per-call lane for agents that want no recourse | Not used | the product is a refundable purchase, which x402 cannot express; Agent Stack CLI needs an email login |
 | StableFX, Swap Kit | no fit (single-currency venue) | Not used | |

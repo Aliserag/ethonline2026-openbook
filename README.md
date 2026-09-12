@@ -216,8 +216,9 @@ Service, so no destination gas is needed:
 [mint on Arc](https://testnet.arcscan.app/tx/0xe54af84c20628ff04f3e691f12818f1f1a6220d109c476b50432d35909b769f1)
 (`bun scripts/circle/fund-buyer.ts 2.00`). A Gateway Unified Balance
 [deposit](https://sepolia.arbiscan.io/tx/0x577395fb4f7e51afde9b69f034b2667034f3d40b1f5fff061f7c0282899ab701)
-from the same treasury spends on Arc once attested. Source-chain testnet USDC comes from
-Circle's faucet API. The full product-by-product map for all three bounties is
+from the same treasury was then [spent on Arc](https://testnet.arcscan.app/tx/0xa956aabeb35342b8c03d7e728a60511f24dcae1793f4885ba290ea54cf196156)
+to the buyer wallet (1 USDC, allocated from the Arbitrum Sepolia deposit, fees 0.011 USDC).
+Source-chain testnet USDC comes from Circle's faucet API. The full product-by-product map for all three bounties is
 [docs/bounty-tech-map.md](docs/bounty-tech-map.md).
 
 **The marketplace.** Two reference sellers are live, both registered through the ENSv2
