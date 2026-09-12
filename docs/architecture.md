@@ -13,7 +13,9 @@ agent's public P&L.
 flowchart LR
     subgraph BuyerSide["Buyer (agent CLI / human)"]
         BC[agent/buyer-cli.ts<br/>quote → pay → deliver → verify → settle/refund]
-        FE[Frontend app · openbook.litai.ca<br/>one page: the latest refund · keyless buy / make-it-fail<br/>market · public books · console]
+        FE[Frontend app · openbook.litai.ca<br/>one page: the latest refund · keyless buy / make-it-fail<br/>market · public books · console<br/>signs nothing: no key in the bundle]
+        CW["Circle Wallets (developer-controlled, SCA) on Arc<br/>buyer: createJob · approve · fund<br/>seller: setBudget · submit<br/>gas: Circle Gas Station · driven by /api/circle/*"]
+        FE -->|"buy / submit"| CW
     end
 
     subgraph ENSv2["ENSv2 · Sepolia (hard-fail gateway)"]
@@ -42,7 +44,7 @@ flowchart LR
     end
 
     SP[scripts/stale-proxy.ts<br/>replays cached old _meta<br/>deterministic money shot]
-    API["page server routes (app/worker)<br/>/api/subgraph cache · /api/deliver: Gateway key, signs the observed block (EIP-191)<br/>/api/attest: the hook attester, verifies the job onchain, then settles as the job's evaluator (complete or reject)"]
+    API["page server routes (app/worker)<br/>/api/subgraph cache · /api/deliver: Gateway key, signs the observed block (EIP-191)<br/>/api/circle/job · /api/circle/submit: Circle wallets, entity secret ciphertext per request<br/>/api/attest: the hook attester, verifies the job onchain, then settles as the job's evaluator (complete or reject)"]
     FE -->|"query · attest"| API
     API --> GW
     API -->|"attest(jobId, hash, metaBlock, minBlock)"| HOOK

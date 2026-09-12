@@ -69,8 +69,9 @@ hash, a subgraph row, or a measured value. The scripted half of this is
 
 - Both sellers and every buyer so far are ours; the mechanism is permissionless, the
   liquidity is not.
-- The demo wallet plays buyer and provider in the keyless runs; the hook's attester (a
-  server key) is the evaluator and sends the complete() or reject() that settles them.
-  Rows from those runs are labeled "our demo wallet (buyer and seller)".
+- Keyless runs use two Circle developer-controlled wallets on Arc (buyer and seller, gas
+  by Circle Gas Station), signed on the server; the hook's attester is the evaluator and
+  sends the complete() or reject() that settles them. Rows from those runs are labeled
+  "our buyer (Circle wallet)" and "openbook.eth (Circle seller wallet)"; both wallets are ours.
 - The staleness in Make it fail is staged (floor above the delivery); the hook's refusal
   is real and is the same path a natural miss takes.

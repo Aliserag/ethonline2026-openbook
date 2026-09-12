@@ -7,7 +7,7 @@
 > costs, and publishes its P&L onchain. Built for ETHOnline 2026 (Sep 4–16).
 
 **Bounties targeted (one project, three sponsors):**
-- **Arc: Best DeFi/Onchain Finance Application** ($3,500; +$2,500 for a mainnet deployment by Sep 30). Not the Agent Stack prize: no Circle Agent Wallet, Nanopayments or x402 is used, and we say so below.
+- **Arc: Best DeFi/Onchain Finance Application** ($3,500; +$2,500 for a mainnet deployment by Sep 30). Circle tools in the money path: Arc, USDC as gas, Circle Wallets (developer-controlled SCA buyer and seller), Circle Gas Station, the ERC-8183 reference escrow. Not the Agent Stack CLI, Nanopayments or x402, and we say so below.
 - **The Graph: Best AI Tooling or AI Use Case with The Graph (Start Fresh)** ($5,000 pool)
 - **ENS: Best Use of ENSv2** ($4,500)
 
@@ -137,7 +137,8 @@ subgraph and the Arc escrow:
 1. **The refund.** The latest real refund the escrow executed, as a receipt with its
    ArcScan link, and three live counters (refunds executed, USDC settled, sellers listed).
 2. **Try it, keyless.** Pick a dataset, see the ENS price and the freshness promise in
-   plain words, click **Buy**. Our demo wallet pays on the live escrow and a stepper shows
+   plain words, click **Buy**. A Circle developer-controlled wallet pays on the live escrow
+   (gas sponsored by Circle Gas Station), a second Circle wallet sells, and a stepper shows
    every transaction as it lands: paid into escrow, data delivered with its block,
    freshness checked onchain, settled, 98/2 fee split. **Make it fail** runs the same
    purchase with the floor one block above the delivery: the hook refuses (`SlaNotMet`)
@@ -191,17 +192,22 @@ buyer), **sandbox** (safe re-enactments on the same live contracts).
 | sandbox | `sandbox stale` | floor pinned one block above the delivery so `complete()` reverts `SlaNotMet`; arm the refund |
 | sandbox | `sandbox claim` | execute `claimRefund` for real after the deadline (live countdown) |
 
-**Demo-buyer policy.** The Buy and Make it fail buttons, and the act and sandbox
-commands, sign with the demo buyer key (`VITE_DEMO_BUYER_KEY` in `app/.env.local`):
-testnet USDC as play money, spent live against the real escrow. When the balance runs
-out, refill the demo buyer address at [faucet.circle.com](https://faucet.circle.com)
-(Arc Testnet). The SLA hook's attester is a separate key that never reaches the browser, and it
+**Who signs what (no key in the browser).** The Buy and Make it fail buttons sign
+nothing: the buyer is a Circle developer-controlled SCA wallet on Arc testnet and the seller
+is a second one, both driven from the page's server routes (`/api/circle/job`,
+`/api/circle/submit`, see `app/worker/circle.ts`) through Circle's API with a fresh entity
+secret ciphertext per request, and their gas is paid by Circle Gas Station (the Arc testnet
+policy). The buyer opens and funds the job, the seller sets the budget and submits the
+deliverable the attester signed, so every page purchase pays a different party: the
+dataset's ENS `svc.payee` names the seller wallet. The buyer holds testnet USDC as play
+money; `scripts/circle/recycle.ts` moves the seller's earnings back to it. The console's
+act and sandbox commands still sign locally with `VITE_DEMO_BUYER_KEY` (local dev only; the
+production bundle carries no key). The SLA hook's attester is a third key that never reaches the browser, and it
 is the evaluator of every page purchase: `/api/deliver` signs what it observed (EIP-191,
 the page recovers the signer and checks it against the hook's `attester()`), and
 `/api/attest` verifies the job, its floor and the submitted deliverable onchain, posts the
 proof, asks the escrow whether `complete()` would pass, then sends `complete()` or
-`reject()` in the same request. The demo key only ever pays and submits; it cannot
-refund itself.
+`reject()` in the same request. No wallet in this flow can refund itself.
 
 **The marketplace.** Two reference sellers are live, both registered through the ENSv2
 storefront and priced by their own text records: `openbook.eth` (0.10 USDC/query, and
@@ -311,11 +317,12 @@ fresh clone, not inferred from the code.
 - The escrow and identity contracts are Circle's ERC-8183 / ERC-8004 **reference
   deployments**; the custom work is `PolicyWallet.sol`, `SlaHook.sol`, the MCP seller, and
   the ENSv2 storefront.
-- **No Circle Agent Wallet or Nanopayments yet.** The buyer in the keyless demo is a local
-  key, not a Circle Agent Wallet, and per-query spend goes through the ERC-8183 escrow, not
-  x402. Agent Wallets do support Arc testnet; we chose the escrow path because the product
-  is the refund, which x402 cannot express. Moving the buyer onto an Agent Wallet is the
-  first mainnet step in RUNBOOK.md.
+- **Circle Wallets and Gas Station, not the Agent Stack CLI or Nanopayments.** The page's
+  buyer and seller are Circle developer-controlled wallets with sponsored gas (verified live:
+  the seller wallet holds no USDC for gas and still submits). Per-query spend goes through
+  the ERC-8183 escrow, not x402, because the product is the refund, which x402 cannot
+  express. An x402 lane for agents that want no recourse, and a Circle Agent Wallet buyer
+  through the Agent Stack CLI, are the next steps in RUNBOOK.md.
 - **The hook's freshness fact is the operator's claim.** The attester signs the block it
   observed and is also the job's evaluator, so the venue's key is the trust anchor. The
   hook makes paying without an attestation above the floor impossible, and a buyer's worst
