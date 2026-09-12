@@ -58,6 +58,12 @@ function sleep(ms: number): Promise<void> {
  * RPCs — which rate-limit browser bursts — from being hit once per node per
  * poll: ens+mcp share one storefront read, agent+policy share one readPolicy.
  * A failed read evicts itself so the next node poll retries.
+ *
+ * Freshness note: the TTL (12-15s) is the node's effective freshness budget —
+ * the Drawer's "records read Ns ago" age label derives from the read's
+ * RESOLUTION time, so for a cache hit it may under-report the value's true age
+ * by up to that window. That is well inside the node's 90s staleAfterMs and the
+ * values are slow-moving config, so the chip still reads honestly.
  */
 function ttl<T>(read: () => Promise<T>, ttlMs: number): () => Promise<T> {
   let at = 0;
@@ -367,7 +373,7 @@ export function SystemMap(): JSX.Element {
       <header className="map__head">
         <span className="map__title">system map</span>
         <span className="map__hint">
-          click a node for its live detail + console action — edges pulse when the subgraph indexes a new head
+          click a node for its live detail + console action · edges pulse when the subgraph indexes a new head
         </span>
       </header>
       <svg

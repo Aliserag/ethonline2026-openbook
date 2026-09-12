@@ -48,7 +48,7 @@ function amountRow(label: string, value: bigint): [string, string] {
 }
 
 function deadlineLabel(deadline: bigint): string {
-  if (deadline === 0n) return "—";
+  if (deadline === 0n) return "·";
   return `${deadline.toString()} (${new Date(Number(deadline) * 1000).toLocaleString()})`;
 }
 
@@ -79,7 +79,7 @@ function verdictLabel(job: JobView, verdict: Verdict | null): string {
     return `REJECT (${reason})`;
   }
   if (job.state === "settled") return verdict ? verdict.verdict : "APPROVE";
-  return "— pending settlement";
+  return "· pending settlement";
 }
 
 export function buildFrames(
@@ -99,11 +99,11 @@ export function buildFrames(
       : job.state === "refunded"
         ? [
             amountRow("refund to buyer", job.amount),
-            ["reason", job.refundReason ?? "—"],
+            ["reason", job.refundReason ?? "·"],
           ]
         : job.state === "settled"
-          ? [["state", "settled — split unavailable (see note)"]]
-          : [["state", "open — escrow still holds the amount"]];
+          ? [["state", "settled · split unavailable (see note)"]]
+          : [["state", "open · escrow still holds the amount"]];
 
   const verdict = deliveryVerdict(job);
 
@@ -113,7 +113,7 @@ export function buildFrames(
       title: "quote",
       rows: [
         ["ens price", ens.price],
-        ["sla maxBlockLag", ens.maxBlockLag > 0 ? `${ens.maxBlockLag} blocks` : "— unreadable (svc.sla)"],
+        ["sla maxBlockLag", ens.maxBlockLag > 0 ? `${ens.maxBlockLag} blocks` : "· unreadable (svc.sla)"],
         amountRow("amount", job.amount),
         ["minBlock (SLA floor)", job.minBlock.toString()],
       ],
@@ -134,21 +134,21 @@ export function buildFrames(
       id: "deliver",
       title: "deliver",
       rows: [
-        ["delivered", job.state === "open" ? "— not yet" : "submitted"],
-        ["payloadHash", job.payloadHash ? truncateHash(job.payloadHash, 12, 10) : "— no fulfillment indexed"],
-        ["metaBlock", job.metaBlock !== undefined ? job.metaBlock.toString() : "—"],
+        ["delivered", job.state === "open" ? "· not yet" : "submitted"],
+        ["payloadHash", job.payloadHash ? truncateHash(job.payloadHash, 12, 10) : "· no fulfillment indexed"],
+        ["metaBlock", job.metaBlock !== undefined ? job.metaBlock.toString() : "·"],
       ],
     },
     {
       id: "verdict",
       title: "verdict",
       rows: [
-        ["metaBlock ≥ minBlock", `${job.metaBlock ?? "—"} ≥ ${job.minBlock.toString()}`],
+        ["metaBlock ≥ minBlock", `${job.metaBlock ?? "·"} ≥ ${job.minBlock.toString()}`],
         ["verdict", verdictLabel(job, verdict)],
         ["subgraph indexed", heads.subgraph.toString()],
         ["arc head", heads.arc.toString()],
       ],
-      note: "the freshness gate is deterministic: a deliverable clears when its block reaches the SLA floor — the ruler below compares delivered vs floor vs head",
+      note: "the freshness gate is deterministic: a deliverable clears when its block reaches the SLA floor · the ruler below compares delivered vs floor vs head",
     },
     {
       id: "money",
@@ -156,9 +156,9 @@ export function buildFrames(
       rows: moneyRows,
       note:
         split !== null
-          ? "split derived from the settlement receipt's USDC Transfer logs (feeSplitFromReceipt) — never from config"
+          ? "split derived from the settlement receipt's USDC Transfer logs (feeSplitFromReceipt) · never from config"
           : job.state === "refunded"
-            ? "RefundIssued returns the full amount to the buyer — no platform fee row (a refund moves no USDC to the treasury)"
+            ? "RefundIssued returns the full amount to the buyer · no platform fee row (a refund moves no USDC to the treasury)"
             : "no money moves until settlement",
     },
     {
@@ -174,7 +174,7 @@ export function buildFrames(
             ? "revenue (PaymentReleased books the full amount once)"
             : job.state === "refunded"
               ? "refund (RefundIssued books the full amount)"
-              : "no line yet — open",
+              : "no line yet · open",
         ],
       ],
     },

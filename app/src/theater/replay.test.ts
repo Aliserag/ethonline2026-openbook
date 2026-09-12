@@ -145,7 +145,7 @@ describe("buildFrames — open job", () => {
 
   it("still yields all six frames; verdict and money degrade truthfully", () => {
     expect(frames.map((f) => f.id)).toHaveLength(6);
-    expect(frame(frames, "verdict").rows.find(([key]) => key === "verdict")?.[1]).toBe("— pending settlement");
+    expect(frame(frames, "verdict").rows.find(([key]) => key === "verdict")?.[1]).toBe("· pending settlement");
     expect(frame(frames, "money").rows.find(([key]) => key === "state")?.[1]).toContain("open");
   });
 });

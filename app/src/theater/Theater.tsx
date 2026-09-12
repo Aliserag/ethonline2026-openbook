@@ -5,12 +5,12 @@
  *
  *   - subgraph event view   — fetchJobEvents (Task 4), the primary trail
  *   - onchain job view      — readJob (Task 3), ground truth for state/amounts
- *   - chain-log fallback    — jobs whose rows predate the index (our job 4:
- *     settlement at block 61,667,228, subgraph start 61,314,000 on the OTHER
- *     escrow). The public Arc RPC caps eth_getLogs at a 10,000-block range, so
- *     the scan walks up to MAX_LOG_WINDOWS windows back from the head and
- *     decodes JobSubmitted (metaBlock/payloadHash) and PaymentReleased/
- *     Refunded (the terminal tx) from the logs themselves.
+ *   - chain-log fallback    — jobs whose event rows the subgraph has not
+ *     indexed yet (rows before its start block; the per-job entity ids embed
+ *     the terminal tx). The public Arc RPC caps eth_getLogs at a 10,000-block
+ *     range, so the scan walks up to MAX_LOG_WINDOWS windows back from the
+ *     head and decodes JobSubmitted (metaBlock/payloadHash) and
+ *     PaymentReleased/Refunded (the terminal tx) from the logs themselves.
  *   - receipt-derived split — platformFee + getTransactionReceipt +
  *     feeSplitFromReceipt (Task 3) — the money frame's numbers are ALWAYS the
  *     receipt's, never config.
@@ -76,18 +76,36 @@ interface HeavyData {
  * once per jobId and cached: the 30s poll only re-reads the live parts (heads
  * + ENS records). This also keeps the public Arc RPC from being hit with a
  * multi-window log scan on every poll.
+ *
+ * Only TERMINAL results are cached (see isTerminalHeavy): an open job or a
+ * transient split failure is evicted on resolution so the next poll re-reads.
  */
 const heavyCache = new Map<string, Promise<HeavyData>>();
+
+/**
+ * A heavy result is cacheable only when history really ended: the job is
+ * settled or refunded AND the receipt split did not fail. An open job must
+ * re-read (it may settle between polls) and a transient splitError must be
+ * retried (the receipt read or fee decode may recover).
+ */
+export function isTerminalHeavy(data: HeavyData): boolean {
+  return (data.job.state === "settled" || data.job.state === "refunded") && data.splitError === undefined;
+}
 
 function heavyData(jobId: bigint): Promise<HeavyData> {
   const key = jobId.toString();
   const existing = heavyCache.get(key);
   if (existing !== undefined) return existing;
-  const loading = loadHeavy(jobId).catch((error) => {
-    // a transient failure may succeed on retry — evict so the next poll retries
-    heavyCache.delete(key);
-    throw error;
-  });
+  const loading = loadHeavy(jobId)
+    .then((data) => {
+      if (!isTerminalHeavy(data)) heavyCache.delete(key);
+      return data;
+    })
+    .catch((error) => {
+      // a transient failure may succeed on retry — evict so the next poll retries
+      heavyCache.delete(key);
+      throw error;
+    });
   heavyCache.set(key, loading);
   return loading;
 }
@@ -99,7 +117,7 @@ async function loadHeavy(jobId: bigint): Promise<HeavyData> {
   const hasChain = onchain !== null && onchain.jobId !== 0n; // shared escrow rows we don't own decode as zero
   const paid = events.paid;
   if (!hasChain && paid === undefined) {
-    throw new Error(`job ${jobId} is unknown onchain and unindexed — the replay has nothing to read`);
+    throw new Error(`job ${jobId} is unknown onchain and unindexed · the replay has nothing to read`);
   }
 
   const state: JobView["state"] = events.refunded
@@ -127,9 +145,9 @@ async function loadHeavy(jobId: bigint): Promise<HeavyData> {
     refundReason: events.refunded?.reason,
   };
 
-  // Terminal tx: subgraph entity id first (185853), chain scan as the fallback
-  // (job 4 predates the index). The scan also replays fulfillment for jobs the
-  // subgraph never saw.
+  // Terminal tx: subgraph entity id first (indexed jobs, e.g. 185853 and job
+  // 4), chain scan as the fallback for jobs whose rows the subgraph has not
+  // indexed yet. The scan also replays fulfillment for those same jobs.
   const needFulfillment = job.metaBlock === undefined || job.payloadHash === undefined;
   const terminalEntity: "settleds" | "refundIssueds" = state === "refunded" ? "refundIssueds" : "settleds";
   const subgraphTx = await subgraphTerminalTx(jobId, terminalEntity);
@@ -328,7 +346,7 @@ export function Theater({ jobId, onClose }: { jobId: string; onClose: () => void
       className="theater"
       role="dialog"
       aria-modal="true"
-      aria-label={`replay theater — job ${jobId}`}
+      aria-label={`replay theater · job ${jobId}`}
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onClose();
       }}
@@ -346,7 +364,7 @@ export function Theater({ jobId, onClose }: { jobId: string; onClose: () => void
         {data === null ? (
           live.state === "error" ? (
             <div className="theater__status theater__status--error" role="alert">
-              <p>the replay could not be built — {live.reason}</p>
+              <p>the replay could not be built · {live.reason}</p>
               <button type="button" onClick={live.refresh}>
                 retry
               </button>
@@ -404,7 +422,7 @@ export function Theater({ jobId, onClose }: { jobId: string; onClose: () => void
                   <div className="theater__ruler">
                     <RulerBlock
                       data={{
-                        delivered: data.job.metaBlock ?? Number(data.heads.subgraph),
+                        delivered: data.job.metaBlock,
                         head: Number(data.heads.arc),
                         floor: Number(data.job.minBlock),
                         label: "deliverable vs SLA floor vs arc head",

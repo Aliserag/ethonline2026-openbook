@@ -151,7 +151,7 @@ export function FramesBlock({ data }: { data: FramesData }): JSX.Element {
   return (
     <div className="console__frames">
       <div className="console__note">
-        replay <code>{data.jobId}</code> — the theater is open at{" "}
+        replay <code>{data.jobId}</code> · the theater is open at{" "}
         <code>#theater/{data.jobId}</code>: quote → pay → deliver → verdict → money →
         books (←/→ scrub, esc closes).
       </div>
