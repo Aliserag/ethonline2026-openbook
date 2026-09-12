@@ -1,0 +1,25 @@
+{
+  "name": "alpha",
+  "ens": "alpha.openbook.eth",
+  "escrow": "0x967e005154D0F62C33Eac8E2F44b44d4C4C07Dd5",
+  "hook": "0x606075F3Cf9b5B66E7e4DD2ea369894374Ff0846",
+  "payee": "0xe09C8F90931E97d0aEE998885b306DDF08CE08Cc",
+  "operatorKey": "SELLER_ALPHA_PK",
+  "gateway": {
+    "url": "https://gateway.thegraph.com",
+    "gatewayKeyEnv": "GRAPH_GATEWAY_KEY"
+  },
+  "datasets": [
+    {
+      "id": "aave-v3-arbitrum-lending",
+      "subgraphId": "4xyasjQeREe7PxnF6wVdobZvCw5mhoHZq3T7guRpuNPf",
+      "schema": "lending/3.1.0",
+      "description": "Aave V3 lending markets on Arbitrum (Messari lending schema)",
+      "freshness": {
+        "maxAge": 50
+      },
+      "priceUsdc": 120000,
+      "chain": "arbitrum"
+    }
+  ]
+}
