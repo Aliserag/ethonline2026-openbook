@@ -38,6 +38,10 @@ export function defaultQueryFor(dataset: DatasetConfig): string {
   const queries: Record<string, string> = {
     "lending/3.1.0": "{ markets(first: 3) { id } }",
     "dex-amm/4.0.1": "{ pools(first: 3) { id } }",
+    "nft-marketplace/2.1.0":
+      "{ trades(first: 3, orderBy: timestamp, orderDirection: desc) { timestamp priceETH } marketplaces(first: 1) { name tradeCount cumulativeTradeVolumeETH } }",
+    "ens/1.0.0":
+      "{ registrations(first: 3, orderBy: registrationDate, orderDirection: desc) { registrationDate domain { name } } }",
   };
   return queries[dataset.schema] ?? "{ __typename }";
 }

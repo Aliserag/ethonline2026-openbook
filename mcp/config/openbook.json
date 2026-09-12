@@ -34,6 +34,28 @@
       },
       "priceUsdc": 100000,
       "chain": "arbitrum"
+    },
+    {
+      "id": "opensea-nft-trades",
+      "subgraphId": "2GmLsgYGWoFoouZzKjp8biYDkfmeLTkEY3VDQyZqSJHA",
+      "schema": "nft-marketplace/2.1.0",
+      "description": "OpenSea (Seaport) NFT trades on Ethereum \u2014 13.9M trades, 2.6M ETH volume, 1.4M traders (Messari nft-marketplace schema)",
+      "freshness": {
+        "maxAge": 50
+      },
+      "priceUsdc": 100000,
+      "chain": "ethereum"
+    },
+    {
+      "id": "ens-registrations",
+      "subgraphId": "5XqPmWe6gjyrJtFn9cLy237i4cWw2j9HcUJEXsP5qGtH",
+      "schema": "ens/1.0.0",
+      "description": "ENS name registrations as they happen (the storefront's own namespace, sold as data)",
+      "freshness": {
+        "maxAge": 50
+      },
+      "priceUsdc": 100000,
+      "chain": "ethereum"
     }
   ]
 }

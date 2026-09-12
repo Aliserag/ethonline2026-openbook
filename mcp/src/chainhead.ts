@@ -26,7 +26,7 @@ export const CHAIN_RPC: Record<DatasetChain, (apiKey: string) => string> = {
 /** Keyless public RPCs (read-only eth_blockNumber; no account needed). */
 export const PUBLIC_CHAIN_RPC: Record<DatasetChain, string> = {
   arbitrum: "https://arb1.arbitrum.io/rpc",
-  ethereum: "https://eth.llamarpc.com",
+  ethereum: "https://ethereum-rpc.publicnode.com",
 };
 
 const clients = new Map<string, PublicClient>();
@@ -47,7 +47,7 @@ function clientFor(chain: DatasetChain, apiKey: string | undefined): PublicClien
 
 /**
  * The default resolver: `eth_blockNumber` on the dataset's chain. Public RPCs
- * by default (arb1.arbitrum.io / eth.llamarpc.com — read-only, no key);
+ * by default (arb1.arbitrum.io / ethereum-rpc.publicnode.com — read-only, no key);
  * Alchemy when ALCHEMY_API_KEY is set AND its app has the network enabled —
  * a 2026-09-09 live probe returned "ARB_MAINNET is not enabled for this app"
  * for a present-but-unconfigured key, so Alchemy failures fall back to the

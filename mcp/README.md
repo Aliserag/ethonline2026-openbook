@@ -53,7 +53,7 @@ printf '%s\n' \
 
 | tool              | expected output (fresh key, records set)                                     |
 | ----------------- | ---------------------------------------------------------------------------- |
-| `list_datasets()` | `aave-v3-arbitrum-lending`, `uniswap-v3-arbitrum-dex` with schema/price/description (+ ENS `svc.menu` entries) |
+| `list_datasets()` | the four datasets — `aave-v3-arbitrum-lending`, `uniswap-v3-arbitrum-dex`, `opensea-nft-trades`, `ens-registrations` — with schema/price/description (+ ENS `svc.menu` entries) |
 | `get_quote(id)`   | `{amount: 100000, amountUsdc: "0.10", minBlockLag: 50, deadlineBlocks: 1, payee, source: "ENS"}` |
 | `query_dataset(id, gql)` | fresh: `{result, meta: {block, hash}, attestation: {message, signature, signer}}`; stale: `{unavailable: true, reason: "STALE"}` |
 | `verify_delivery({jobId, payloadHash, metaBlock})` | `{verdict: "APPROVE"}` or `{verdict: "REJECT", reason: "STALE_DATA"}`; add `settle: true` to execute the onchain settlement |
