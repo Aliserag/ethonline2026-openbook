@@ -1,14 +1,14 @@
 /**
- * OpenBook . HE RECEIPT PRINTER (one route, guided ledger).
+ * OpenBook: THE RECEIPT PRINTER (one route, guided ledger).
  *
  * Brand: the agent's settlement book, printed live. `▤ OB` mark. Paper, ink,
- * stamps (SETTLED / REFUNDED / STALE), and THE TAPE ,  receipt printer that
+ * stamps (SETTLED / REFUNDED / STALE), and THE TAPE: a receipt printer that
  * types out every settlement event as it lands.
  *
  * Guided: each step is a card with a plain-language job ("See what's for
  * sale", "Get the price", "Pay", "Watch data arrive", "Settle or refund"),
  * tooltips on every jargon term, and key gates rendered as setup cards with
- * exact 60-second steps , ever silent dead ends.
+ * exact 60-second steps, never silent dead ends.
  *
  * Logic preserved verbatim from the prior revision; only presentation and
  * copy changed (plus aria + status semantics).
@@ -28,7 +28,7 @@ import { defaultChainHeadResolver } from "../../mcp/src/chainhead";
 import { createJobWithSla, ERC8183, setUsdcAddress, usdcAddress, USDC_ABI, type Sla } from "../../agent/escrow";
 import { verifyDelivery } from "../../mcp/src/escrow";
 
-// Chain-specific USDC (VITE_USDC_ADDRESS) , ainnet override for the escrow module.
+// Chain-specific USDC (VITE_USDC_ADDRESS), mainnet override for the escrow module.
 if (env.usdcAddress !== undefined && /^0x[0-9a-fA-F]{40}$/.test(env.usdcAddress)) {
   setUsdcAddress(env.usdcAddress as `0x${string}`);
 }
@@ -72,7 +72,7 @@ interface SettleState {
 const SERVICE_KEYS = ["svc.menu", "svc.price", "svc.sla", "svc.payee", "svc.operator", "svc.pnl"];
 const HARD_FAIL_KEYS = ["svc.price", "svc.sla", "svc.payee"];
 
-/** The hard-fail keys whose own record is unset , atched BY NAME, never by
+/** The hard-fail keys whose own record is unset, matched BY NAME, never by
  *  position: SERVICE_KEYS and HARD_FAIL_KEYS are different orders and a naive
  *  index filter falsely blames neighbors (F1, adversarial E2E). */
 export function missingHardFailKeys(records: { key: string; value: string | null }[]): string[] {
@@ -171,9 +171,9 @@ async function quoteWithNamespace(
   return quoteFromRecords(dataset, merged);
 }
 
-/** Tooltip , he page's vocabulary for judges with zero context. */
+/** Tooltip: the page's vocabulary for judges with zero context. */
 /**
- * Tooltip , rap the KEYWORD (`<Tip text="…">SLA</Tip>`): it renders with a
+ * Tooltip: wrap the KEYWORD (`<Tip text="…">SLA</Tip>`): it renders with a
  * dashed underline and reveals the note on hover/focus. No "?" badges.
  */
 function Tip({ text, children }: { text: string; children?: ReactNode }): JSX.Element {
@@ -186,7 +186,7 @@ function Tip({ text, children }: { text: string; children?: ReactNode }): JSX.El
 
 type StepStateAttr = "active" | "done" | "failed" | "blocked" | "idle";
 
-/** One step card , he guided spine. */
+/** One step card: the guided spine. */
 function StepCard(props: {
   n: number;
   state: StepStateAttr;
@@ -295,7 +295,7 @@ export default function App() {
     setQueryText(defaultQueryFor(dataset));
   }, [dataset]);
 
-  // P&L ledger: the open-book subgraph via Studio , ublic endpoint, no key.
+  // P&L ledger: the open-book subgraph via Studio, public endpoint, no key.
   useEffect(() => {
     let cancelled = false;
     Promise.all([fetchPnl(env.graphKey), publicClient.getBlockNumber()])
@@ -335,13 +335,18 @@ export default function App() {
   }, []);
 
   const flowBusy = paying || querying || settling;
+  // A funded, unsettled job pins the dataset: its SLA floor was packed from
+  // THIS dataset's chain/config, so switching mid-job would judge a delivery
+  // against the wrong floor. The lock lifts as soon as step 4 settles (or
+  // refunds) the job.
+  const switchLocked = flowBusy || (job !== null && settle === null);
 
   // Switching datasets invalidates the previous quote/delivery/verdict , he pay
   // button must never fund the previous dataset's price. Refused while a flow is in
   // flight (paying/querying/settling): a funded job or a half-signed tx must never be
   // orphaned by a stray click.
   const handleDatasetChange = (nextId: string): void => {
-    if (flowBusy) return;
+    if (switchLocked) return;
     setDatasetId(nextId);
     setQuote(null);
     setDelivery(null);
@@ -609,7 +614,7 @@ export default function App() {
       <main>
         <p className="intro">
           <strong>First time here? Start with steps 1 and 2.</strong> The menu, the live quote and
-          the agent's books all read from ENS and the public subgraph with <em>no wallet and no
+          the agent's books all read from ENS and the public subgraph, with <em>no wallet and no
           keys</em>. Step 3 (paying) needs an EVM wallet and free testnet USDC from{" "}
           <a href="https://faucet.circle.com" target="_blank" rel="noreferrer">
             faucet.circle.com
@@ -713,7 +718,7 @@ export default function App() {
                 <select
                   id="dataset"
                   value={datasetId}
-                  disabled={flowBusy}
+                  disabled={switchLocked}
                   aria-describedby="dataset-lock"
                   onChange={(event) => handleDatasetChange(event.target.value)}
                 >
@@ -723,9 +728,11 @@ export default function App() {
                     </option>
                   ))}
                 </select>
-                {flowBusy && (
+                {switchLocked && (
                   <p className="caption" id="dataset-lock">
-                    locked while a payment is in flight, so the funded job stays in view
+                    {flowBusy
+                      ? "locked while a payment is in flight, so the funded job stays in view"
+                      : "locked until the funded job settles or refunds (step 4) — its SLA floor belongs to this dataset"}
                   </p>
                 )}
               </div>
@@ -778,7 +785,7 @@ export default function App() {
                     Paying needs a wallet.{" "}
                     {connectors.map((connector) => (
                       <button key={connector.uid} className="ghost" onClick={() => connect({ connector })}>
-                        Connect {connector.name}
+                        Connect {connector.name === "Injected" ? "browser wallet" : connector.name}
                       </button>
                     ))}{" "}
                     (or use the Connect wallet button up top). Nothing leaves the escrow until the SLA is checked.
@@ -889,7 +896,7 @@ export default function App() {
               )}
               {hasGraphKey && quote === null && (
                 <p className="caption" id="query-caption">
-                  Quote first (step 2) , he delivery answers your order.
+                  Quote first (step 2), the delivery answers your order.
                 </p>
               )}
               {queryError !== null && (
@@ -1040,7 +1047,7 @@ export default function App() {
                   {pnlUpdatedAt !== null && (
                     <>
                       {" · "}
-                      <span className="live-stamp">updated {pnlUpdatedAt.toLocaleTimeString()}</span>
+                      <span className="live-stamp">updated {pnlUpdatedAt.toLocaleTimeString()}</span>{" "}
                       <button
                         type="button"
                         className="ob-refresh"
