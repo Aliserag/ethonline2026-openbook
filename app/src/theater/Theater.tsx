@@ -264,7 +264,7 @@ async function loadEns(): Promise<{ price: string; maxBlockLag: number }> {
     try {
       maxBlockLag = parseSlaRecord(sla).maxBlockLag;
     } catch {
-      // unreadable record — the quote frame renders "— unreadable", never a fake figure
+      // unreadable record — the quote frame renders "· unreadable", never a fake figure
     }
   }
   return { price: price ?? "✗ svc.price unreadable (ENS)", maxBlockLag };

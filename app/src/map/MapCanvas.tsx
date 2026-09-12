@@ -149,7 +149,7 @@ async function readEnsNode(): Promise<NodeLiveData> {
       ["name", CONFIG.ens],
       ["svc.price", records.price ?? "✗ unset"],
       ["svc.sla", records.sla ?? "✗ unset"],
-      ["maxBlockLag", records.maxBlockLag !== null ? `${records.maxBlockLag} blocks` : "—"],
+      ["maxBlockLag", records.maxBlockLag !== null ? `${records.maxBlockLag} blocks` : "·"],
       ["svc.payee", records.payee ?? "✗ unset"],
     ],
   };
@@ -309,7 +309,7 @@ function NodeShape({
       transform={`translate(${node.x}, ${node.y})`}
       role="button"
       tabIndex={0}
-      aria-label={`${node.title} — ${chip}`}
+      aria-label={`${node.title} · ${chip}`}
       onClick={onSelect}
       onKeyDown={(event) => {
         if (event.key === "Enter" || event.key === " ") {
