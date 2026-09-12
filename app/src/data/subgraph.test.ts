@@ -33,9 +33,11 @@ describe("fetchJobs", () => {
       id: "0x2d5f5", jobId: "185853",
       payloadHash: `0x${"ab".repeat(32)}`, metaBlock: "445566",
     };
+    let eventsQuery = "";
     const fetchImpl = async (_url: string, init?: RequestInit) => {
       const body = JSON.parse(String(init?.body)) as { query: string };
       const events = body.query.includes("fulfilleds");
+      if (events) eventsQuery = body.query;
       return new Response(JSON.stringify({
         data: events
           ? {
@@ -50,6 +52,10 @@ describe("fetchJobs", () => {
       }), { status: 200, headers: { "content-type": "application/json" } });
     };
     const jobs = await fetchJobs(undefined, fetchImpl);
+    // round-2 collections must not fall back to graph-node's 100-row default
+    expect(eventsQuery).toContain("fulfilleds(first: 1000,");
+    expect(eventsQuery).toContain("settleds(first: 1000,");
+    expect(eventsQuery).toContain("refundIssueds(first: 1000,");
     const refunded = jobs.find((j) => j.jobId === 185853n);
     expect(refunded).toBeDefined();
     expect(refunded?.state).toBe("refunded");

@@ -69,10 +69,13 @@ export function fetchJobs(
       const jobIds = paidRows.map((row) => big(row["jobId"]).toString());
       // Round 2: per-job event windows bound to the RETURNED jobIds — a refund
       // for any of our jobs can never be evicted by a global first-N window.
+      // first: 1000 (graph-node max) on each collection: round 1 can return up
+      // to 200 paid rows, so 200 > the default 100-row page would otherwise
+      // silently re-create window eviction past the 100th job of any type.
       const eventsQuery = `{
-  fulfilleds(where: { jobId_in: [${jobIds.join(", ")}] }) { id jobId payloadHash metaBlock }
-  settleds(where: { jobId_in: [${jobIds.join(", ")}] }) { id jobId seller amount }
-  refundIssueds(where: { jobId_in: [${jobIds.join(", ")}] }) { id jobId reason }
+  fulfilleds(first: 1000, where: { jobId_in: [${jobIds.join(", ")}] }) { id jobId payloadHash metaBlock }
+  settleds(first: 1000, where: { jobId_in: [${jobIds.join(", ")}] }) { id jobId seller amount }
+  refundIssueds(first: 1000, where: { jobId_in: [${jobIds.join(", ")}] }) { id jobId reason }
 }`;
       return hostedQuery({ url: endpoint, query: eventsQuery, fetchImpl }).then(
         ({ data: eventsData }) => {
