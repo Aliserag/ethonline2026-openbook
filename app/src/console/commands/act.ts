@@ -313,6 +313,16 @@ export function isRecoveredActJob(): boolean {
   return actJobRecovered;
 }
 
+/**
+ * Clear the act slot after a terminal claim — ONLY when the claimed job IS
+ * the slot's job. A refund of one job (e.g. a sandbox-staged one) must never
+ * wipe a different, still-unsettled purchase's in-memory state or its
+ * persisted recovery entry.
+ */
+export function clearActJobIfClaimed(active: ActJob | null, claimedJobId: string): void {
+  if (active?.jobId === claimedJobId) setActJob(null);
+}
+
 /* -------------------------------------------- act-job persistence (v1) */
 
 const ACT_JOB_STORAGE_KEY = "openbook.actjob.v1";

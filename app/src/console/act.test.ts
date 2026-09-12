@@ -17,13 +17,16 @@ import type { EnsTextReader } from "../../../mcp/src/ens";
 import {
   canBuy,
   classifyRevert,
+  clearActJobIfClaimed,
   deserializeActJob,
   formatSendError,
+  getActJob,
   parseBuyArgs,
   rehydrateActJob,
   resolveDatasetQuote,
   resolveDatasetRecord,
   serializeActJob,
+  setActJob,
   usdcTrim,
   walkRevertData,
   type ActJob,
@@ -290,6 +293,36 @@ describe("act job persistence (localStorage v1)", () => {
     } as unknown as Storage;
     expect(rehydrateActJob(store)).toEqual(job);
     expect(removed).toBeNull();
+  });
+});
+
+describe("clearActJobIfClaimed (claim must not strand a different purchase)", () => {
+  const base: ActJob = {
+    datasetId: "aave-v3-arbitrum-lending",
+    jobId: "25",
+    minBlock: 504_304_900,
+    amountUsdc: 150000,
+    deadline: 1_789_194_000n,
+    createdAt: 1_789_190_000,
+  };
+
+  it("claiming the NON-act job leaves the slot's purchase (and its persistence) intact", () => {
+    const other: ActJob = { ...base, jobId: "26", deadline: 1_789_200_000n };
+    setActJob(other); // a still-unsettled purchase occupies the slot
+    clearActJobIfClaimed(getActJob(), "25"); // the claimed job is a DIFFERENT one
+    expect(getActJob()?.jobId).toBe("26");
+  });
+
+  it("claiming the act job clears the slot", () => {
+    setActJob({ ...base });
+    clearActJobIfClaimed(getActJob(), "25");
+    expect(getActJob()).toBeNull();
+  });
+
+  it("claiming with no act job at all is a no-op", () => {
+    setActJob(null);
+    clearActJobIfClaimed(getActJob(), "25");
+    expect(getActJob()).toBeNull();
   });
 });
 

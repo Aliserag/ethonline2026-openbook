@@ -46,6 +46,7 @@ import { reasonHash } from "../../../../mcp/src/escrow";
 import { register, type Command, type KvRow } from "../registry";
 import {
   classifyRevert,
+  clearActJobIfClaimed,
   formatSendError,
   getActJob,
   isRecoveredActJob,
@@ -462,7 +463,12 @@ const claimCommand: Command = {
       rows.push(["protocol evidence", "none captured (attestation or staleness did not land)"]);
     }
     if (job.deadline === 0n) {
-      rows.push(["countdown", "✗ deadline unknown — the onchain read-back raced; rerun `sandbox stale`"]);
+      rows.push([
+        "countdown",
+        sandbox !== null
+          ? "✗ deadline unknown — the onchain read-back raced; rerun `sandbox stale` to re-arm"
+          : "✗ deadline unknown — the onchain read-back raced; run `status` to confirm the job, the refund window cannot be computed",
+      ]);
       return { render: "kv", data: { rows } };
     }
     const nowSec = Math.floor(Date.now() / 1000);
@@ -489,8 +495,10 @@ const claimCommand: Command = {
         data: { rows: [...rows, ["claim", `✗ ${formatSendError(error)}`]] },
       };
     }
-    // Terminal outcome (refunded) — no recovery affordance needed past this point.
-    setActJob(null);
+    // Terminal outcome (refunded) — clear the act slot ONLY when the claimed
+    // job IS the slot's job: a different, still-unsettled purchase must keep
+    // its in-memory state and persisted recovery entry.
+    clearActJobIfClaimed(active, job.jobId);
     setSandboxState(null);
     return {
       render: "tx",
