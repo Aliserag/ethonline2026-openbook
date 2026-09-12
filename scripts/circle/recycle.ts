@@ -33,13 +33,13 @@ const res = await fetch("https://api.circle.com/v1/w3s/developer/transactions/tr
     destinationAddress: cenv.buyerAddress,
     tokenAddress: USDC,
     blockchain: "ARC-TESTNET",
-    amount: [(Number(bal) / 1e6).toFixed(6)],
+    amounts: [(Number(bal) / 1e6).toFixed(6)],
     feeLevel: "MEDIUM",
     entitySecretCiphertext: await entitySecretCiphertext(cenv),
   }),
 });
-const body = (await res.json()) as { data?: { id?: string; state?: string }; message?: string };
-if (!res.ok || !body.data?.id) throw new Error(`transfer failed ${res.status}: ${body.message ?? ""}`);
+const body = (await res.json()) as { data?: { id?: string; state?: string }; message?: string; errors?: unknown };
+if (!res.ok || !body.data?.id) throw new Error(`transfer failed ${res.status}: ${body.message ?? ""} ${JSON.stringify(body.errors ?? "")}`);
 for (let i = 0; i < 40; i++) {
   await new Promise((r) => setTimeout(r, 2000));
   const t = ((await (await fetch(`https://api.circle.com/v1/w3s/transactions/${body.data.id}`, { headers: { authorization: `Bearer ${cenv.apiKey}` } })).json()) as { data?: { transaction?: { state?: string; txHash?: string; errorReason?: string } } }).data?.transaction;
