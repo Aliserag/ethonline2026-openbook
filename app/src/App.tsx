@@ -25,7 +25,8 @@ import { fetchPnl, type PnlRow, type RefundEvent } from "./pnl";
 import { createEnsTextReader, type EnsTextReader } from "../../mcp/src/ens";
 import { gatewayQuery, stripMeta } from "../../mcp/src/gateway";
 import { defaultChainHeadResolver } from "../../mcp/src/chainhead";
-import { createJobWithSla, ERC8183, ERC8183_ABI, setUsdcAddress, usdcAddress, USDC_ABI, type Sla } from "../../agent/escrow";
+import { createJobWithSla, ERC8183, ERC8183_ABI, setEscrowAddress, setUsdcAddress, usdcAddress, USDC_ABI, type Sla } from "../../agent/escrow";
+import { ADDR } from "./data/addresses";
 import { verifyDelivery } from "../../mcp/src/escrow";
 import { Console } from "./console/Console";
 import { TheaterRoute } from "./theater/Theater";
@@ -42,6 +43,12 @@ const TourRoute = lazy(() => import("./tour/Tour").then((m) => ({ default: m.Tou
 if (env.usdcAddress !== undefined && /^0x[0-9a-fA-F]{40}$/.test(env.usdcAddress)) {
   setUsdcAddress(env.usdcAddress as `0x${string}`);
 }
+// AgenticCommerce module target = the MARKET escrow (ADDR.escrow): agent/
+// escrow.ts's module default is the SHARED reference deployment 0x0747…, which
+// does not whitelist our SlaHook — every app write (legacy step flow AND the
+// console buy/deliver/settle/sandbox) must hit the instance that does,
+// otherwise createJob reverts HookNotWhitelisted().
+setEscrowAddress(ADDR.escrow);
 
 export interface StorefrontState {
   records: { key: string; value: string | null }[];
