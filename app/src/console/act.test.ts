@@ -4,14 +4,24 @@
  * synthetic revert data, and registry registration of buy/deliver/settle.
  */
 import { describe, expect, it } from "bun:test";
-import { keccak256, toBytes } from "viem";
+import {
+  ContractFunctionExecutionError,
+  ContractFunctionRevertedError,
+  keccak256,
+  RawContractError,
+  toBytes,
+} from "viem";
 import { commands, dispatch } from "./registry";
+import { CONFIG } from "../config";
 import type { EnsTextReader } from "../../../mcp/src/ens";
 import {
   canBuy,
   classifyRevert,
+  formatSendError,
   parseBuyArgs,
+  resolveDatasetQuote,
   resolveDatasetRecord,
+  walkRevertData,
 } from "./commands/act";
 // Side-effect: registers buy/deliver/settle (same import the app will make).
 import "./commands/act";
@@ -150,6 +160,65 @@ describe("classifyRevert", () => {
 
   it("renders unknown selectors as their hex prefix, never a fabricated name", () => {
     expect(classifyRevert(data(selector("SomethingElse()")))).toBe(`unknown selector ${selector("SomethingElse()")}`);
+  });
+});
+
+describe("walkRevertData (viem cause chain)", () => {
+  const slaNotMetData = (`${keccak256(toBytes("SlaNotMet(uint256,uint256)")).slice(0, 10)}` + "00".repeat(64)) as `0x${string}`;
+
+  it("walks ContractFunctionExecutionError → ContractFunctionRevertedError.raw", () => {
+    // The real viem shape: viem 2.56.3 wraps simulate/estimate reverts so the
+    // raw hex sits on a NESTED cause, never on the top error.
+    const reverted = new ContractFunctionRevertedError({ abi: [], data: slaNotMetData, functionName: "complete" });
+    const execution = new ContractFunctionExecutionError(reverted, { abi: [], functionName: "complete" });
+    expect(walkRevertData(execution)?.slice(0, 10)).toBe(slaNotMetData.slice(0, 10));
+    expect(classifyRevert(walkRevertData(execution)!)).toBe("SlaNotMet");
+    expect(formatSendError(execution)).toContain("SlaNotMet");
+  });
+
+  it("walks a nested RawContractError.data", () => {
+    const raw = new RawContractError({ data: slaNotMetData });
+    const execution = new ContractFunctionExecutionError(raw, { abi: [], functionName: "complete" });
+    expect(walkRevertData(execution)?.slice(0, 10)).toBe(slaNotMetData.slice(0, 10));
+  });
+
+  it("returns undefined when no node in the chain carries revert data", () => {
+    expect(walkRevertData(new Error("plain error"))).toBeUndefined();
+    const noData = new ContractFunctionExecutionError(new Error("no data"), { abi: [], functionName: "complete" });
+    expect(walkRevertData(noData)).toBeUndefined();
+    expect(formatSendError(noData)).toContain("no data");
+  });
+});
+
+describe("resolveDatasetQuote failure edge (quote == charge)", () => {
+  const SLA = '{"maxBlockLag": 50, "maxLatencyMs": 2000}';
+
+  it("a FAILED subname price read falls back to the parent, like quote", async () => {
+    const records = {
+      "openbook.eth|svc.price": "0.10 USDC/query",
+      "openbook.eth|svc.sla": SLA,
+    };
+    const reader: EnsTextReader = async (name, key) => {
+      if (name.startsWith("aave-v3-arbitrum-lending") && key === "svc.price") throw new Error("resolve failed");
+      return records[`${name}|${key}`] ?? null;
+    };
+    const quote = await resolveDatasetQuote(CONFIG.datasets[0], reader);
+    expect(quote).toEqual({ price: "0.10 USDC/query", amountUsdc: 100000, maxBlockLag: 50, maxLatencyMs: 2000 });
+  });
+
+  it("subname AND parent both failing refuses (unreachable, not a price)", async () => {
+    const reader: EnsTextReader = async () => {
+      throw new Error("rpc down");
+    };
+    await expect(resolveDatasetQuote(CONFIG.datasets[0], reader)).rejects.toThrow("unreachable");
+  });
+
+  it("subname unset + parent read failing stays 'not set' (no fabricated fallback)", async () => {
+    const reader: EnsTextReader = async (name, key) => {
+      if (name === "openbook.eth") throw new Error("rpc down");
+      return null;
+    };
+    await expect(resolveDatasetQuote(CONFIG.datasets[0], reader)).rejects.toThrow("svc.price is not set");
   });
 });
 

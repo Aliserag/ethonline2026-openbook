@@ -20,7 +20,7 @@
  * the T9 sandbox re-exports it from here — act's own failure paths need it,
  * so it lives with them).
  */
-import { keccak256, toBytes, type Address, type WalletClient } from "viem";
+import { BaseError, keccak256, toBytes, type Address, type WalletClient } from "viem";
 import { CONFIG, defaultQueryFor, type DatasetConfig } from "../../config";
 import { env, hasGraphKey } from "../../env";
 import { ADDR } from "../../data/addresses";
@@ -98,10 +98,44 @@ export function resolveDatasetRecord(sub: string | null, parent: string | null):
   return sub ?? parent;
 }
 
+/** ENS read that reports resolution failures instead of throwing (probe style). */
+type EnsProbe = { ok: true; value: string | null } | { ok: false; reason: string };
+
+async function probeEns(
+  readEnsText: EnsTextReader,
+  name: string,
+  key: string,
+): Promise<EnsProbe> {
+  try {
+    return { ok: true, value: await readEnsText(name, key) };
+  } catch (error) {
+    return { ok: false, reason: reason(error) };
+  }
+}
+
+/**
+ * Subname-over-parent merge with the failure edge `quote` uses (inspect.ts's
+ * firstNonNull semantics): a SET subname wins; a resolved-but-unset subname
+ * falls back to the parent; a FAILED subname read falls back to the parent
+ * too — the charge must equal the quote even when a record read fails; only
+ * when BOTH fail is the resolution refused.
+ */
+function firstNonNull(
+  primary: EnsProbe,
+  fallback: EnsProbe,
+): { value: string | null; failed?: string } {
+  if (primary.ok && primary.value !== null) return { value: primary.value };
+  if (fallback.ok && fallback.value !== null) return { value: fallback.value };
+  if (primary.ok || fallback.ok) return { value: null };
+  return { value: null, failed: primary.reason };
+}
+
 /**
  * Live quote for one dataset — price, amount and the SLA window, all from
- * ENSv2 with the subname-first resolution `quote` uses. A missing svc.price /
- * svc.sla hard-fails (no hard-coded values).
+ * ENSv2 with the subname-first resolution `quote` uses, INCLUDING the failure
+ * edge: an unset record falls back to the parent and a failed read falls back
+ * to the parent too (quote == charge); only when subname AND parent both fail
+ * (or both are unset) is the buy refused — never a hard-coded value.
  */
 export async function resolveDatasetQuote(
   dataset: DatasetConfig,
@@ -109,27 +143,33 @@ export async function resolveDatasetQuote(
 ): Promise<DatasetQuote> {
   const sub = `${dataset.id}.${CONFIG.ens}`;
   const [subPrice, subSla, rootPrice, rootSla] = await Promise.all([
-    readEnsText(sub, "svc.price"),
-    readEnsText(sub, "svc.sla"),
-    readEnsText(CONFIG.ens, "svc.price"),
-    readEnsText(CONFIG.ens, "svc.sla"),
+    probeEns(readEnsText, sub, "svc.price"),
+    probeEns(readEnsText, sub, "svc.sla"),
+    probeEns(readEnsText, CONFIG.ens, "svc.price"),
+    probeEns(readEnsText, CONFIG.ens, "svc.sla"),
   ]);
-  const price = resolveDatasetRecord(subPrice, rootPrice);
-  if (price === null) {
+  const price = firstNonNull(subPrice, rootPrice);
+  if (price.failed) {
+    throw new Error(`svc.price is unreachable (${price.failed}) — refusing to buy at a hard-coded price`);
+  }
+  if (price.value === null) {
     throw new Error(
       `svc.price is not set on ${sub} (nor ${CONFIG.ens}) — refusing to buy at a hard-coded price`,
     );
   }
-  const sla = resolveDatasetRecord(subSla, rootSla);
-  if (sla === null) {
+  const sla = firstNonNull(subSla, rootSla);
+  if (sla.failed) {
+    throw new Error(`svc.sla is unreachable (${sla.failed}) — no freshness window to floor the SLA`);
+  }
+  if (sla.value === null) {
     throw new Error(
       `svc.sla is not set on ${sub} (nor ${CONFIG.ens}) — no freshness window to floor the SLA`,
     );
   }
-  const amountUsdc = parsePriceToAmount6dec(price);
-  const parsedSla = parseSlaRecord(sla);
+  const amountUsdc = parsePriceToAmount6dec(price.value);
+  const parsedSla = parseSlaRecord(sla.value);
   return {
-    price,
+    price: price.value,
     amountUsdc,
     maxBlockLag: parsedSla.maxBlockLag,
     maxLatencyMs: parsedSla.maxLatencyMs,
@@ -305,11 +345,35 @@ export function classifyRevert(data: `0x${string}`): string {
   return `unknown selector ${selector}`;
 }
 
+/**
+ * Extract contract revert bytes from a viem error by walking the cause chain.
+ * viem 2.56.3 wraps reverts in BaseError subclasses and the raw hex lives on a
+ * NESTED cause — ContractFunctionExecutionError → ContractFunctionRevertedError
+ * (`.raw` is the raw hex; its `.data` is the DECODED object) → RawContractError
+ * (`.data` is the hex). Reading `.data` off the top error alone is dead code.
+ * Returns undefined when no node in the chain carries 0x revert data.
+ */
+export function walkRevertData(error: unknown): `0x${string}` | undefined {
+  const hexOf = (value: unknown): `0x${string}` | undefined =>
+    typeof value === "string" && value.startsWith("0x") ? (value as `0x${string}`) : undefined;
+  if (!(error instanceof BaseError)) {
+    // Bare non-viem payload (e.g. an RPC error surfaced through a custom
+    // transport) that still carries the data field directly.
+    return hexOf((error as { data?: unknown } | null | undefined)?.data);
+  }
+  const found = error.walk((e) => {
+    const node = e as { raw?: unknown; data?: unknown };
+    return typeof node.raw === "string" || typeof node.data === "string";
+  }) as (Error & { raw?: unknown; data?: unknown }) | null;
+  if (!found) return undefined;
+  return hexOf(found.raw ?? found.data);
+}
+
 /** Failure-path formatter: name the revert when raw data is present, else the message. */
 export function formatSendError(error: unknown): string {
-  const data = (error as { data?: unknown } | undefined)?.data;
-  if (typeof data === "string" && data.startsWith("0x") && data.length >= 10) {
-    return `${classifyRevert(data as `0x${string}`)} (revert data ${data.slice(0, 10)}…)`;
+  const hex = walkRevertData(error);
+  if (hex !== undefined) {
+    return `${classifyRevert(hex)} (revert data ${hex.slice(0, 10)}…)`;
   }
   const message = error instanceof Error ? error.message : String(error);
   return message.length > 300 ? `${message.slice(0, 300)}…` : message;

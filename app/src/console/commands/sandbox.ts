@@ -49,6 +49,7 @@ import {
   resolveDatasetQuote,
   resolveSigner,
   setActJob,
+  walkRevertData,
   type ActJob,
   type DatasetQuote,
 } from "./act";
@@ -365,13 +366,17 @@ const staleCommand: Command = {
         });
         rows.push(["simulate complete", "no revert — the delivery cleared the floor (subgraph caught up); nothing to show as refusal"]);
       } catch (error) {
-        const data = (error as { data?: unknown } | undefined)?.data;
-        if (typeof data === "string" && data.startsWith("0x") && data.length >= 10) {
-          evidence = classifyRevert(data as `0x${string}`);
-          evidenceData = data as `0x${string}`;
+        // viem nests the raw revert hex on a cause-chain node
+        // (ContractFunctionRevertedError.raw / RawContractError.data) — the
+        // walker extracts it so the SlaNotMet evidence fires once the
+        // attester key exists (T13).
+        const hex = walkRevertData(error);
+        if (hex !== undefined && hex.length >= 10) {
+          evidence = classifyRevert(hex);
+          evidenceData = hex;
           rows.push([
             "evidenced refusal",
-            `complete() would revert ${evidence} (data ${data.slice(0, 10)}…) — the protocol refuses the stale delivery, NO TX SENT`,
+            `complete() would revert ${evidence} (data ${hex.slice(0, 10)}…) — the protocol refuses the stale delivery, NO TX SENT`,
           ]);
         } else {
           rows.push(["simulate complete", `✗ simulate failed: ${reason(error)}`]);
@@ -443,7 +448,7 @@ const claimCommand: Command = {
       rows.push(["countdown", `not eligible yet — the escrow releases the refund at the deadline (in ${wait}s)`]);
       return {
         render: "kv",
-        data: { rows, note: "claimRefund is buyer-gated by the deadline (WrongStatus before it) — wait and rerun" },
+        data: { rows, note: "claimRefund opens at the deadline (WrongStatus before it) — anyone can poke it; the funds always return to the buyer" },
       };
     }
     const signed = await resolveSigner();
