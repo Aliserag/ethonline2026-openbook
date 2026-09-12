@@ -196,7 +196,7 @@ describe("verdict stamps", () => {
           ["tx", "0x3b2d816d…aa8bb50f"],
           ["split", "seller 0.15 · treasury 0.00"],
         ],
-        note: "verdict is APPROVE: SLA met — the hook allowed complete()",
+        note: "verdict is APPROVE: SLA met · the hook allowed complete()",
       },
     } as CommandResult;
     expect(verdictFor("settle aave-v3-arbitrum-lending", kv)).toBe("APPROVED");
@@ -206,8 +206,8 @@ describe("verdict stamps", () => {
     const kv = {
       render: "kv",
       data: {
-        rows: [["verdict", "STALE"], ["refund", "client refunded — full amount, no fee row"]],
-        note: "verdict is STALE: stale or invalid — refunded instead",
+        rows: [["verdict", "STALE"], ["refund", "client refunded · full amount, no fee row"]],
+        note: "verdict is STALE: stale or invalid · refunded instead",
       },
     } as CommandResult;
     expect(verdictFor("settle", kv)).toBe("REFUNDED");

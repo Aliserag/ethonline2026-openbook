@@ -15,7 +15,7 @@
  * lifecycle the console's buy/deliver/settle also mutate. No chain call
  * exists in this file.
  */
-import { useEffect, useMemo, useState, type JSX } from "react";
+import { useEffect, useMemo, useRef, useState, type JSX } from "react";
 import { CONFIG, type DatasetConfig } from "../config";
 import { env, hasGraphKey } from "../env";
 import { demoAddress, getPublicClient, pickSigner } from "../data/chain";
@@ -275,6 +275,24 @@ export function Tour({ onClose }: { onClose: () => void }): JSX.Element {
     }
   };
 
+  // Focus the dialog when it opens and return focus to the entry trigger
+  // (the `data-tour-entry` button) when it closes — the same bar the
+  // Console/Palette set (focus moves with the surface, never through the
+  // background page).
+  const dialogRef = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    dialogRef.current?.focus();
+    // Hand focus back to the entry trigger after the dialog unmounts. The
+    // timeout is deliberately NOT cleared: it must run post-removal, once
+    // the browser has blurred the detached subtree onto <body>.
+    return () => {
+      setTimeout(() => {
+        const trigger = document.querySelector<HTMLElement>("[data-tour-entry]");
+        if (document.activeElement === document.body) trigger?.focus();
+      }, 0);
+    };
+  }, []);
+
   // Esc closes the tour from anywhere (inputs keep their own keys).
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
@@ -321,6 +339,8 @@ export function Tour({ onClose }: { onClose: () => void }): JSX.Element {
       role="dialog"
       aria-modal="true"
       aria-label="the 5-step walk as console commands"
+      tabIndex={-1}
+      ref={dialogRef}
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onClose();
       }}
