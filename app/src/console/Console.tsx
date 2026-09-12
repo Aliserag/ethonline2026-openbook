@@ -22,6 +22,8 @@ import { createEnsTextReader } from "../../../mcp/src/ens";
 import { commands, dispatch, type CommandContext, type CommandResult } from "./registry";
 import { renderResult } from "./renderers";
 import "./commands/inspect"; // registers the 11 inspect commands (side effect)
+import "./commands/act"; // registers buy/deliver/settle (side effect)
+import "./commands/sandbox"; // registers policy refusals try-overspend + sandbox stale/claim (side effect)
 
 interface Entry {
   id: number;
