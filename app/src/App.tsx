@@ -650,7 +650,7 @@ export default function App() {
         <div className="chainbadges">
           <span>arc · {arcChain.id}</span>
           <span>
-            <Tip text="ENS is the agent's storefront: the name publishes the menu, the price, the SLA and the payee as onchain records. Buyers resolve it before paying — and the quote hard-fails if the records are missing. No ENS, no payment.">
+            <Tip text="ENS is the agent's storefront: the name publishes the menu, the price, the SLA and the payee as onchain records. Buyers resolve it before paying, and the quote hard-fails if the records are missing. No ENS, no payment.">
               ensv2 · sepolia
             </Tip>
           </span>
@@ -699,9 +699,9 @@ export default function App() {
               n={1}
               state={ensDone ? "done" : ensLoading ? "active" : "failed"}
               stateLabel={ensLoading ? "resolving…" : undefined}
-              title="The storefront — what's for sale"
+              title="The storefront: what's for sale"
               what="This table is the storefront: the datasets on offer, their prices and their SLA, read live from openbook.eth."
-              why="The storefront is a name, not a file. openbook.eth publishes its menu, price and service-level promise as live ENSv2 records. If a record is missing, nothing gets priced: the agent will not quote a hard-coded value. Every dataset is one config entry — any of The Graph's 15,000+ subgraphs can be sold this way."
+              why="The storefront is a name, not a file. openbook.eth publishes its menu, price and service-level promise as live ENSv2 records. If a record is missing, nothing gets priced: the agent will not quote a hard-coded value. Every dataset is one config entry, and any of The Graph's 15,000+ subgraphs can be sold this way."
             >
               {ensLoading && (
                 <p className="notice" role="status">
@@ -967,7 +967,7 @@ export default function App() {
               state={stepState(step.settle)}
               title="Settle or refund"
               what="The verdict is deterministic open code: fresh data settles, stale data refunds."
-              why="The payment itself checks the SLA: our SlaHook contract reverts a stale completion onchain. The agent is never paid for stale data, the buyer never asks for a refund — and 2% of every settlement routes to the protocol treasury."
+              why="The payment itself checks the SLA: our SlaHook contract reverts a stale completion onchain. The agent is never paid for stale data, the buyer never asks for a refund, and 2% of every settlement routes to the protocol treasury."
             >
               <p style={{ marginTop: 0 }}>
                 <button
@@ -999,8 +999,8 @@ export default function App() {
               )}
               {job !== null && delivery !== null && settle === null && (
                 <p className="caption" style={{ marginTop: 8 }}>
-                  The verdict is open code: a stale delivery triggers the refund in the same click —
-                  and even if nobody clicks, anyone can claim it onchain after the job deadline.
+                  The verdict is open code: a stale delivery triggers the refund in the same click.
+                  And even if nobody clicks, anyone can claim it onchain after the job deadline.
                 </p>
               )}
               {settleError !== null && (
@@ -1044,7 +1044,7 @@ export default function App() {
                 <div className="steptitle">
                   <h2 id="pnl-title">The agent's books</h2>
                   <p className="what">
-                    Running P&amp;L, onchain and queryable. Every settlement — and the protocol fee — lands here.
+                    Running P&amp;L, onchain and queryable. Every settlement (and the protocol fee) lands here.
                   </p>
                 </div>
                 <span className="stepstate">
@@ -1099,7 +1099,7 @@ export default function App() {
                 {treasury !== null && (
                   <div className="refunds-live">
                     <p className="cap">
-                      the protocol fee — {(treasury.feeBP / 100).toFixed(0)}% of every settlement, read live
+                      the protocol fee: {(treasury.feeBP / 100).toFixed(0)}% of every settlement, read live
                       from the escrow. The treasury is the same policy-gated wallet that receives settlements.
                     </p>
                     <ul className="running">
@@ -1120,8 +1120,8 @@ export default function App() {
                   <Tip
                     text={
                       pnlMeta !== null && pnlHead !== null
-                        ? `The books are a subgraph indexed from Arc: it has read up to block ${pnlMeta}, the chain head is ${pnlHead} — ${Math.max(0, pnlHead - pnlMeta)} blocks behind, seconds of lag.`
-                        : "The books are a subgraph indexed from Arc — block freshness is being checked."
+                        ? `The books are a subgraph indexed from Arc: it has read up to block ${pnlMeta}, the chain head is ${pnlHead}, ${Math.max(0, pnlHead - pnlMeta)} blocks behind, seconds of lag.`
+                        : "The books are a subgraph indexed from Arc; block freshness is being checked."
                     }
                   >
                     live

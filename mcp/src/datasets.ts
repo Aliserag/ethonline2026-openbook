@@ -4,7 +4,7 @@
  * The global "Start Fresh" data spine is two pinned live Messari subgraphs
  * (verified anchors from the plan). Configs may also self-register datasets:
  * anything not in PINNED_SUBGRAPH_IDS is served from the config's own
- * subgraphId — that is how the Compound V3 demo config reuses this server.
+ * subgraphId, that is how the Compound V3 demo config reuses this server.
  *
  * Secrecy rule: configs NEVER hold private keys. `operatorKey` is either a hex
  * key (user-authored local configs) or, in committed configs, the NAME of an
@@ -38,12 +38,12 @@ export interface DatasetConfig {
   schema: string;
   description: string;
   freshness: FreshnessConfig;
-  /** price in 6-decimal USDC units (100000 = 0.10 USDC) — display only; the
+  /** price in 6-decimal USDC units (100000 = 0.10 USDC), display only; the
    * authoritative price comes from the ENS svc.price record at quote time */
   priceUsdc: number;
   /** true for the global Start Fresh pins; configs set pseudo-field via loader */
   pinned: boolean;
-  /** the dataset's settlement chain — the freshness head reference (Alchemy
+  /** the dataset's settlement chain, the freshness head reference (Alchemy
    * eth_blockNumber); the Gateway _meta has no chainHeadBlock field */
   chain: "arbitrum" | "ethereum";
 }
@@ -66,7 +66,7 @@ export interface OpenBookConfig {
   ens: string;
   /** ERC-8183 AgenticCommerce address on Arc testnet */
   escrow: `0x${string}`;
-  /** seller payout address — DISPLAY-ONLY fallback; get_quote resolves svc.payee LIVE from ENSv2, so "" (unset) is valid */
+  /** seller payout address, DISPLAY-ONLY fallback; get_quote resolves svc.payee LIVE from ENSv2, so "" (unset) is valid */
   payee: string;
   operatorKey: string;
   gateway: GatewayConfig;
@@ -91,14 +91,14 @@ function requireAddress(value: unknown, field: string): `0x${string}` {
 }
 
 /**
- * Optional address: "" means unset. Config payee is display-only — get_quote
+ * Optional address: "" means unset. Config payee is display-only, get_quote
  * resolves svc.payee LIVE from the ENS records, so a zero-address placeholder
  * is worse than absent (it reads as a real payout target).
  */
 function requireAddressOrEmpty(value: unknown, field: string): string {
   if (typeof value !== "string" || (value.length !== 0 && !ADDRESS_RE.test(value))) {
     throw new Error(
-      `mcp config: ${field} must be a 0x-prefixed 40-hex address or "" (unset — display-only; get_quote resolves svc.payee live)`,
+      `mcp config: ${field} must be a 0x-prefixed 40-hex address or "" (unset, display-only; get_quote resolves svc.payee live)`,
     );
   }
   return value;
