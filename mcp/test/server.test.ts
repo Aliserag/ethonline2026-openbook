@@ -11,6 +11,7 @@ import { keccak256, toBytes } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { createApp, createMcpServer } from "../src/server";
+import { escrowAddress as settleEscrowAddress } from "../../agent/escrow";
 import {
   loadConfigFile,
   type OpenBookConfig,
@@ -425,6 +426,8 @@ describe("escrow anchor", () => {
   it("boots against the config default (our market instance) with no override", () => {
     const app = createApp(configOf("openbook.json"), { env: {} });
     expect(app.escrowAnchor).toBe(MARKET_INSTANCE);
+    // the process-wide settle target follows the boot anchor, not the Task-0 default
+    expect(settleEscrowAddress()).toBe(MARKET_INSTANCE);
   });
 
   it("boots against the reference instance when OPENBOOK_ESCROW is set", () => {
@@ -432,6 +435,7 @@ describe("escrow anchor", () => {
       env: { OPENBOOK_ESCROW: REFERENCE_INSTANCE },
     });
     expect(app.escrowAnchor).toBe(REFERENCE_INSTANCE);
+    expect(settleEscrowAddress()).toBe(REFERENCE_INSTANCE);
     // the five tools still answer on the same server
     const mcp = createMcpServer(app);
     expect(mcp).toBeDefined();

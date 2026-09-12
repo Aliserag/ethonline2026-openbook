@@ -48,6 +48,7 @@ import {
   type EnsTextReader,
 } from "./ens";
 import { verifyDelivery as verifyDeliveryCore } from "./escrow";
+import { setEscrowAddress } from "../../agent/escrow";
 import { ARC_MS_PER_BLOCK, ARC_RPC_URL } from "./constants";
 
 // --- domain types ---------------------------------------------------------------
@@ -224,6 +225,11 @@ export function createApp(config: OpenBookConfig, deps: AppDeps = {}): OpenBookA
   // The escrow anchor: the config default (validated by loadConfigFile) is the
   // world this MCP boots against; OPENBOOK_ESCROW overrides it when set.
   const escrowAnchor = resolveEscrowAnchor(config, env);
+  // Point every onchain operation in this process (verify_delivery settle,
+  // job reads) at the resolved anchor — the agent layer's singleton seam,
+  // same as buyer-cli/seller use. Without this, settle would still target the
+  // shared reference deployment no matter which world the server booted on.
+  setEscrowAddress(escrowAnchor);
 
   const displayPrice = (priceUsdc: number): string =>
     `${(priceUsdc / 1_000_000).toFixed(2)} USDC/query`;
