@@ -21,6 +21,7 @@ bun install          # from the repo root (workspace: mcp)
 | `OPERATOR_PRIVATE_KEY` | `query_dataset` attestation, `verify_delivery` settle | seller/operator key (falls back to `ARC_TESTNET_PK`) |
 | `SEPOLIA_RPC`        | `get_quote`, `list_datasets` ENS reads | any Sepolia RPC (default: public Sepolia)      |
 | `ARC_TESTNET_RPC`    | `verify_delivery` settle            | default `https://rpc.testnet.arc.io`          |
+| `OPENBOOK_ESCROW`    | escrow anchor override              | overrides the config default escrow at boot (validated — a malformed value refuses to boot) |
 
 No secrets live in the repo or in `mcp/config/*.json` — `operatorKey` names the
 env var that holds the key.
@@ -94,7 +95,8 @@ attestation signature from the operator key.
 {
   "name": "my-store",
   "ens": "openbook.eth",                    // ENSv2 name (Sepolia) with svc.* records
-  "escrow": "0x0747EEf0706327138c69792bF28Cd525089e4583", // verified ERC-8183
+  "escrow": "0x967e005154D0F62C33Eac8E2F44b44d4C4C07Dd5", // our market escrow instance (2% venue fee)
+                                            // override at boot with OPENBOOK_ESCROW
   "payee": "0x0000…0000",                   // set to your PolicyWallet; get_quote
                                             // uses the live svc.payee record anyway
   "operatorKey": "OPERATOR_PRIVATE_KEY",    // env var NAME (no secrets in repo)

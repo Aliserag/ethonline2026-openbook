@@ -47,7 +47,7 @@ import {
   resolveServiceRecords,
   type EnsTextReader,
 } from "./ens";
-import { escrowAddress, verifyDelivery as verifyDeliveryCore } from "./escrow";
+import { verifyDelivery as verifyDeliveryCore } from "./escrow";
 import { ARC_MS_PER_BLOCK, ARC_RPC_URL } from "./constants";
 
 // --- domain types ---------------------------------------------------------------
@@ -132,6 +132,8 @@ export interface GetPnlResult {
 }
 
 export interface OpenBookApp {
+  /** The ERC-8183 escrow this app boots against — config default, or OPENBOOK_ESCROW override when set. */
+  escrowAnchor: `0x${string}`;
   listDatasets(): Promise<ListDatasetsResult>;
   getQuote(datasetId: string): Promise<GetQuoteResult>;
   queryDataset(datasetId: string, graphql: string): Promise<QueryDatasetResult>;
@@ -162,6 +164,25 @@ function stripMeta(data: unknown): unknown {
   const copy: Record<string, unknown> = { ...(data as Record<string, unknown>) };
   delete copy["_meta"];
   return copy;
+}
+
+const ESCROW_ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/;
+
+/**
+ * Resolve the ERC-8183 escrow this MCP boots against: the config default
+ * (already validated as an address by loadConfigFile) is the world; an
+ * OPENBOOK_ESCROW override wins when set. The override is validated here so a
+ * malformed value fails loudly at boot — never a silent fallback.
+ */
+function resolveEscrowAnchor(config: OpenBookConfig, env: Record<string, string | undefined>): `0x${string}` {
+  const raw = env["OPENBOOK_ESCROW"];
+  if (raw === undefined || raw === "") return config.escrow;
+  if (!ESCROW_ADDRESS_RE.test(raw)) {
+    throw new Error(
+      `refusing to boot: OPENBOOK_ESCROW ${JSON.stringify(raw)} is not a valid ERC-8183 escrow address (expected 0x + 40 hex chars)`,
+    );
+  }
+  return raw as `0x${string}`;
 }
 
 /**
@@ -200,12 +221,9 @@ export function createApp(config: OpenBookConfig, deps: AppDeps = {}): OpenBookA
     return arcWallet;
   };
 
-  // escrow address must match the verified Task-0 anchor — refuse to run otherwise
-  if (escrowAddress(config).toLowerCase() !== "0x0747EEf0706327138c69792bF28Cd525089e4583".toLowerCase()) {
-    throw new Error(
-      `config escrow ${config.escrow} does not match the verified ERC-8183 reference deployment on Arc testnet`,
-    );
-  }
+  // The escrow anchor: the config default (validated by loadConfigFile) is the
+  // world this MCP boots against; OPENBOOK_ESCROW overrides it when set.
+  const escrowAnchor = resolveEscrowAnchor(config, env);
 
   const displayPrice = (priceUsdc: number): string =>
     `${(priceUsdc / 1_000_000).toFixed(2)} USDC/query`;
@@ -390,7 +408,7 @@ export function createApp(config: OpenBookConfig, deps: AppDeps = {}): OpenBookA
     return { dailyPnLs: rows, metaBlock: meta.block };
   };
 
-  return { listDatasets, getQuote, queryDataset, verifyDelivery: verifyDeliveryTool, getPnl };
+  return { escrowAnchor, listDatasets, getQuote, queryDataset, verifyDelivery: verifyDeliveryTool, getPnl };
 }
 
 // --- MCP registration --------------------------------------------------------------

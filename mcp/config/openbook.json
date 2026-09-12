@@ -1,7 +1,7 @@
 {
   "name": "openbook",
   "ens": "openbook.eth",
-  "escrow": "0x0747EEf0706327138c69792bF28Cd525089e4583",
+  "escrow": "0x967e005154D0F62C33Eac8E2F44b44d4C4C07Dd5",
   "payee": "",
   "operatorKey": "OPERATOR_PRIVATE_KEY",
   "gateway": {

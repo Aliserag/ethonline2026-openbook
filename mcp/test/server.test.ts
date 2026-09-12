@@ -396,7 +396,8 @@ describe("config files", () => {
   it("openbook.json pins the two Messari subgraph ids verbatim", () => {
     const cfg = configOf("openbook.json");
     expect(cfg.ens).toBe("openbook.eth");
-    expect(cfg.escrow).toBe("0x0747EEf0706327138c69792bF28Cd525089e4583");
+    // M4b: the default world is our market escrow instance (env-overrideable)
+    expect(cfg.escrow).toBe("0x967e005154D0F62C33Eac8E2F44b44d4C4C07Dd5");
     const byId = Object.fromEntries(cfg.datasets.map((d) => [d.id, d]));
     expect(byId["aave-v3-arbitrum-lending"].subgraphId).toBe(
       "4xyasjQeREe7PxnF6wVdobZvCw5mhoHZq3T7guRpuNPf",
@@ -412,6 +413,34 @@ describe("config files", () => {
     expect(compound).toBeDefined();
     expect(compound?.schema).toBe("lending/3.1.0");
     expect(compound?.freshness.maxAge).toBeGreaterThan(0);
+  });
+});
+
+// --- escrow anchor (M4b: config default, env-overrideable) ----------------------------
+
+describe("escrow anchor", () => {
+  const MARKET_INSTANCE = "0x967e005154D0F62C33Eac8E2F44b44d4C4C07Dd5";
+  const REFERENCE_INSTANCE = "0x0747EEf0706327138c69792bF28Cd525089e4583";
+
+  it("boots against the config default (our market instance) with no override", () => {
+    const app = createApp(configOf("openbook.json"), { env: {} });
+    expect(app.escrowAnchor).toBe(MARKET_INSTANCE);
+  });
+
+  it("boots against the reference instance when OPENBOOK_ESCROW is set", () => {
+    const app = createApp(configOf("openbook.json"), {
+      env: { OPENBOOK_ESCROW: REFERENCE_INSTANCE },
+    });
+    expect(app.escrowAnchor).toBe(REFERENCE_INSTANCE);
+    // the five tools still answer on the same server
+    const mcp = createMcpServer(app);
+    expect(mcp).toBeDefined();
+  });
+
+  it("refuses to boot on a malformed OPENBOOK_ESCROW (no silent fallback)", () => {
+    expect(() =>
+      createApp(configOf("openbook.json"), { env: { OPENBOOK_ESCROW: "0x1234" } }),
+    ).toThrow(/OPENBOOK_ESCROW/);
   });
 });
 
