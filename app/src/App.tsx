@@ -30,6 +30,7 @@ import { verifyDelivery } from "../../mcp/src/escrow";
 import { Console } from "./console/Console";
 import { TheaterRoute } from "./theater/Theater";
 import { SystemMap } from "./map/MapCanvas";
+import { Market } from "./components/Market";
 
 // T12: the `#tour` walk over the shell (Task 12 brief). Brought in with
 // React.lazy so the tour's own import of App's shared derivations (StepCard,
@@ -1254,6 +1255,8 @@ export default function App() {
       </main>
 
       <SystemMap />
+
+      <Market />
 
       <footer className="foot">
         <a
