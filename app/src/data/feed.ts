@@ -20,6 +20,8 @@ export interface Feed {
 /** A purchase executed in this browser session (shown before the subgraph indexes it). */
 export interface SessionRun {
   jobId: string;
+  /** blocks below the floor (fail runs) */
+  gap?: number;
   datasetId: string;
   amount: bigint;
   outcome: "settled" | "refunded" | "open";
@@ -44,6 +46,8 @@ export interface BoardRow {
   sellerName?: string;
   /** a deliverable was submitted onchain (so a refund means a failed check, not a no-show) */
   delivered: boolean;
+  /** blocks the delivery fell short of the freshness floor, when both are known and positive */
+  gap?: number;
 }
 
 export function latestRefund(jobs: JobView[]): JobView | null {
@@ -98,6 +102,7 @@ export function boardRows(
       seller: j.seller,
       sellerName: sellerNames[j.seller.toLowerCase()],
       delivered: j.metaBlock !== undefined,
+      gap: j.metaBlock !== undefined && Number(j.minBlock) > j.metaBlock ? Number(j.minBlock) - j.metaBlock : undefined,
     });
   }
   for (const r of runs) {
@@ -118,6 +123,7 @@ export function boardRows(
       refundReason: r.refundReason,
       seller: null,
       delivered: true,
+      gap: r.gap,
     });
   }
   return [...byId.values()]

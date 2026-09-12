@@ -48,20 +48,21 @@ export function Hero({ onBuy, onFail }: { onBuy(): void; onFail(): void }): JSX.
         <div>
           <h1 id="hero-title">When an agent buys stale data, the money comes back. Automatically.</h1>
           <p className="lede">
-            Every purchase carries a freshness promise, locked into an escrow on Arc the moment it is paid.
-            Fresh data settles and the seller is paid. Stale data is refunded onchain, with nobody asked.
+            OpenBook is a data marketplace for AI agents. Every purchase carries a freshness promise, locked into
+            an escrow on Arc the moment it is paid. Fresh data settles and the seller is paid. Stale data is
+            refunded onchain, without anyone asking.
           </p>
           <div className="hero__actions">
             <button type="button" className="btn" onClick={onBuy}>
               Buy a query
             </button>
-            <button type="button" className="btn btn--ghost" onClick={onFail}>
-              Watch a refund happen
+            <button type="button" className="linkbtn hero__alt" onClick={onFail}>
+              or watch a refund happen
             </button>
           </div>
           <p className="tiny hero__note">
-            No wallet, no keys. Our demo wallet pays with testnet USDC on the live escrow. Arc testnet, ENSv2 on
-            Sepolia, The Graph.
+            Both run a real purchase on the live escrow, right here, in about twenty seconds. No wallet, no keys:
+            our demo wallet pays with testnet USDC. Arc testnet, ENSv2 on Sepolia, The Graph.
           </p>
         </div>
         <ReceiptCard row={refund} state={feed.state} reason={feed.reason} />

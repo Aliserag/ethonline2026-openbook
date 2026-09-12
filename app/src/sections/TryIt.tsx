@@ -35,7 +35,7 @@ const ENS = createEnsTextReader({ rpcUrl: env.sepoliaRpc });
 
 type Summary = { kind: "settled" | "refunded" | "failed"; text: string };
 
-export function TryIt({ armed }: { armed: "fresh" | "fail" | null }): JSX.Element {
+export function TryIt({ armed, onArmedConsumed }: { armed: "fresh" | "fail" | null; onArmedConsumed(): void }): JSX.Element {
   const [datasetId, setDatasetId] = useState(CONFIG.datasets[0]?.id ?? "");
   const [quote, setQuote] = useState<DatasetQuote | null>(null);
   const [quoteError, setQuoteError] = useState<string | null>(null);
@@ -63,10 +63,14 @@ export function TryIt({ armed }: { armed: "fresh" | "fail" | null }): JSX.Elemen
     };
   }, [dataset]);
 
+  // A hero button is the real action: once the quote is in, it runs the purchase.
   useEffect(() => {
-    if (armed === "fail") failBtn.current?.focus();
-    if (armed === "fresh") buyBtn.current?.focus();
-  }, [armed]);
+    if (armed === null || busy || quote === null) return;
+    (armed === "fail" ? failBtn : buyBtn).current?.focus();
+    onArmedConsumed();
+    void run(armed);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [armed, busy, quote]);
 
   const run = async (m: "fresh" | "fail"): Promise<void> => {
     if (busy) return;
@@ -83,6 +87,7 @@ export function TryIt({ armed }: { armed: "fresh" | "fail" | null }): JSX.Elemen
     if (result.ok && result.jobId) {
       recordRun({
         jobId: result.jobId,
+        gap: result.metaBlock !== undefined && result.minBlock !== undefined && result.minBlock > result.metaBlock ? result.minBlock - result.metaBlock : undefined,
         datasetId: dataset.id,
         amount: BigInt(result.amount ?? 0),
         outcome: result.outcome ?? "open",
@@ -141,7 +146,7 @@ export function TryIt({ armed }: { armed: "fresh" | "fail" | null }): JSX.Elemen
           </p>
           <div className="try__actions">
             <button ref={buyBtn} type="button" className="btn" disabled={busy || quote === null} onClick={() => run("fresh")}>
-              {busy && mode === "fresh" ? "Buying…" : `Buy for ${quote ? priceLabel(quote.amountUsdc) : "…"}`}
+              {busy && mode === "fresh" ? "Buying…" : `Buy a query · ${quote ? priceLabel(quote.amountUsdc) : "…"}`}
             </button>
             <button
               ref={failBtn}
@@ -154,8 +159,9 @@ export function TryIt({ armed }: { armed: "fresh" | "fail" | null }): JSX.Elemen
             </button>
           </div>
           <p className="tiny try__hint">
-            Buy runs the real purchase. Make it fail sets the freshness floor one block above the delivery, so the
-            contract must refuse payment and refund. Both spend our demo wallet's testnet USDC on Arc.
+            Buy runs the real purchase. Make it fail runs the same purchase but demands data newer than what
+            arrives, so the contract has to refuse payment and the escrow refunds. Both spend our demo wallet's
+            testnet USDC on Arc; purchases from this page are sold by that wallet to itself.
           </p>
         </div>
         <div className="try__run">

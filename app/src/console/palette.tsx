@@ -5,6 +5,7 @@
  * is the overlay shell: ↑/↓ choose, Enter runs, Esc closes.
  */
 import { useEffect, useMemo, useRef, useState, type JSX, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useModalFocus } from "../ui/useModalFocus";
 
 export interface PaletteItem {
   name: string;
@@ -144,6 +145,7 @@ export function Palette({
   const [query, setQuery] = useState("");
   const [sel, setSel] = useState(0);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  useModalFocus(open, { inertSelectors: ["main"], focus: () => inputRef.current });
 
   useEffect(() => {
     if (open) {
@@ -185,6 +187,7 @@ export function Palette({
     <div
       className="palette"
       role="dialog"
+      aria-modal="true"
       aria-label="command palette (fuzzy over commands and datasets)"
       onClick={(event) => {
         if (event.target === event.currentTarget) onClose();

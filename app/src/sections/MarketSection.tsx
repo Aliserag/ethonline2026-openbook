@@ -74,7 +74,8 @@ export function MarketSection(): JSX.Element {
         <p className="lede">
           A seller is an ENS name with four records: what it sells, the price, the freshness promise, and where to
           pay. Publish them under openbook.eth and buyers can find you. Two reference sellers we operate are listed
-          today.
+          today; purchases made from this page are sold by our demo wallet to itself and count in the books, not on
+          these cards.
         </p>
       </div>
       {sellers.value === null && (

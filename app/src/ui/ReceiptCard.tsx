@@ -1,11 +1,12 @@
 import type { JSX } from "react";
 import type { BoardRow } from "../data/feed";
 import type { LiveState } from "../data/types";
-import { datasetTitle, priceLabel, relativeTime } from "../copy/plain";
+import { datasetTitle, priceLabel, relativeTime, stalenessLabel } from "../copy/plain";
 import { explorerUrl, truncateHash } from "../format";
 import { Badge } from "./Badge";
 
-export function refundWhy(reason: string | undefined, delivered = true): string {
+export function refundWhy(reason: string | undefined, delivered = true, gap?: number): string {
+  if (gap !== undefined && gap > 0) return `the delivery was ${stalenessLabel(0, gap, "arbitrum")}`;
   if (reason === "STALE_DATA") return "the delivery missed the freshness floor";
   if (reason === "INVALID_HASH") return "the delivery did not match its proof";
   if (delivered) return "the delivery did not clear the freshness check, so the escrow returned the payment";
@@ -50,7 +51,7 @@ export function ReceiptCard({
         <dt>{row.datasetId ? "dataset" : "seller"}</dt>
         <dd>{row.datasetId ? datasetTitle(row.datasetId) : (row.sellerName ?? (row.seller ? truncateHash(row.seller) : "onchain data query"))}</dd>
         <dt>why</dt>
-        <dd>{refundWhy(row.refundReason, row.delivered)}</dd>
+        <dd>{refundWhy(row.refundReason, row.delivered, row.gap)}</dd>
         <dt>job</dt>
         <dd>{row.jobId}</dd>
         {row.txHash && (

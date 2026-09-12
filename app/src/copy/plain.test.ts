@@ -9,7 +9,8 @@ describe("plain copy", () => {
     expect(blocksToDuration(1, "arbitrum")).toBe("under a second");
   });
   test("freshness promise", () => {
-    expect(freshnessPromise(50, "arbitrum")).toBe("fresh within 50 blocks (about 13 seconds)");
+    expect(freshnessPromise(50, "arbitrum")).toBe("fresh within 50 Arbitrum blocks (about 13 seconds)");
+    expect(freshnessPromise(50, "ethereum")).toBe("fresh within 50 Ethereum blocks (about 10 minutes)");
   });
   test("staleness label", () => {
     expect(stalenessLabel(100, 101, "arbitrum")).toBe("1 block below the freshness floor");

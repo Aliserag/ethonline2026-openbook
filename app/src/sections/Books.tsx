@@ -31,7 +31,7 @@ function Row({ row, isNew }: { row: BoardRow; isNew: boolean }): JSX.Element {
       <span className="mono">{priceLabel(row.amount)}</span>
       <span>
         <Badge kind={kind}>
-          {row.outcome === "settled" ? "Settled" : row.outcome === "refunded" ? "Refunded" : "Open"}
+          {row.outcome === "settled" ? "Settled" : row.outcome === "refunded" ? "Refunded" : "In progress"}
         </Badge>
         {row.confirming && <span className="tiny"> confirming</span>}
       </span>

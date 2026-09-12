@@ -16,8 +16,10 @@ export function blocksToDuration(blocks: number, chain: DatasetChain): string {
   return `about ${Math.round(hours)} hours`;
 }
 
+const CHAIN_NAME: Record<DatasetChain, string> = { arbitrum: "Arbitrum", ethereum: "Ethereum" };
+
 export function freshnessPromise(maxBlockLag: number, chain: DatasetChain): string {
-  return `fresh within ${maxBlockLag} blocks (${blocksToDuration(maxBlockLag, chain)})`;
+  return `fresh within ${maxBlockLag} ${CHAIN_NAME[chain]} blocks (${blocksToDuration(maxBlockLag, chain)})`;
 }
 
 export function stalenessLabel(metaBlock: number, minBlock: number, _chain: DatasetChain): string {

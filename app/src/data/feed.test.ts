@@ -60,9 +60,12 @@ describe("feed derivations", () => {
     expect(rows[2]!.delivered).toBe(false);
     expect(rows[0]!.delivered).toBe(true);
   });
-  test("boardRows marks delivered when the job carries a metaBlock", () => {
-    const jobs = [job({ jobId: 6n, state: "refunded", metaBlock: 123 })];
-    expect(boardRows(jobs, [], 5)[0]!.delivered).toBe(true);
+  test("boardRows marks delivered and the staleness gap when the job carries a metaBlock", () => {
+    const jobs = [job({ jobId: 6n, state: "refunded", metaBlock: 123, minBlock: 130n })];
+    const row = boardRows(jobs, [], 5)[0]!;
+    expect(row.delivered).toBe(true);
+    expect(row.gap).toBe(7);
+    expect(boardRows([job({ jobId: 7n, state: "settled", metaBlock: 200, minBlock: 130n })], [], 5)[0]!.gap).toBeUndefined();
   });
   test("boardRows names sellers by operator address", () => {
     const jobs = [job({ jobId: 7n, seller: "0xAbC" as `0x${string}`, state: "settled" })];

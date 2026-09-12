@@ -55,10 +55,10 @@ export default function App(): JSX.Element {
       ) : (
         <main>
           <Hero onBuy={() => go("fresh")} onFail={() => go("fail")} />
-          <TryIt armed={armed} />
+          <TryIt armed={armed} onArmedConsumed={() => setArmed(null)} />
           <MarketSection />
           <Books />
-          <Builders onConsole={openConsole} />
+          <Builders onConsole={openConsole} onBuy={() => go("fresh")} />
           <footer className="foot wrap">
             <span className="tiny">OpenBook · built for ETHOnline 2026 · Arc testnet, ENSv2 on Sepolia, The Graph</span>
           </footer>

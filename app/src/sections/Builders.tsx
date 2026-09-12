@@ -1,6 +1,6 @@
 import type { JSX } from "react";
 
-export function Builders({ onConsole }: { onConsole(): void }): JSX.Element {
+export function Builders({ onConsole, onBuy }: { onConsole(): void; onBuy(): void }): JSX.Element {
   return (
     <section id="how" className="section wrap" aria-labelledby="how-title">
       <div className="section__head">
@@ -34,6 +34,12 @@ export function Builders({ onConsole }: { onConsole(): void }): JSX.Element {
             editing a record. Buyers refuse to pay a name without them.
           </p>
         </article>
+      </div>
+      <div className="closing">
+        <p className="lede">Watch the escrow do it. One click, no wallet.</p>
+        <button type="button" className="btn" onClick={onBuy}>
+          Buy a query
+        </button>
       </div>
       <div className="builders__links">
         <a href="https://github.com/Aliserag/OpenBook" target="_blank" rel="noreferrer">

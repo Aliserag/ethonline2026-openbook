@@ -21,7 +21,8 @@
  * the subgraph (entity ids embed `txHash || logIndex`) and falls back to the
  * chain scan only when the subgraph lacks the row.
  */
-import { useEffect, useMemo, useState, type JSX } from "react";
+import { useEffect, useMemo, useRef, useState, type JSX } from "react";
+import { useModalFocus } from "../ui/useModalFocus";
 import { parseAbi, type PublicClient } from "viem";
 import { CONFIG } from "../config";
 import { env } from "../env";
@@ -344,9 +345,16 @@ export function Theater({ jobId, onClose }: { jobId: string; onClose: () => void
   const data = live.value;
   const frame = frames[Math.min(index, Math.max(0, frames.length - 1))];
   const stateStamp = data?.job.state ?? "open";
+  const rootRef = useRef<HTMLElement | null>(null);
+  useModalFocus(true, {
+    inertSelectors: ["main", ".console", ".console__launcher"],
+    focus: () => rootRef.current?.querySelector<HTMLElement>("button, a[href]") ?? rootRef.current,
+  });
 
   return (
     <section
+      ref={rootRef}
+      tabIndex={-1}
       className="theater"
       role="dialog"
       aria-modal="true"
