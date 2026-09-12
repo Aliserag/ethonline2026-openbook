@@ -29,6 +29,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { privateKeyToAccount } from "viem/accounts";
 import type { Address } from "viem";
+import { setEscrowAddress } from "./escrow";
 import {
   createEnsTextReader,
   parsePriceToAmount6dec,
@@ -142,18 +143,36 @@ const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,31}$/;
 const ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/;
 const HEX_KEY_RE = /^0x[0-9a-fA-F]{64}$/;
 
-/** Parse a bare decimal USDC amount ("0.12") into 6-decimal units (120000). */
+/**
+ * Parse a bare decimal USDC amount ("0.12", "0.005") into 6-decimal units
+ * (120000, 5000). Exact integer arithmetic: more than 6 decimals cannot be
+ * represented in the 6-dec svc.price record and is rejected, never rounded.
+ */
 export function parsePriceToUsdc6dec(raw: string): number {
-  const match = /^\s*([0-9]+(?:\.[0-9]+)?)\s*$/.exec(raw);
+  const match = /^\s*([0-9]+)(?:\.([0-9]+))?\s*$/.exec(raw);
   if (!match) {
     throw new Error(`sell init: --price must be a decimal USDC amount (got "${raw}")`);
   }
-  return Math.round(parseFloat(match[1]) * 1_000_000);
+  const fraction = match[2] ?? "";
+  if (fraction.length > 6) {
+    throw new Error(
+      `sell init: --price ${raw} has ${fraction.length} decimals; the svc.price record is 6-decimal USDC (max 6)`,
+    );
+  }
+  const units = Number(`${match[1]}${fraction.padEnd(6, "0")}`);
+  if (!Number.isSafeInteger(units)) {
+    throw new Error(`sell init: --price ${raw} is too large for 6-decimal USDC units`);
+  }
+  return units;
 }
 
-/** Render 6-decimal USDC units as a fixed-2 display string ("0.12"). */
+/**
+ * Render 6-decimal USDC units as the exact decimal string of the record value
+ * ("0.005", "0.12") — never rounded. toString() of an integer-unit amount is
+ * exact for every 6-dec value ≥ 1 unit (1e-6 floor: "0.000001").
+ */
 export function usdc6decToDisplay(amount6dec: number): string {
-  return (amount6dec / 1_000_000).toFixed(2);
+  return (amount6dec / 1_000_000).toString();
 }
 
 export interface InitOptions {
@@ -663,12 +682,27 @@ export interface ServeOptions {
   since?: bigint;
 }
 
-/** Mirror agent/seller.ts main(): the loop body is serveFundedJobs, delegated. */
+/**
+ * Point the agent escrow module at the config's escrow — the same seam
+ * buyer-cli honors via OPENBOOK_ESCROW. The loop's state reads, submits and
+ * tallies then target the seller's escrow (SellerConfig.escrow is the market
+ * instance), never the module default.
+ */
+export function applySellerEscrow(seller: SellerConfig): void {
+  setEscrowAddress(seller.escrow);
+}
+
+/**
+ * Mirror agent/seller.ts main(): the loop body is serveFundedJobs, delegated.
+ * The escrow seam is applied BEFORE the keyless skip so a skip leaves no stale
+ * module target behind and the keyed loop always serves the config's escrow.
+ */
 export async function serveSellerConfig(
   seller: SellerConfig,
   opts: ServeOptions,
   env: Record<string, string | undefined>,
 ): Promise<{ skipped: boolean }> {
+  applySellerEscrow(seller);
   const config = toOpenBookConfig(seller);
   const operatorKey = resolveOperatorKey(config, env);
   const gatewayKey = resolveGatewayKey(config, env);

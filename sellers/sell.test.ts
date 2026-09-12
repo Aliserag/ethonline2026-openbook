@@ -11,6 +11,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Address } from "viem";
+import { escrowAddress, setEscrowAddress } from "../agent/escrow";
 import {
   MARKET_ESCROW,
   MARKET_HOOK,
@@ -21,7 +22,9 @@ import {
   loadSellerConfig,
   parsePriceToUsdc6dec,
   registerSeller,
+  serveSellerConfig,
   toOpenBookConfig,
+  usdc6decToDisplay,
   type RegisteredSeller,
   type RegisterDeps,
   type SellerConfig,
@@ -235,6 +238,57 @@ describe("svc.* records built for register", () => {
     });
     const ops = buildSvcRecords(two, ALPHA_OPERATOR);
     expect(JSON.parse(ops[2].value)).toEqual({ maxBlockLag: 20, maxLatencyMs: 2000 });
+  });
+
+  it("writes sub-cent prices verbatim on the authoritative record (no rounding)", () => {
+    for (const [units, display] of [
+      [5000, "0.005"],
+      [1000, "0.001"],
+      [120000, "0.12"],
+      [100000, "0.1"],
+      [1500000, "1.5"],
+      [1, "0.000001"],
+    ] as const) {
+      const cfg = alphaConfig();
+      cfg.datasets = [{ ...cfg.datasets[0], priceUsdc: units }];
+      const ops = buildSvcRecords(cfg, ALPHA_OPERATOR);
+      expect(ops[1]).toEqual({ type: "text", key: "svc.price", value: `${display} USDC/query` });
+    }
+  });
+});
+
+describe("price fidelity (init parse <-> svc.price record)", () => {
+  it("parses --price exactly and round-trips through the record display", () => {
+    for (const raw of ["0.005", "0.001", "0.12", "0.1", "1.5", "12"]) {
+      const units = parsePriceToUsdc6dec(raw);
+      expect(units).toBe(Math.round(parseFloat(raw) * 1_000_000)); // sanity: no drift
+      expect(usdc6decToDisplay(units)).toBe(raw);
+      expect(parsePriceToUsdc6dec(usdc6decToDisplay(units))).toBe(units);
+    }
+    // a sub-cent init writes the exact record the buyer will parse back
+    const cfg = buildSellerConfig({ name: "gamma", schema: "lending/3.1.0", price: "0.005" });
+    expect(cfg.datasets[0].priceUsdc).toBe(5000);
+    expect(buildSvcRecords(cfg, ALPHA_OPERATOR)[1].value).toBe("0.005 USDC/query");
+  });
+
+  it("rejects prices finer than 6 decimals instead of rounding them", () => {
+    expect(() => parsePriceToUsdc6dec("0.0000005")).toThrow(/6-decimal USDC/);
+    expect(() => parsePriceToUsdc6dec("0.1234567")).toThrow(/6-decimal USDC/);
+  });
+});
+
+describe("serve wiring", () => {
+  it("points the loop at the config's escrow through the escrow seam (buyer-cli's OPENBOOK_ESCROW seam)", async () => {
+    setEscrowAddress(null);
+    try {
+      const seller = alphaConfig();
+      expect(escrowAddress().toLowerCase()).not.toBe(seller.escrow.toLowerCase()); // module default
+      const out = await serveSellerConfig(seller, {}, {});
+      expect(out.skipped).toBe(true); // keyless: nothing served, seam still applied
+      expect(escrowAddress().toLowerCase()).toBe(MARKET_ESCROW.toLowerCase());
+    } finally {
+      setEscrowAddress(null);
+    }
   });
 });
 
