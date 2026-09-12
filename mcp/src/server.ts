@@ -99,7 +99,7 @@ export interface Attestation {
 export type QueryDatasetResult =
   | {
       unavailable: true;
-      reason: "STALE" | "NO_META";
+      reason: "STALE" | "NO_META" | "INDEXING_ERRORS";
       meta: GatewayMeta;
       freshnessMaxAge: number;
       detectedAt: string;
@@ -340,6 +340,10 @@ export function createApp(config: OpenBookConfig, deps: AppDeps = {}): OpenBookA
     }
     if (head - block > freshnessMaxAge) {
       return { unavailable: true, reason: "STALE", meta, freshnessMaxAge, detectedAt: new Date().toISOString() };
+    }
+    if (meta.hasIndexingErrors) {
+      // a subgraph reporting indexing errors is not sold as fresh, whatever its block
+      return { unavailable: true, reason: "INDEXING_ERRORS", meta, freshnessMaxAge, detectedAt: new Date().toISOString() };
     }
 
     // fresh: sign the deterministic attestation before returning (seller liability)

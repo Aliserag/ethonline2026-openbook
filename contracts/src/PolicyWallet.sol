@@ -18,7 +18,7 @@ interface IERC20 {
 ///      Gas floor on Arc is 20 Gwei (verified: lower tips are silently dropped).
 contract PolicyWallet {
     IERC20 public immutable usdc; // Arc testnet USDC (6 decimals)
-    address public owner; // ENS name manager key (treasury admin)
+    address public owner; // treasury admin (sets caps + allowlist); distinct from the ENS name owner
     address public agent; // agent key — may request withdrawals
     uint256 public perTxCap; // 6-dec units, per single withdrawal
     uint256 public dailyCap; // 6-dec units, per day bucket

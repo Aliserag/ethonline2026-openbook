@@ -25,7 +25,8 @@
  */
 import { keccak256, toBytes, type TransactionReceipt } from "viem";
 import { CONFIG, defaultQueryFor } from "../../config";
-import { env, hasGraphKey } from "../../env";
+import { env } from "../../env";
+import { appGatewayQuery, attestViaApi, hasGatewayAccess } from "../../data/api";
 import { ensureArcChain } from "../../arc";
 import { ADDR } from "../../data/addresses";
 import { checkWithdrawal, readPolicy, simulateOverspend } from "../../data/policy";
@@ -33,9 +34,8 @@ import { fetchPolicyRefusalsResilient, type PolicyRefusalView, type Resilient } 
 import { cachedAsOfLabel } from "../../data/cache";
 import { truncateHash, usdc6 } from "../../format";
 import { createEnsTextReader } from "../../../../mcp/src/ens";
-import { gatewayQuery, stripMeta } from "../../../../mcp/src/gateway";
+import { stripMeta } from "../../../../mcp/src/gateway";
 import {
-  attestDelivery,
   claimTimeout,
   createJobWithSla,
   ERC8183_ABI,
@@ -257,11 +257,11 @@ const staleCommand: Command = {
     const parsed = parseDeadline(argv);
     if ("error" in parsed) return { render: "text", data: `sandbox stale: ${parsed.error}` };
     const requested = parsed.seconds;
-    if (!hasGraphKey) {
+    if (!hasGatewayAccess()) {
       return {
         render: "kv",
         data: {
-          rows: [["gateway", "✗ delivery refused · VITE_GRAPH_GATEWAY_KEY is not set"]],
+          rows: [["gateway", "✗ delivery refused · no server route (VITE_API_BASE) and no VITE_GRAPH_GATEWAY_KEY"]],
         },
       };
     }
@@ -296,8 +296,7 @@ const staleCommand: Command = {
     let payloadHash: `0x${string}`;
     let metaBlock: number;
     try {
-      const { data, meta } = await gatewayQuery({
-        key: env.graphKey,
+      const { data, meta } = await appGatewayQuery({
         subgraphId: dataset.subgraphId,
         query: defaultQueryFor(dataset),
       });
@@ -362,7 +361,7 @@ const staleCommand: Command = {
     // that revert is rendered as the current evidence instead.
     let attested = false;
     try {
-      await attestDelivery(ctx.publicClient, signer.wallet, ADDR.hook, jobId, payloadHash, metaBlock, sla.minBlock);
+      await attestViaApi({ jobId: jobId.toString(), deliverable: payloadHash, metaBlock, minBlock: sla.minBlock });
       attested = true;
       rows.push(["attest", `ok · posted metaBlock ${metaBlock}, minBlock ${sla.minBlock}`]);
     } catch (error) {

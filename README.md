@@ -43,9 +43,11 @@ no keys needed; [raw subgraph](https://api.studio.thegraph.com/query/1760032/ope
 On the marketplace escrow the same mechanic refunded two stale deliveries in full:
 [job 42 (0.15)](https://testnet.arcscan.app/tx/0xcef2e16b6028c650d6a33f9e3838d57f3d99e62963d6c6e3194e71ed19c40ca1)
 and [job 46 (0.12)](https://testnet.arcscan.app/tx/0x85ef3525ea9e57818a6c99f8e858ed36a2994be1d30b8ce02b3d78a76964b9aa) —
-refund == funded amount for both, and the hook refuses stale payments first
-(`MissingAttestation` revert, settle at
-[0xd93aa95e…3ec4b6](https://testnet.arcscan.app/tx/0xd93aa95ee6552568653a8acfda21998a3173a87f537ebca79cf2d35ffd3ec4b6)).
+refund == funded amount for both. The hook gates every settlement: `complete()` on
+an unattested job reverts `MissingAttestation` (a call, so it leaves no transaction;
+reproduce it with `cast call` on job 38 before its attestation), and the settle that
+followed the attestation landed at
+[0xd93aa95e…3ec4b6](https://testnet.arcscan.app/tx/0xd93aa95ee6552568653a8acfda21998a3173a87f537ebca79cf2d35ffd3ec4b6).
 
 ![The books: the settlement board with the latest refunds and settlements](docs/images/app-books.png)
 
@@ -107,9 +109,11 @@ are organs, not stickers:
   ("No ENS, no payment"). The `svc.payee` record names the PolicyWallet as the
   only payee, the storefront can never route money anywhere but the
   policy-gated treasury. The agent also runs its **own ENSv2 subname registry**
-  (UserRegistry via the VerifiableFactory): each dataset is a subname, 
-  `aave-v3-arbitrum-lending.openbook.eth` prices itself, and the quote reads
-  the most specific records through the hierarchical registry.
+  (UserRegistry via the VerifiableFactory): a dataset can be its own subname,
+  `aave-v3-arbitrum-lending.openbook.eth` prices itself at 0.15 while the parent
+  quotes 0.10, and the quote reads the most specific records through the
+  hierarchical registry. `alpha.openbook.eth` has no resolver of its own and
+  resolves through the parent's (wildcard resolution).
 
 ## The app
 
@@ -232,7 +236,7 @@ of `openbook.eth` (`"source": "ENS"`), and `get_pnl` returns the P&L rows the
 `open-book` subgraph indexed from the escrow + policy contracts on Arc testnet.
 
 ```bash
-bun test          # 364 unit tests across agent, mcp, app and scripts; mock-injected, no keys needed
+bun test          # 366 unit tests across agent, mcp, app and scripts; mock-injected, no keys needed
 cd app && bun run dev   # the product page on localhost:5173 (reads Studio directly; the
                         # deployed lanes read it through the cached /api/subgraph proxy)
 ```
@@ -277,7 +281,7 @@ fresh clone, not inferred from the code.
 | The judge path works with **no keys** | fresh clone → the stdio command above returns a quote (`"source": "ENS"`) and the indexed P&L in under a second |
 | A stale delivery **refunded the buyer onchain, automatically** | the [Refunded tx](https://testnet.arcscan.app/tx/0x25e7805ae79fd8320ccbc74d90dead9d87b082fd299ecfe5a5949a968e16063f) and the `refunds` row in the live P&L |
 | Treasury policy is enforced **onchain** | `PolicyWallet` verified on ArcScan; `PolicyBlocked` rows indexed by the subgraph |
-| Contracts and tests are real | 20 forge tests · 364 unit tests · 3-job CI (badge above) · 20-check browser audit (`scripts/app-audit.mjs`) |
+| Contracts and tests are real | 20 forge tests · 366 unit tests · 3-job CI (badge above) · 20-check browser audit (`scripts/app-audit.mjs`) |
 
 **Not proven, stated plainly:**
 
@@ -290,6 +294,14 @@ fresh clone, not inferred from the code.
 - The escrow and identity contracts are Circle's ERC-8183 / ERC-8004 **reference
   deployments**; the custom work is `PolicyWallet.sol`, `SlaHook.sol`, the MCP seller, and
   the ENSv2 storefront.
+- **No Circle Agent Wallet or Nanopayments yet.** The buyer in the keyless demo is a local
+  key, not a Circle Agent Wallet, and per-query spend goes through the ERC-8183 escrow, not
+  x402. Agent Wallets do support Arc testnet; we chose the escrow path because the product
+  is the refund, which x402 cannot express. Moving the buyer onto an Agent Wallet is the
+  first mainnet step in RUNBOOK.md.
+- **The hook's freshness fact is the operator's claim.** The attester key lives on the
+  server (`/api/attest`), which verifies the job, its floor and the submitted deliverable
+  onchain before it posts, but the delivered block itself is not independently proven.
 
 ## Status
 

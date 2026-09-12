@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { runPurchase, type PurchaseDeps, type PurchaseEvent } from "./purchase";
+import { previewOf, runPurchase, type PurchaseDeps, type PurchaseEvent } from "./purchase";
 
 type Wallet = NonNullable<PurchaseDeps["signer"]>["wallet"];
 const wallet = { account: { address: "0xbuyer" }, writeContract: async () => "0xhash" } as unknown as Wallet;
@@ -98,7 +98,7 @@ describe("runPurchase", () => {
       deps({ hasGatewayKey: false }),
     );
     expect(result.failedStep).toBe("deliver");
-    expect(result.reason).toContain("Graph key");
+    expect(result.reason).toContain("server");
   });
 
   test("unknown dataset fails at quote", async () => {
@@ -115,5 +115,17 @@ describe("runPurchase", () => {
     expect(result.ok).toBe(false);
     expect(result.failedStep).toBe("settle");
     expect(steps(events).at(-1)).toBe("settle:failed");
+  });
+});
+
+describe("previewOf", () => {
+  test("names the first list field and up to three rows with one number each", () => {
+    const text = previewOf({ markets: [{ id: "0x1", name: "Aave USDC", totalValueLockedUSD: "1234567.891" }, { id: "0x2", name: "Aave WETH", totalValueLockedUSD: "10" }] });
+    expect(text).toBe("2 markets: Aave USDC (totalValueLockedUSD 1,234,567.89) · Aave WETH (totalValueLockedUSD 10)");
+  });
+  test("falls back to ids and to nested domain names", () => {
+    expect(previewOf({ registrations: [{ registrationDate: "1", domain: { name: "vitalik.eth" } }] })).toBe("1 registrations: vitalik.eth (registrationDate 1)");
+    expect(previewOf({ pools: [{ id: "0xabc" }] })).toBe("1 pools: 0xabc");
+    expect(previewOf({})).toBe("");
   });
 });

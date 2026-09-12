@@ -11,7 +11,8 @@
  * (controller ruling, carry-ins).
  */
 import { CONFIG, type DatasetConfig } from "../../config";
-import { env, hasGraphKey } from "../../env";
+import { env } from "../../env";
+import { hasGatewayAccess } from "../../data/api";
 import { ADDR } from "../../data/addresses";
 import { demoAddress } from "../../data/chain";
 import { readPolicy } from "../../data/policy";
@@ -196,10 +197,10 @@ const statusCommand: Command = {
       rows.push(["ens", `✗ ENS unreachable: ${reason(error)}`]);
     }
     rows.push([
-      "gateway key",
-      hasGraphKey
-        ? "present (VITE_GRAPH_GATEWAY_KEY)"
-        : "missing · set VITE_GRAPH_GATEWAY_KEY (delivery refused until then)",
+      "gateway",
+      hasGatewayAccess()
+        ? "server route /api/query (key held server-side)"
+        : "missing · no server route and no local key (delivery refused until then)",
     ]);
     const actJob = getActJob();
     if (actJob !== null) {

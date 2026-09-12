@@ -22,7 +22,8 @@
  */
 import { BaseError, keccak256, toBytes, type Address, type WalletClient } from "viem";
 import { CONFIG, defaultQueryFor, type DatasetConfig } from "../../config";
-import { env, hasGraphKey } from "../../env";
+import { env } from "../../env";
+import { appGatewayQuery, attestViaApi, hasGatewayAccess } from "../../data/api";
 import { ADDR } from "../../data/addresses";
 import { getProvider, arcWalletClient, ensureArcChain } from "../../arc";
 import { walletForDemo } from "../../data/chain";
@@ -35,10 +36,9 @@ import {
   parseSlaRecord,
   type EnsTextReader,
 } from "../../../../mcp/src/ens";
-import { gatewayQuery, stripMeta } from "../../../../mcp/src/gateway";
+import { stripMeta } from "../../../../mcp/src/gateway";
 import { defaultChainHeadResolver } from "../../../../mcp/src/chainhead";
 import {
-  attestDelivery,
   createJobWithSla,
   getJob,
   submitDeliverable,
@@ -725,11 +725,11 @@ const deliverCommand: Command = {
     if (job.outcome !== undefined) return terminalRefusal(job, "deliver");
     const dataset = CONFIG.datasets.find((d) => d.id === (id ?? job.datasetId));
     if (!dataset) return { render: "text", data: `deliver: unknown dataset ${id ?? job.datasetId}` };
-    if (!hasGraphKey) {
+    if (!hasGatewayAccess()) {
       return {
         render: "kv",
         data: {
-          rows: [["dataset", dataset.id], ["gateway", "✗ delivery refused · VITE_GRAPH_GATEWAY_KEY is not set"]],
+          rows: [["dataset", dataset.id], ["gateway", "✗ delivery refused · no server route (VITE_API_BASE) and no VITE_GRAPH_GATEWAY_KEY"]],
         },
       };
     }
@@ -738,8 +738,7 @@ const deliverCommand: Command = {
     let payloadHash: `0x${string}`;
     let metaBlock: number;
     try {
-      const { data, meta } = await gatewayQuery({
-        key: env.graphKey,
+      const { data, meta } = await appGatewayQuery({
         subgraphId: dataset.subgraphId,
         query: defaultQueryFor(dataset),
       });
@@ -837,15 +836,7 @@ const settleCommand: Command = {
     // reason, never glossed over.
     try {
       await ensureChainFor(signer);
-      await attestDelivery(
-        ctx.publicClient,
-        signer.wallet,
-        ADDR.hook,
-        BigInt(job.jobId),
-        job.payloadHash,
-        job.metaBlock,
-        job.minBlock,
-      );
+      await attestViaApi({ jobId: job.jobId, deliverable: job.payloadHash, metaBlock: job.metaBlock, minBlock: job.minBlock });
     } catch (error) {
       return {
         render: "kv",

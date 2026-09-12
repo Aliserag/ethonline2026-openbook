@@ -103,7 +103,7 @@ export function TryIt({ armed, onArmedConsumed }: { armed: "fresh" | "fail" | nu
             }
           : {
               kind: "refunded",
-              text: `Refunded. ${priceLabel(result.amount ?? 0)} went back to the buyer because the delivery missed the freshness floor. Nobody approved it; the escrow did it.`,
+              text: `Refunded. ${priceLabel(result.amount ?? 0)} went back to the buyer because the delivery missed the freshness floor. The hook refused payment, so the refund was the only settlement the escrow allowed.`,
             },
       );
     } else if (!result.ok) {
@@ -136,7 +136,7 @@ export function TryIt({ armed, onArmedConsumed }: { armed: "fresh" | "fail" | nu
             {quote ? (
               <>
                 {priceLabel(quote.amountUsdc)} per query · {freshnessPromise(quote.maxBlockLag, dataset.chain)} ·
-                sold by openbook.eth
+                price from the ENS record of {dataset.id}.openbook.eth (falls back to openbook.eth)
               </>
             ) : quoteError ? (
               `The price could not be read from ENS: ${quoteError}`

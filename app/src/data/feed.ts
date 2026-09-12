@@ -48,6 +48,8 @@ export interface BoardRow {
   delivered: boolean;
   /** blocks the delivery fell short of the freshness floor, when both are known and positive */
   gap?: number;
+  /** job deadline, unix seconds (subgraph rows) */
+  deadline?: number;
 }
 
 /**
@@ -116,6 +118,7 @@ export function boardRows(
       sellerName: sellerNames[j.seller.toLowerCase()],
       delivered: j.metaBlock !== undefined,
       gap: j.metaBlock !== undefined && Number(j.minBlock) > j.metaBlock ? Number(j.minBlock) - j.metaBlock : undefined,
+      deadline: Number(j.deadline),
     });
   }
   for (const r of runs) {

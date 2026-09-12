@@ -38,10 +38,14 @@ flowchart LR
 
     subgraph Graph["The Graph"]
         GW[Gateway<br/>pinned Messari subgraphs<br/>Aave V3 Arb · Uniswap V3 Arb · Compound V3]
-        PNL[openbook-pnl subgraph<br/>arc-testnet · Studio<br/>QueryPaid · Fulfilled · Settled<br/>RefundIssued · CostPaid · PolicyBlocked · DailyPnL]
+        PNL[open-book subgraph · v0.0.6<br/>arc-testnet · Studio, read through the page's cached /api/subgraph proxy<br/>QueryPaid · Fulfilled · Settled · RefundIssued · CostPaid · PolicyBlocked · Provider]
     end
 
     SP[scripts/stale-proxy.ts<br/>replays cached old _meta<br/>deterministic money shot]
+    API["page server routes (app/worker)<br/>/api/subgraph cache · /api/query Gateway key<br/>/api/attest: the hook attester key, verifies the job onchain first"]
+    FE -->|"query · attest"| API
+    API --> GW
+    API -->|"attest(jobId, hash, metaBlock, minBlock)"| HOOK
 
     BC -->|"resolve records (hard-fail if null)"| NAME
     FE -->|"resolve records (hard-fail if null)"| NAME

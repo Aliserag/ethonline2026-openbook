@@ -17,8 +17,10 @@ node scripts/fetch-pnl-snapshot.mjs
 
 echo "== [2/6] build"
 cd "$APP_DIR"
+bun run build:worker >/dev/null
 ./node_modules/.bin/tsc --noEmit
-BASE_PATH=/ ./node_modules/.bin/vite build >/dev/null
+# secrets never enter the browser bundle: the server routes hold them
+VITE_GRAPH_GATEWAY_KEY= VITE_ALCHEMY_API_KEY= VITE_LLM_API_KEY= BASE_PATH=/ ./node_modules/.bin/vite build >/dev/null
 echo "   dist: $(ls dist/assets | wc -l | tr -d ' ') assets"
 
 echo "== [3/6] Vercel (project dist, team pyefi)"

@@ -23,6 +23,7 @@ const BALANCE_ABI = [
 
 function Row({ row, isNew }: { row: BoardRow; isNew: boolean }): JSX.Element {
   const kind = row.outcome === "settled" ? "settled" : row.outcome === "refunded" ? "refunded" : "open";
+  const expired = row.outcome === "open" && row.deadline !== undefined && row.deadline < Math.floor(Date.now() / 1000);
   return (
     <li className={`board__row${isNew ? " board__row--new" : ""}`}>
       <span className="tiny">{relativeTime(row.at)}</span>
@@ -31,7 +32,7 @@ function Row({ row, isNew }: { row: BoardRow; isNew: boolean }): JSX.Element {
       <span className="mono">{priceLabel(row.amount)}</span>
       <span>
         <Badge kind={kind}>
-          {row.outcome === "settled" ? "Settled" : row.outcome === "refunded" ? "Refunded" : "In progress"}
+          {row.outcome === "settled" ? "Settled" : row.outcome === "refunded" ? "Refunded" : expired ? "Expired, refundable" : "In progress"}
         </Badge>
         {row.confirming && <span className="tiny"> confirming</span>}
       </span>

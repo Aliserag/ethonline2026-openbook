@@ -624,7 +624,7 @@ export function Console(): JSX.Element {
       )}
 
       <div className="console__asks">
-        <span className="console__asks-cap">try asking</span>
+        <span className="console__asks-cap">try these</span>
         {SUGGESTED_ASKS.map((ask) => (
           <button
             type="button"
@@ -658,7 +658,7 @@ export function Console(): JSX.Element {
           aria-label={`input mode: ${mode}`}
           aria-pressed={mode === "ask"}
         >
-          {mode === "command" ? "command ▸ ask" : hasLlmKey ? "ask ◂ command" : "ask: set VITE_LLM_API_KEY"}
+          {mode === "command" ? (hasLlmKey ? "command ▸ ask" : "command") : hasLlmKey ? "ask ◂ command" : "ask mode is off on this deployment"}
         </button>
         <span className="console__prompt" aria-hidden="true">
           ›

@@ -8,19 +8,15 @@
  */
 import { keccak256, toBytes, type PublicClient, type WalletClient } from "viem";
 import { CONFIG, defaultQueryFor, type DatasetConfig } from "../config";
-import { env, hasGraphKey } from "../env";
+import { env } from "../env";
+import { appGatewayQuery, attestViaApi, hasGatewayAccess } from "../data/api";
 import { ADDR } from "../data/addresses";
 import { getPublicClient } from "../data/chain";
 import { feeSplitFromReceipt, platformFee } from "../data/escrow";
 import type { FeeSplit } from "../data/types";
-import {
-  attestDelivery,
-  createJobWithSla,
-  ERC8183_ABI,
-  submitDeliverable,
-} from "../../../agent/escrow";
+import { createJobWithSla, ERC8183_ABI, submitDeliverable } from "../../../agent/escrow";
 import { reasonHash, verifyDelivery } from "../../../mcp/src/escrow";
-import { gatewayQuery, stripMeta } from "../../../mcp/src/gateway";
+import { stripMeta } from "../../../mcp/src/gateway";
 import { defaultChainHeadResolver } from "../../../mcp/src/chainhead";
 import { createEnsTextReader } from "../../../mcp/src/ens";
 import {
@@ -67,7 +63,7 @@ export interface PurchaseDeps {
     params: { minBlock: number; schemaHash: `0x${string}`; maxLatencyMs: number; amount: bigint },
     trace: string[],
   ): Promise<bigint>;
-  query(dataset: DatasetConfig): Promise<{ payloadHash: `0x${string}`; metaBlock: number }>;
+  query(dataset: DatasetConfig): Promise<{ payloadHash: `0x${string}`; metaBlock: number; preview?: string }>;
   submit(jobId: bigint, payloadHash: `0x${string}`): Promise<`0x${string}`>;
   attest(jobId: bigint, payloadHash: `0x${string}`, metaBlock: number, minBlock: number): Promise<`0x${string}`>;
   simulateComplete(jobId: bigint): Promise<{ reverted: boolean; reason?: string }>;
@@ -136,22 +132,20 @@ export async function liveDeps(publicClient: PublicClient = getPublicClient()): 
       });
     },
     query: async (dataset) => {
-      const { data, meta } = await gatewayQuery({
-        key: env.graphKey,
+      const { data, meta } = await appGatewayQuery({
         subgraphId: dataset.subgraphId,
         query: defaultQueryFor(dataset),
       });
       if (meta.block === null || meta.block === undefined) {
         throw new Error("the gateway answered without a freshness block, so nothing can be attested");
       }
-      return { payloadHash: keccak256(toBytes(JSON.stringify(stripMeta(data)))), metaBlock: meta.block };
+      const payload = stripMeta(data);
+      return { payloadHash: keccak256(toBytes(JSON.stringify(payload))), metaBlock: meta.block, preview: previewOf(payload) };
     },
     submit: async (jobId, hash) => (await submitDeliverable(publicClient, needWallet(), jobId, hash)).transactionHash,
-    attest: async (jobId, hash, metaBlock, minBlock) => {
-      const trace: string[] = [];
-      await attestDelivery(publicClient, tracedWallet(needWallet(), trace), ADDR.hook, jobId, hash, metaBlock, minBlock);
-      return (trace[0] ?? "0x") as `0x${string}`;
-    },
+    // the attester key lives on the server; it verifies the job onchain first
+    attest: (jobId, hash, metaBlock, minBlock) =>
+      attestViaApi({ jobId: jobId.toString(), deliverable: hash, metaBlock, minBlock }),
     simulateComplete: async (jobId) => {
       if (!signer) return { reverted: false };
       try {
@@ -177,8 +171,34 @@ export async function liveDeps(publicClient: PublicClient = getPublicClient()): 
       const terms = await platformFee(publicClient);
       return feeSplitFromReceipt(receipt, terms.feeBP, provider);
     },
-    hasGatewayKey: hasGraphKey,
+    hasGatewayKey: hasGatewayAccess(),
   };
+}
+
+/** One line of the delivered rows, so a judge sees what was bought. */
+export function previewOf(payload: unknown): string {
+  if (typeof payload !== "object" || payload === null) return "";
+  const entries = Object.entries(payload as Record<string, unknown>);
+  const list = entries.find(([, v]) => Array.isArray(v) && v.length > 0);
+  if (!list) return "";
+  const [field, rows] = list as [string, Record<string, unknown>[]];
+  const labelOf = (r: Record<string, unknown>): string => {
+    const domain = r.domain as { name?: unknown } | undefined;
+    const candidate = r.name ?? r.homeTeam ?? domain?.name ?? r.id ?? "row";
+    return String(candidate).slice(0, 40);
+  };
+  const numberOf = (r: Record<string, unknown>): string => {
+    const hit = Object.entries(r).find(
+      ([k, v]) => k !== "id" && (typeof v === "number" || (typeof v === "string" && /^-?\d+(\.\d+)?$/.test(v))),
+    );
+    if (!hit) return "";
+    return `${hit[0]} ${Number(hit[1]).toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
+  };
+  const items = rows.slice(0, 3).map((r) => {
+    const value = numberOf(r);
+    return `${labelOf(r)}${value ? ` (${value})` : ""}`;
+  });
+  return `${rows.length} ${field}: ${items.join(" · ")}`;
 }
 
 const FAUCET_HINT =
@@ -229,12 +249,12 @@ export async function runPurchase(
 
   const signer = d.signer;
   const schemaHash = keccak256(toBytes(dataset.schema));
-  let delivered: { payloadHash: `0x${string}`; metaBlock: number } | null = null;
+  let delivered: { payloadHash: `0x${string}`; metaBlock: number; preview?: string } | null = null;
 
   const deliver = async (): Promise<PurchaseResult | null> => {
     emit({ step: "deliver", status: "running" });
     if (!d.hasGatewayKey) {
-      return fail("deliver", "Delivery needs a Graph key on this deployment (the operator sets VITE_GRAPH_GATEWAY_KEY).");
+      return fail("deliver", "Delivery runs through the deployed server (it holds the Graph key); local runs need VITE_API_BASE or VITE_GRAPH_GATEWAY_KEY.");
     }
     try {
       delivered = await d.query(dataset);
@@ -244,8 +264,8 @@ export async function runPurchase(
     emit({
       step: "deliver",
       status: "done",
-      detail: `indexed at block ${delivered.metaBlock.toLocaleString("en-US")}`,
-      data: { metaBlock: String(delivered.metaBlock), payloadHash: delivered.payloadHash },
+      detail: `indexed at block ${delivered.metaBlock.toLocaleString("en-US")}${delivered.preview ? ` · ${delivered.preview}` : ""}`,
+      data: { metaBlock: String(delivered.metaBlock), payloadHash: delivered.payloadHash, ...(delivered.preview ? { rows: delivered.preview } : {}) },
     });
     return null;
   };
@@ -288,7 +308,9 @@ export async function runPurchase(
   emit({
     step: "pay",
     status: "done",
-    detail: `${usdcText(BigInt(quote.amountUsdc))} USDC locked in escrow · job ${jobId} · floor ${minBlock.toLocaleString("en-US")}`,
+    detail: opts.mode === "fail"
+      ? `${usdcText(BigInt(quote.amountUsdc))} USDC locked in escrow · job ${jobId} · floor pinned at ${minBlock.toLocaleString("en-US")}, one block above the delivery, on purpose`
+      : `${usdcText(BigInt(quote.amountUsdc))} USDC locked in escrow · job ${jobId} · floor ${minBlock.toLocaleString("en-US")}`,
     txHash: trace[trace.length - 1],
     data: { jobId: String(jobId), minBlock: String(minBlock), txs: trace.join(",") },
   });
@@ -297,7 +319,7 @@ export async function runPurchase(
     const r = await deliver();
     if (r) return r;
   }
-  const dl = delivered as unknown as { payloadHash: `0x${string}`; metaBlock: number };
+  const dl = delivered as unknown as { payloadHash: `0x${string}`; metaBlock: number; preview?: string };
 
   emit({ step: "verdict", status: "running" });
   let submitTx: `0x${string}`;
@@ -318,7 +340,7 @@ export async function runPurchase(
     : `block ${dl.metaBlock.toLocaleString("en-US")} is below the floor ${minBlock.toLocaleString("en-US")}`;
   if (!fresh) {
     const sim = await d.simulateComplete(jobId);
-    if (sim.reverted) verdictDetail += ` · the contract refused to pay (${sim.reason ?? "reverted"})`;
+    if (sim.reverted) verdictDetail += ` · the contract refuses to pay: complete() reverts ${sim.reason ?? ""} (checked by simulation, no transaction)`;
   }
   emit({
     step: "verdict",

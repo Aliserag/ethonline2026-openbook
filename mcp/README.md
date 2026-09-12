@@ -54,8 +54,8 @@ printf '%s\n' \
 
 | tool              | expected output (fresh key, records set)                                     |
 | ----------------- | ---------------------------------------------------------------------------- |
-| `list_datasets()` | the four datasets — `aave-v3-arbitrum-lending`, `uniswap-v3-arbitrum-dex`, `opensea-nft-trades`, `ens-registrations` — with schema/price/description (+ ENS `svc.menu` entries) |
-| `get_quote(id)`   | `{amount: 100000, amountUsdc: "0.10", minBlockLag: 50, deadlineBlocks: 1, payee, source: "ENS"}` |
+| `list_datasets()` | the five datasets — `aave-v3-arbitrum-lending`, `uniswap-v3-arbitrum-dex`, `opensea-nft-trades`, `ens-registrations`, `overtime-sports-odds` — with schema/price/description (+ ENS `svc.menu` entries) |
+| `get_quote(id)`   | `{amount: 150000, amountUsdc: "0.15", minBlockLag: 50, deadlineBlocks: 1, payee, source: "ENS"}` for `aave-v3-arbitrum-lending` (its subname record); parent-priced datasets quote `0.10` |
 | `query_dataset(id, gql)` | fresh: `{result, meta: {block, hash}, attestation: {message, signature, signer}}`; stale: `{unavailable: true, reason: "STALE"}` |
 | `verify_delivery({jobId, payloadHash, metaBlock})` | `{verdict: "APPROVE"}` or `{verdict: "REJECT", reason: "STALE_DATA"}`; add `settle: true` to execute the onchain settlement |
 | `get_pnl()`       | `{dailyPnLs: [{id, revenue, costs, refunds, net}], metaBlock}` from the open-book subgraph (arc-testnet; public Studio endpoint — no key) |
@@ -81,7 +81,7 @@ Unit tests are mock-injected (never mocks in production). Live tests are
 **key-guarded** — they hit the real Gateway only when the key is present:
 
 ```bash
-bun test mcp                                  # 28 pass, 2 skip (live, no key)
+bun test mcp                                  # 54 pass, 2 skip (live, no key)
 GRAPH_GATEWAY_KEY=<key> bun test mcp          # + live Aave query & get_pnl
 ```
 

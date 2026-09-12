@@ -72,8 +72,10 @@ Gateway-backed, freshness-gated path.
    `createJobWithSla`; SLA description = `JSON.stringify({minBlock, schemaHash,
    maxLatencyMs})` — the seller can parse it back deterministically).
 3. **Seller** runs `query_dataset(id, graphql)`. The server appends
-   `_meta { block { number hash } chainHeadBlock { number } }` to every query.
-   - `chainHeadBlock - _meta.block > maxAge` ⇒ `{unavailable: true,
+   `_meta { block { number hash timestamp } hasIndexingErrors }` to every query
+   (the Gateway's `_Meta_` type has no chain-head field) and reads the chain head
+   from the dataset's own chain RPC.
+   - `chainHead - _meta.block > maxAge` (or `hasIndexingErrors`) ⇒ `{unavailable: true,
      reason: "STALE"}` — **never charged**.
    - Fresh ⇒ `{result, meta: {block, hash}, attestation}` where
      `attestation.message = "<datasetId>@<block>|<payloadHash>|<block>"` and

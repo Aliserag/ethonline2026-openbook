@@ -36,8 +36,8 @@ export const CONFIG = openbookConfig as unknown as AppConfig;
 /** Deterministic default query per dataset schema (mirrors agent/seller.ts). */
 export function defaultQueryFor(dataset: DatasetConfig): string {
   const queries: Record<string, string> = {
-    "lending/3.1.0": "{ markets(first: 3) { id } }",
-    "dex-amm/4.0.1": "{ pools(first: 3) { id } }",
+    "lending/3.1.0": "{ markets(first: 3, orderBy: totalValueLockedUSD, orderDirection: desc) { id name totalValueLockedUSD } }",
+    "dex-amm/4.0.1": "{ pools(first: 3, orderBy: totalValueLockedUSD, orderDirection: desc) { id name totalValueLockedUSD } }",
     "nft-marketplace/2.1.0":
       "{ trades(first: 3, orderBy: timestamp, orderDirection: desc) { timestamp priceETH } marketplaces(first: 1) { name tradeCount cumulativeTradeVolumeETH } }",
     "sports-odds/1.0.0":
