@@ -235,26 +235,66 @@ const ensShowCommand: Command = {
   },
 };
 
+/** Live ENS price cell for a dataset row: subname over root, `✗ …` when unset. */
+function priceCell(dataset: DatasetConfig, probe: { value: string | null; failed?: string }): string {
+  if (probe.failed) return `✗ ${probe.failed}`;
+  if (probe.value === null) {
+    return `✗ svc.price unset on ${dataset.id}.${CONFIG.ens} (nor ${CONFIG.ens})`;
+  }
+  return probe.value;
+}
+
+/** Live ENS SLA maxBlockLag cell: parse failures and unset records are `✗ …`. */
+function slaCell(probe: { value: string | null; failed?: string }): string {
+  if (probe.failed) return `✗ ${probe.failed}`;
+  if (probe.value === null) return "✗ svc.sla unset";
+  try {
+    return String(parseSlaRecord(probe.value).maxBlockLag);
+  } catch (error) {
+    return `✗ invalid: ${reason(error)}`;
+  }
+}
+
 /* ------------------------------------------------------------- datasets */
 
 const datasetsCommand: Command = {
   name: "datasets",
-  help: "the storefront menu: 5 datasets, listed price, SLA window, chain",
+  help: "the storefront menu: 5 datasets with live ENS prices + SLA windows",
   kind: "inspect",
   run: async () => {
-    const rows = CONFIG.datasets.map((d: DatasetConfig) => ({
-      id: d.id,
-      schema: d.schema,
-      price: `${usdc6(d.priceUsdc)} USDC`,
-      maxBlockLag: String(d.freshness.maxAge),
-      chain: d.chain,
+    // Live data only: every row's price and maxBlockLag resolve from ENSv2 at
+    // dispatch time (subname over root, exactly like quote) — the imported
+    // config's priceUsdc/freshness fields are deployment defaults, never the
+    // displayed figures. The root records are shared by all five datasets, so
+    // they are read once; only the 10 unique subname probes fan out (the
+    // public Sepolia RPC rate-limits broad parallel bursts).
+    const [rootPrice, rootSla] = await Promise.all([
+      probeEns(CONFIG.ens, "svc.price"),
+      probeEns(CONFIG.ens, "svc.sla"),
+    ]);
+    const probes = await Promise.all(
+      CONFIG.datasets.map(async (dataset) => {
+        const sub = `${dataset.id}.${CONFIG.ens}`;
+        const [subPrice, subSla] = await Promise.all([
+          probeEns(sub, "svc.price"),
+          probeEns(sub, "svc.sla"),
+        ]);
+        return { dataset, price: firstNonNull(subPrice, rootPrice), sla: firstNonNull(subSla, rootSla) };
+      }),
+    );
+    const rows = probes.map(({ dataset, price, sla }) => ({
+      id: dataset.id,
+      schema: dataset.schema,
+      price: priceCell(dataset, price),
+      maxBlockLag: slaCell(sla),
+      chain: dataset.chain,
     }));
     return {
       render: "table",
       data: {
         columns: ["id", "schema", "price", "maxBlockLag", "chain"],
         rows,
-        summary: `${CONFIG.datasets.length} datasets listed by openbook.eth — the ENS price + SLA floor are read live by quote <id>`,
+        summary: `${CONFIG.datasets.length} datasets — prices and SLA windows are LIVE ENS reads (subname over ${CONFIG.ens}), same resolution as quote <id>`,
       },
     };
   },
