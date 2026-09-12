@@ -199,7 +199,7 @@ const statusCommand: Command = {
     rows.push([
       "gateway",
       hasGatewayAccess()
-        ? "server route /api/query (key held server-side)"
+        ? "server route /api/deliver (key held server-side)"
         : "missing · no server route and no local key (delivery refused until then)",
     ]);
     const actJob = getActJob();
