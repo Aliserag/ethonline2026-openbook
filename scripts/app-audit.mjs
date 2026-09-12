@@ -313,15 +313,23 @@ async function audit(url) {
         fail("2.map all 8 nodes render", `missing nodes: ${missing.join(", ")}`);
       } else {
         const notes = [];
-        let ok = true;
+        const skipIds = [];
+        const hard = [];
         for (const [id, title] of Object.entries(NODE_TITLES)) {
           const node = byName.get(title);
           if (node.state === "error" || node.state === "unknown") {
-            if (node.reason) {
+            // The SVG <title> renders reason ?? node.title, so "present" is
+            // vacuous — a stranded node falls back to its own title. The
+            // degrade is only reasoned when the reason is ambient (429/rate
+            // limit); anything else is a real surfaced failure.
+            const hasReason = node.reason.length > 0 && node.reason !== node.name;
+            if (!hasReason) {
+              hard.push(`${id}[${node.state} with NO reason text]`);
+            } else if (isAmbient(node.reason)) {
+              skipIds.push(id);
               notes.push(`${id}[${node.state}: ${node.reason.slice(0, 60)}]`);
             } else {
-              ok = false;
-              notes.push(`${id}[${node.state} with NO reason text]`);
+              hard.push(`${id}[${node.state}: ${node.reason.slice(0, 60)} — not ambient]`);
             }
           } else if (node.state === "live") {
             notes.push(`${id}[live: ${node.chip.slice(0, 40)}]`);
@@ -329,26 +337,37 @@ async function audit(url) {
             notes.push(`${id}[${node.state}: ${node.reason.slice(0, 50) || node.chip.slice(0, 40)}]`);
           }
         }
-        if (ok) pass("2.map all 8 nodes render", notes.join(" · "));
-        else fail("2.map all 8 nodes render", notes.join(" · "));
+        if (hard.length > 0) {
+          fail("2.map all 8 nodes render", hard.join(" · "));
+        } else if (skipIds.length > 0) {
+          skip("2.map all 8 nodes render", `${skipIds.length} node(s) degraded with ambient reason (${skipIds.join(",")}); ${notes.join(" · ")}`);
+        } else {
+          pass("2.map all 8 nodes render", notes.join(" · "));
+        }
       }
     }
 
     /* 5 · market — two live-ENS sellers + venue fee row --------------------- */
+    const marketPredicate = () => {
+      const normP = (s) => String(s ?? "").replace(/\s+/g, " ").trim();
+      const sellers = [...document.querySelectorAll(".market__seller-name")].map((e) => normP(e.textContent));
+      const error = normP(document.querySelector(".market__error")?.textContent ?? "");
+      const chip = normP(document.querySelector(".market__head .market__chip")?.textContent ?? "");
+      if (sellers.length >= 2 || error) return { sellers, error, chip };
+      return null;
+    };
+    const probeMarket = () =>
+      waitFor(page, marketPredicate, { timeout: 90000, label: "market sellers or truthful error" });
+
     let market;
     try {
-      const raw = await waitFor(
-        page,
-        () => {
-          const normP = (s) => String(s ?? "").replace(/\s+/g, " ").trim();
-          const sellers = [...document.querySelectorAll(".market__seller-name")].map((e) => normP(e.textContent));
-          const error = normP(document.querySelector(".market__error")?.textContent ?? "");
-          const chip = normP(document.querySelector(".market__head .market__chip")?.textContent ?? "");
-          if (sellers.length >= 1 || error) return { sellers, error, chip };
-          return null;
-        },
-        { timeout: 120000, label: "market sellers or truthful error" },
-      );
+      let raw = await probeMarket();
+      // Re-probe once after a settle pause before granting an ambient SKIP:
+      // the 30s storefront poll may recover mid-check.
+      if (raw.error) {
+        await sleep(10000);
+        raw = await probeMarket();
+      }
       const venue = await waitFor(
         page,
         () => {
@@ -373,9 +392,9 @@ async function audit(url) {
 
     if (market.error) {
       if (isAmbient(market.error)) {
-        skip("5.market two sellers + venue row", `reasoned degraded: ${market.error.slice(0, 120)}`);
+        skip("5.market two sellers render from live ENS", `reasoned degraded after re-probe: ${market.error.slice(0, 120)}`);
       } else {
-        fail("5.market two sellers + venue row", `market error: ${market.error.slice(0, 160)}${market.dump ? ` :: ${market.dump}` : ""}`);
+        fail("5.market two sellers render from live ENS", `market error: ${market.error.slice(0, 160)}${market.dump ? ` :: ${market.dump}` : ""}`);
       }
     } else {
       const sellers = market.sellers ?? [];
@@ -393,7 +412,9 @@ async function audit(url) {
         pass("5.market venue row (platformFee → 2 percent feed)", `${fig} · ${chip}`);
       } else if (chip === "error" && note) {
         if (isAmbient(note)) {
-          pass("5.market venue row (platformFee → 2 percent feed)", `reasoned degraded: ${note.slice(0, 120)}`);
+          // An unexercised fee read is a SKIP, never a PASS: the assertion is
+          // about the rendered 2-percent feed, not about a truthful error.
+          skip("5.market venue row (platformFee → 2 percent feed)", `reasoned degraded: ${note.slice(0, 120)}`);
         } else {
           fail("5.market venue row (platformFee → 2 percent feed)", `${fig} · ${chip} · ${note}`);
         }
@@ -419,12 +440,18 @@ async function audit(url) {
       const statusKeys = ["arc head", "subgraph", "ens", "gateway key", "demo wallet"];
       const present = new Map(status.rows);
       const missingKeys = statusKeys.filter((k) => !present.has(k));
-      if (missingKeys.length === 0) {
-        const degradedRows = statusKeys.filter((k) => present.get(k)?.startsWith("✗"));
-        const note = degradedRows.length > 0 ? `truthful degrade on: ${degradedRows.join(", ")}` : "all rows live";
-        pass("3.console status prints all live sources", note);
-      } else {
+      if (missingKeys.length > 0) {
         fail("3.console status prints all live sources", `missing rows: ${missingKeys.join(", ")}`);
+      } else {
+        const degraded = statusKeys.filter((k) => present.get(k)?.startsWith("✗"));
+        const hard = degraded.filter((k) => !isAmbient(present.get(k)));
+        if (hard.length > 0) {
+          fail("3.console status prints all live sources", `non-ambient value failures: ${hard.map((k) => `${k}: ${present.get(k)}`).join(" | ")}`);
+        } else if (degraded.length > 0) {
+          pass("3.console status prints all live sources", `all 5 rows present · truthful degrade on: ${degraded.join(", ")}`);
+        } else {
+          pass("3.console status prints all live sources", "all 5 rows present and live");
+        }
       }
 
       let quote = await runKvCmd(page, "quote aave-v3-arbitrum-lending", { timeout: 45000 });
@@ -453,10 +480,19 @@ async function audit(url) {
     /* 4a · money — policy refusals ------------------------------------------ */
     try {
       const refusals = await runCmdWithRetry(page, "policy refusals");
-      const hasTableRows = /policy refusals? onchain/i.test(refusals.text) && /PER_TX_CAP|DAILY_CAP|NOT_ALLOWLISTED|policy refusal/.test(refusals.text);
-      const truthfulEmpty = refusals.text.includes("no PolicyBlocked events indexed");
-      if (hasTableRows) {
-        pass("4.money policy refusals renders real PolicyBlocked rows", refusals.text.slice(0, 120));
+      const rowCount = await page.evaluate(() => {
+        const entry = [...document.querySelectorAll(".console__entry")].pop();
+        if (!entry) return 0;
+        // table rows (some clickable rows carry .tape__row--job; plain rows are
+        // bare <tr>) — count the rendered body rows either way.
+        return entry.querySelectorAll(".tape__table tbody tr").length;
+      });
+      // Real rows REQUIRE a contract reason code — the summary line's own
+      // "N policy refusals onchain" wording must not self-satisfy the check.
+      const hasReasonCodes = /PER_TX_CAP|DAILY_CAP|NOT_ALLOWLISTED/.test(refusals.text);
+      const truthfulEmpty = refusals.text.includes("no PolicyBlocked events indexed") && rowCount === 0;
+      if (hasReasonCodes && rowCount >= 1) {
+        pass("4.money policy refusals renders real PolicyBlocked rows", `${rowCount} rendered row(s) onchain: ${refusals.text.slice(0, 120)}`);
       } else if (truthfulEmpty) {
         pass("4.money policy refusals renders real PolicyBlocked rows", "truthful empty state: no PolicyBlocked events indexed (blank, not zeroed)");
       } else if (refusals.text.includes("failed")) {
@@ -466,7 +502,7 @@ async function audit(url) {
           fail("4.money policy refusals renders real PolicyBlocked rows", refusals.text.slice(0, 160));
         }
       } else {
-        fail("4.money policy refusals renders real PolicyBlocked rows", `unexpected output: ${refusals.text.slice(0, 160)}`);
+        fail("4.money policy refusals renders real PolicyBlocked rows", `no real reason codes (${rowCount} rows): ${refusals.text.slice(0, 160)}`);
       }
     } catch (error) {
       fail("4.money policy refusals renders real PolicyBlocked rows", error.message.slice(0, 160));
@@ -557,8 +593,19 @@ async function audit(url) {
         } else {
           fail("4.money money frame sums to the job amount", `treasury ${t} + seller ${s} != total ${tot}`);
         }
-      } else if (rowMap.has("state") && /split unavailable/.test(rowMap.get("state"))) {
-        skip("4.money money frame sums to the job amount", "truthful degraded: settled · split unavailable (receipt read blocked)");
+      } else if (rowMap.has("state") && /split unavailable/.test(rowMap.get("state") ?? "")) {
+        // The money frame truthfully degrades to "settled · split unavailable
+        // (see note)" — SKIP only when the underlying splitError is ambient
+        // (rate limit / gateway); any other split error is a real failure.
+        const splitNote = await page.evaluate(() => {
+          const note = document.querySelector(".theater__note--error");
+          return note ? String(note.textContent).replace(/\s+/g, " ").trim() : "";
+        });
+        if (splitNote && isAmbient(splitNote)) {
+          skip("4.money money frame sums to the job amount", `truthful degraded: ${splitNote.slice(0, 130)}`);
+        } else {
+          fail("4.money money frame sums to the job amount", `split unavailable, non-ambient: ${splitNote || "(no split error text)"}`);
+        }
       } else {
         fail("4.money money frame sums to the job amount", `rows=${JSON.stringify(moneyRows)}`);
       }
