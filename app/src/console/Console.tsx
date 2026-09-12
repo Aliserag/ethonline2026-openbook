@@ -48,6 +48,9 @@ import {
   askLlm,
   buildLiveAskContext,
   buildSystemPrompt,
+  llmConfigured,
+  missingKeyRefusal,
+  offerAskFor,
   proposalLine,
   registrySchema,
   requiresRun,
@@ -332,17 +335,23 @@ export function Console(): JSX.Element {
 
   /** Ask lane: build the live-context system prompt, call the LLM (propose
    * only), print a proposal or refusal receipt. Never blocks the dock: the
-   * in-flight entry shows "asking <model>…" with a cancel. */
+   * in-flight entry shows "asking <model>…" with a cancel. With no key the
+   * refusal receipt is immediate: no asking state, no live-context reads, no
+   * fetch (round-1 review — the tape must not pretend a model call happens). */
   const runAsk = async (question: string): Promise<void> => {
     const text = question.trim();
     if (text.length === 0) return;
-    const controller = new AbortController();
-    askAbortRef.current?.abort();
-    askAbortRef.current = controller;
     setPendingAsk(null);
     setPopover(null);
     setInput("");
     const id = seqRef.current++;
+    if (!llmConfigured(env.llmApiKey)) {
+      setEntries((es) => [...es, { id, line: `ask · ${text}`, at: Date.now(), results: null, ask: missingKeyRefusal() }]);
+      return;
+    }
+    const controller = new AbortController();
+    askAbortRef.current?.abort();
+    askAbortRef.current = controller;
     setEntries((es) => [...es, { id, line: `ask · ${text}`, at: Date.now(), results: null, asking: env.llmModel }]);
     try {
       const systemPrompt = buildSystemPrompt(registrySchema(allCommands), await buildLiveAskContext());
@@ -402,9 +411,11 @@ export function Console(): JSX.Element {
         setMode("command");
         return;
       }
-      // command mode: Tab completes when something matches; when the input
-      // resolves to nothing the nudge offers ask mode, and Tab takes it.
-      if (popover === null && input.trim().length > 0 && completionCandidates(input, allCommands, CONFIG.datasets).length === 0) {
+      // command mode: the SAME predicate as the nudge decides the switch —
+      // Tab switches to ask exactly when the nudge offers it, and completes
+      // otherwise (strict prefixes like `qu` complete to `quote`, never
+      // fight the nudge, round-1 review).
+      if (offerAskFor(input, allCommands, CONFIG.datasets)) {
         setMode("ask");
         return;
       }
@@ -613,7 +624,7 @@ export function Console(): JSX.Element {
         ))}
       </div>
 
-      {mode === "command" && input.trim().length > 0 && find(input.trim()) === undefined && (
+      {mode === "command" && offerAskFor(input, allCommands, CONFIG.datasets) && (
         <div className="console__nudge">
           <span>
             did you mean to ask? press <kbd>Tab</kbd> to switch to ask mode

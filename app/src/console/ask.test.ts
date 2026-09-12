@@ -16,6 +16,7 @@ import {
   datasetMenu,
   DATASET_IDS,
   missingKeyRefusal,
+  offerAskFor,
   parseProposal,
   proposalLine,
   registrySchema,
@@ -25,6 +26,7 @@ import {
   type AskInput,
   type AskProposal,
 } from "./ask";
+import { CONFIG } from "../config";
 import { commands, find, type Command } from "./registry";
 // Side-effect registration of the real registry (same imports the Console does).
 import "./commands/inspect";
@@ -156,6 +158,26 @@ describe("validateProposal", () => {
   });
 });
 
+describe("offerAskFor (nudge ⇔ Tab agreement, round-1 review)", () => {
+  it("strict command prefixes complete instead of offering ask; garbage offers ask", () => {
+    const cmds = CMDS();
+    const datasets = CONFIG.datasets;
+    // strict prefixes have completion candidates -> Tab completes, no nudge
+    expect(offerAskFor("qu", cmds, datasets)).toBe(false);
+    expect(offerAskFor("bo", cmds, datasets)).toBe(false);
+    expect(offerAskFor("sandbox cl", cmds, datasets)).toBe(false);
+    expect(offerAskFor("policy s", cmds, datasets)).toBe(false);
+    // resolvable input is never nudged even with zero dataset candidates
+    expect(offerAskFor("quote", cmds, datasets)).toBe(false);
+    // nothing resolves nor completes -> the nudge offers ask and Tab switches
+    expect(offerAskFor("banana", cmds, datasets)).toBe(true);
+    expect(offerAskFor("show me the money", cmds, datasets)).toBe(true);
+    // empty / whitespace inputs are never nudged
+    expect(offerAskFor("", cmds, datasets)).toBe(false);
+    expect(offerAskFor("   ", cmds, datasets)).toBe(false);
+  });
+});
+
 describe("arityOf", () => {
   it("derives min/max from the usage string", () => {
     expect(arityOf("buy <dataset> [--amount <usdc>]")).toEqual({ min: 1, max: 3 });
@@ -213,11 +235,14 @@ describe("missingKeyRefusal (no-key path)", () => {
     expect(outcome.refusal).toContain("VITE_LLM_API_KEY");
   });
 
-  it("askLlm with an empty key refuses without calling fetch", async () => {
-    const fetchImpl = stubFetch([]);
-    const outcome = await askLlm("hello", input({ apiKey: "", fetchImpl }), "system", CMDS());
-    expect(outcome.status).toBe("refusal");
-    expect(fetchImpl.calls.length).toBe(0);
+  it("askLlm with an empty or whitespace key refuses without calling fetch", async () => {
+    for (const key of ["", "   "]) {
+      const fetchImpl = stubFetch([]);
+      const outcome = await askLlm("hello", input({ apiKey: key, fetchImpl }), "system", CMDS());
+      expect(outcome.status).toBe("refusal");
+      if (outcome.status === "refusal") expect(outcome.refusal).toContain("VITE_LLM_API_KEY");
+      expect(fetchImpl.calls.length).toBe(0);
+    }
   });
 });
 

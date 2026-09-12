@@ -21,9 +21,35 @@ import { getPublicClient } from "../data/chain";
 import { platformFee } from "../data/escrow";
 import { truncateHash } from "../format";
 import { createEnsTextReader } from "../../../mcp/src/ens";
-import type { Command, CommandKind } from "./registry";
+import { find, type Command, type CommandKind } from "./registry";
+import { completionCandidates } from "./palette";
 
 export type AskMode = "command" | "ask";
+
+export interface AskableDataset {
+  id: string;
+  description?: string;
+}
+
+/**
+ * The single predicate behind BOTH the "did you mean to ask?" nudge and the
+ * Tab mode-switch, so the two can never disagree (round-1 review): a
+ * command-mode input offers the ask lane when it is non-empty, resolves to
+ * no registry command (`find`), AND Tab-completion has nothing to offer
+ * (`completionCandidates`). A strict command prefix (`qu`, `bo`, `sandbox
+ * cl`, `policy s`) has completion candidates, so it completes on Tab and the
+ * nudge stays quiet; garbage (`banana`) nudges and Tab switches to ask.
+ */
+export function offerAskFor(
+  input: string,
+  cmds: readonly Command[],
+  datasets: readonly AskableDataset[],
+): boolean {
+  const text = input.trim();
+  if (text.length === 0) return false;
+  if (find(text) !== undefined) return false;
+  return completionCandidates(text, [...cmds], [...datasets]).length === 0;
+}
 
 /** A validated registry pick: exact command name + argument tokens only. */
 export interface AskProposal {
@@ -214,6 +240,15 @@ export function missingKeyRefusal(): AskOutcome {
 }
 
 /**
+ * The shared key predicate: the dock's runAsk short-circuits on this BEFORE
+ * creating an asking state or reading the live context, and askLlm refuses on
+ * it before any fetch — one predicate, so the no-key path cannot lie.
+ */
+export function llmConfigured(apiKey: string): boolean {
+  return apiKey.trim().length > 0;
+}
+
+/**
  * Best-effort live context block for the system prompt: escrow, venue fee +
  * treasury, the seller list with live ENS prices, and the dataset ids. Any
  * source that fails renders its reason inline, never a hard-coded figure.
@@ -291,7 +326,7 @@ export async function askLlm(
   systemPrompt: string,
   cmds: readonly Command[],
 ): Promise<AskOutcome> {
-  if (input.apiKey.trim().length === 0) return missingKeyRefusal();
+  if (!llmConfigured(input.apiKey)) return missingKeyRefusal();
 
   const fetchImpl = input.fetchImpl ?? fetch;
   const base = input.baseUrl.replace(/\/+$/, "");
