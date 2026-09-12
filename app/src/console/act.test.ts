@@ -213,7 +213,19 @@ describe("resolveDatasetQuote failure edge (quote == charge)", () => {
       return records[`${name}|${key}`] ?? null;
     };
     const quote = await resolveDatasetQuote(CONFIG.datasets[0], reader);
-    expect(quote).toEqual({ price: "0.10 USDC/query", amountUsdc: 100000, maxBlockLag: 50, maxLatencyMs: 2000 });
+    expect(quote).toEqual({ price: "0.10 USDC/query", priceName: "openbook.eth", amountUsdc: 100000, maxBlockLag: 50, maxLatencyMs: 2000 });
+  });
+
+  it("a SET subname price names the subname as the record that answered", async () => {
+    const records = {
+      "aave-v3-arbitrum-lending.openbook.eth|svc.price": "0.15 USDC/query",
+      "openbook.eth|svc.price": "0.10 USDC/query",
+      "openbook.eth|svc.sla": SLA,
+    };
+    const reader: EnsTextReader = async (name, key) => records[`${name}|${key}`] ?? null;
+    const quote = await resolveDatasetQuote(CONFIG.datasets[0], reader);
+    expect(quote.priceName).toBe("aave-v3-arbitrum-lending.openbook.eth");
+    expect(quote.amountUsdc).toBe(150000);
   });
 
   it("subname AND parent both failing refuses (unreachable, not a price)", async () => {

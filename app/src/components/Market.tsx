@@ -24,7 +24,7 @@ import {
 import { hostedQueryViaProxy } from "../data/endpoint";
 import type { ProviderStats } from "../../../mcp/src/router";
 import { loadSnapshotProvidersView } from "../pnl";
-import { readLastGood, writeLastGood } from "../data/cache";
+import { readLastGood, shared, writeLastGood } from "../data/cache";
 import { CONFIG } from "../config";
 import { ADDR } from "../data/addresses";
 import type { LiveSource } from "../data/types";
@@ -214,7 +214,7 @@ async function subnameRow(ref: SellerRef, providers: readonly ProviderStats[]): 
 /** Every seller on the storefront: the parent's own catalog + every ENS
  *  subname seller, each with live records and subgraph stats. Stats degrade
  *  through the last-good cache / build-time snapshot when Studio is walled. */
-export async function readSellers(): Promise<MarketView> {
+async function readSellersUncached(): Promise<MarketView> {
   const [parent, subnames, providers] = await Promise.all([
     readParentRecords(),
     listSellers(STOREFRONT, { readEnsText: marketEnsReader, client: directoryClient }),
@@ -245,3 +245,8 @@ async function fetchProvidersResilient(): Promise<{ stats: ProviderStats[]; sour
   }
 }
 
+
+/** One enumeration shared by every surface that lists sellers (hero, market,
+ *  books): the subregistry walk is RPC-hungry, so simultaneous pollers
+ *  coalesce into one read per 2 minutes. */
+export const readSellers: () => Promise<MarketView> = shared(readSellersUncached, 120_000);

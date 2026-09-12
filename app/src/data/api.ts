@@ -1,12 +1,16 @@
 /**
  * The page's server-side helpers (app/worker/*): on a deployed origin the
- * browser never holds the Gateway key or the hook attester key. It POSTs to
- *   /api/query    a Gateway query with the server-held key
- *   /api/attest   the SlaHook attestation, verified onchain by the server
- * Local dev without VITE_API_BASE falls back to the browser-side key path for
- * queries and cannot attest (the attester key lives only on the server).
+ * browser never holds the Gateway key, the hook attester key or the LLM key.
+ *   /api/deliver   the server runs the dataset query, hashes the payload,
+ *                  records the indexed block and signs that observation
+ *   /api/attest    the server verifies the job onchain and requires the deliver
+ *                  signature before it posts the freshness proof
+ *   /api/ask       the console's LLM, key held server-side
+ * Local dev without VITE_API_BASE falls back to a browser-side Gateway key for
+ * queries (no signature, so attest will refuse) and has no ask mode.
  */
-import { appendMeta, extractMeta, GatewayHttpError, GraphQueryError, type GatewayMeta } from "../../../mcp/src/gateway";
+import { keccak256, toBytes } from "viem";
+import { appendMeta, extractMeta, GatewayHttpError, GraphQueryError, stripMeta, type GatewayMeta } from "../../../mcp/src/gateway";
 import { env, hasGraphKey } from "../env";
 
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
@@ -38,25 +42,49 @@ async function postJson(url: string, body: unknown): Promise<{ status: number; j
   return { status: response.status, json, text };
 }
 
-/** Gateway query with the freshness fragment appended, like mcp's gatewayQuery. */
-export async function appGatewayQuery(opts: { subgraphId: string; query: string }): Promise<{ data: unknown; meta: GatewayMeta }> {
+export interface Delivery {
+  data: unknown;
+  payloadHash: `0x${string}`;
+  metaBlock: number;
+  /** the server's signature over `${payloadHash}|${metaBlock}` (empty on the local key path) */
+  proof: string;
+}
+
+/** Deliver a dataset query: server-observed on deployed origins, key-local in dev. */
+export async function deliverViaApi(opts: { subgraphId: string; query: string }): Promise<Delivery> {
   const base = apiBase();
-  const payload = JSON.stringify({ query: appendMeta(opts.query) });
-  const url = base !== null
-    ? `${base}/api/query`
-    : `https://gateway.thegraph.com/api/${env.graphKey}/subgraphs/id/${opts.subgraphId}`;
-  const body = base !== null ? { subgraphId: opts.subgraphId, body: payload } : JSON.parse(payload);
-  const { status, json, text } = await postJson(url, body);
+  if (base !== null) {
+    const { status, json, text } = await postJson(`${base}/api/deliver`, opts);
+    const root = (typeof json === "object" && json !== null ? json : {}) as Partial<Delivery> & { error?: string };
+    if (status >= 400 || typeof root.payloadHash !== "string" || typeof root.metaBlock !== "number") {
+      if (status === 429) throw new GatewayHttpError(429, root.error ?? text.slice(0, 160));
+      throw new Error(root.error ?? `deliver failed (${status}): ${text.slice(0, 160)}`);
+    }
+    return { data: root.data, payloadHash: root.payloadHash as `0x${string}`, metaBlock: root.metaBlock, proof: root.proof ?? "" };
+  }
+  const { status, json, text } = await postJson(
+    `https://gateway.thegraph.com/api/${env.graphKey}/subgraphs/id/${opts.subgraphId}`,
+    { query: appendMeta(opts.query) },
+  );
   if (status >= 400) throw new GatewayHttpError(status, text.slice(0, 200));
   const root = (typeof json === "object" && json !== null ? json : {}) as { data?: unknown; errors?: { message?: string }[] };
   if (Array.isArray(root.errors) && root.errors.length > 0) {
     throw new GraphQueryError(root.errors.map((e) => e.message ?? "error").join("; "), root.errors);
   }
-  return { data: root.data, meta: extractMeta(root.data) };
+  const meta: GatewayMeta = extractMeta(root.data);
+  if (meta.block === null) throw new Error("the gateway answered without a freshness block, so nothing can be attested");
+  const payload = stripMeta(root.data);
+  return { data: payload, payloadHash: keccak256(toBytes(JSON.stringify(payload))), metaBlock: meta.block, proof: "" };
 }
 
 /** Ask the server to attest a delivery; returns the attest tx hash. */
-export async function attestViaApi(input: { jobId: string; deliverable: `0x${string}`; metaBlock: number; minBlock: number }): Promise<`0x${string}`> {
+export async function attestViaApi(input: {
+  jobId: string;
+  deliverable: `0x${string}`;
+  metaBlock: number;
+  minBlock: number;
+  proof: string;
+}): Promise<`0x${string}`> {
   const base = apiBase();
   if (base === null) throw new Error("attestation runs on the server; set VITE_API_BASE to a deployed origin for local runs");
   const { status, json, text } = await postJson(`${base}/api/attest`, input);
@@ -65,4 +93,12 @@ export async function attestViaApi(input: { jobId: string; deliverable: `0x${str
     throw new Error(root.error ?? `attest failed (${status}): ${text.slice(0, 160)}`);
   }
   return root.txHash as `0x${string}`;
+}
+
+/** Where the console's ask mode sends chat requests: the server route on deployed origins. */
+export function askConfig(): { baseUrl: string; apiKey: string; model: string } | null {
+  const base = apiBase();
+  if (base !== null) return { baseUrl: `${base}/api/ask`, apiKey: "server", model: "server" };
+  if (env.llmApiKey.length > 0) return { baseUrl: env.llmBaseUrl, apiKey: env.llmApiKey, model: env.llmModel };
+  return null;
 }

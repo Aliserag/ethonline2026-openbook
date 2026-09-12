@@ -62,7 +62,8 @@ export interface BoardRow {
 export const MARKET_ESCROW_MAX_JOB_ID = 100_000n;
 
 export function marketJobs(jobs: JobView[]): JobView[] {
-  return jobs.filter((j) => j.jobId < MARKET_ESCROW_MAX_JOB_ID);
+  // created-but-never-funded jobs (amount 0, still open) are not purchases
+  return jobs.filter((j) => j.jobId < MARKET_ESCROW_MAX_JOB_ID && !(j.state === "open" && j.amount === 0n));
 }
 
 export function latestRefund(jobs: JobView[]): JobView | null {

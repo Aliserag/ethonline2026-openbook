@@ -26,7 +26,7 @@
 import { keccak256, toBytes, type TransactionReceipt } from "viem";
 import { CONFIG, defaultQueryFor } from "../../config";
 import { env } from "../../env";
-import { appGatewayQuery, attestViaApi, hasGatewayAccess } from "../../data/api";
+import { attestViaApi, deliverViaApi, hasGatewayAccess } from "../../data/api";
 import { ensureArcChain } from "../../arc";
 import { ADDR } from "../../data/addresses";
 import { checkWithdrawal, readPolicy, simulateOverspend } from "../../data/policy";
@@ -34,7 +34,6 @@ import { fetchPolicyRefusalsResilient, type PolicyRefusalView, type Resilient } 
 import { cachedAsOfLabel } from "../../data/cache";
 import { truncateHash, usdc6 } from "../../format";
 import { createEnsTextReader } from "../../../../mcp/src/ens";
-import { stripMeta } from "../../../../mcp/src/gateway";
 import {
   claimTimeout,
   createJobWithSla,
@@ -295,21 +294,12 @@ const staleCommand: Command = {
     // SLA is written so this exact deliverable cannot clear it.
     let payloadHash: `0x${string}`;
     let metaBlock: number;
+    let proof = "";
     try {
-      const { data, meta } = await appGatewayQuery({
-        subgraphId: dataset.subgraphId,
-        query: defaultQueryFor(dataset),
-      });
-      if (meta.block === null || meta.block === undefined) {
-        return {
-          render: "kv",
-          data: {
-            rows: [...rows, ["delivery", "✗ no _meta in the gateway payload · nothing to attest"]],
-          },
-        };
-      }
-      payloadHash = keccak256(toBytes(JSON.stringify(stripMeta(data))));
-      metaBlock = meta.block;
+      const delivered = await deliverViaApi({ subgraphId: dataset.subgraphId, query: defaultQueryFor(dataset) });
+      payloadHash = delivered.payloadHash;
+      metaBlock = delivered.metaBlock;
+      proof = delivered.proof;
       rows.push(["payloadHash", truncateHash(payloadHash, 12, 10)]);
       rows.push(["metaBlock", metaBlock.toLocaleString("en-US")]);
     } catch (error) {
@@ -361,7 +351,7 @@ const staleCommand: Command = {
     // that revert is rendered as the current evidence instead.
     let attested = false;
     try {
-      await attestViaApi({ jobId: jobId.toString(), deliverable: payloadHash, metaBlock, minBlock: sla.minBlock });
+      await attestViaApi({ jobId: jobId.toString(), deliverable: payloadHash, metaBlock, minBlock: sla.minBlock, proof });
       attested = true;
       rows.push(["attest", `ok · posted metaBlock ${metaBlock}, minBlock ${sla.minBlock}`]);
     } catch (error) {
@@ -418,6 +408,7 @@ const staleCommand: Command = {
       deadline,
       payloadHash,
       metaBlock,
+      proof,
       createdAt: Math.floor(Date.now() / 1000),
     };
     setActJob(job);

@@ -59,7 +59,9 @@ import {
   type AskOutcome,
   type AskProposal,
 } from "./ask";
-import { hasLlmKey } from "../env";
+import { askConfig } from "../data/api";
+const ASK = askConfig();
+const hasLlmKey = ASK !== null;
 import { renderResult } from "./renderers";
 import { CountdownBlock } from "./blocks/CountdownBlock";
 import { LogBlock } from "./blocks/LogBlock";
@@ -359,19 +361,19 @@ export function Console(): JSX.Element {
     setPopover(null);
     setInput("");
     const id = seqRef.current++;
-    if (!llmConfigured(env.llmApiKey)) {
+    if (ASK === null || !llmConfigured(ASK.apiKey)) {
       setEntries((es) => [...es, { id, line: `ask · ${text}`, at: Date.now(), results: null, ask: missingKeyRefusal() }]);
       return;
     }
     const controller = new AbortController();
     askAbortRef.current?.abort();
     askAbortRef.current = controller;
-    setEntries((es) => [...es, { id, line: `ask · ${text}`, at: Date.now(), results: null, asking: env.llmModel }]);
+    setEntries((es) => [...es, { id, line: `ask · ${text}`, at: Date.now(), results: null, asking: ASK?.model === "server" ? "the server model" : (ASK?.model ?? "") }]);
     try {
       const systemPrompt = buildSystemPrompt(registrySchema(allCommands), await buildLiveAskContext());
       const outcome = await askLlm(
         text,
-        { baseUrl: env.llmBaseUrl, apiKey: env.llmApiKey, model: env.llmModel, signal: controller.signal },
+        { baseUrl: ASK!.baseUrl, apiKey: ASK!.apiKey, model: ASK!.model, signal: controller.signal },
         systemPrompt,
         allCommands,
       );

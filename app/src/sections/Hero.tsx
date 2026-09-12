@@ -13,7 +13,7 @@ export function Hero({ onBuy, onFail }: { onBuy(): void; onFail(): void }): JSX.
   const feed = useFeed();
   const runs = useSessionRuns();
   const fee = useLiveValue(() => platformFee(getPublicClient()), { pollMs: 60_000, staleAfterMs: 180_000 });
-  const sellers = useLiveValue(readSellers, { pollMs: 60_000, staleAfterMs: 180_000, cacheKey: "market.sellers" });
+  const sellers = useLiveValue(readSellers, { pollMs: 120_000, staleAfterMs: 360_000, cacheKey: "market.sellers" });
   const jobs = feed.value?.jobs ?? [];
 
   const refund = useMemo(() => {
@@ -48,8 +48,8 @@ export function Hero({ onBuy, onFail }: { onBuy(): void; onFail(): void }): JSX.
           <h1 id="hero-title">When an agent buys stale data, the money comes back. Automatically.</h1>
           <p className="lede">
             OpenBook is a data marketplace for AI agents. Every purchase carries a freshness promise, locked into
-            an escrow on Arc the moment it is paid. Fresh data settles and the seller is paid. Stale data is
-            refunded onchain, without anyone asking.
+            an escrow on Arc the moment it is paid. Fresh data settles and the seller is paid. Stale data cannot be paid for:
+            the contract refuses, and the escrow returns the money.
           </p>
           <div className="hero__actions">
             <button type="button" className="btn" onClick={onBuy}>

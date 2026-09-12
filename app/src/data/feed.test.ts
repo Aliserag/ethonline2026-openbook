@@ -73,7 +73,7 @@ describe("feed derivations", () => {
     expect(boardRows(jobs, [], 5)[0]!.sellerName).toBeUndefined();
   });
   test("marketJobs keeps the market escrow's small ids and drops the reference escrow's", () => {
-    const jobs = [job({ jobId: 52n }), job({ jobId: 185853n }), job({ jobId: 1n })];
+    const jobs = [job({ jobId: 52n }), job({ jobId: 185853n }), job({ jobId: 1n }), job({ jobId: 61n, amount: 0n, state: "open" })];
     expect(marketJobs(jobs).map((j) => j.jobId)).toEqual([52n, 1n]);
   });
   test("boardRows respects the limit", () => {

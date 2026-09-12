@@ -63,7 +63,7 @@ export function Books(): JSX.Element {
       }) as Promise<bigint>,
     { pollMs: 30_000, staleAfterMs: 90_000 },
   );
-  const sellers = useLiveValue(readSellers, { pollMs: 60_000, staleAfterMs: 180_000, cacheKey: "market.sellers" });
+  const sellers = useLiveValue(readSellers, { pollMs: 120_000, staleAfterMs: 360_000, cacheKey: "market.sellers" });
   const jobs = feed.value?.jobs ?? [];
   const rows = boardRows(jobs, runs, 12, sellerNameMap(sellers.value));
   const t = totals(jobs, fee.value?.feeBP ?? 200);

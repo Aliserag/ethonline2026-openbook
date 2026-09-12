@@ -7,14 +7,15 @@ import { datasetTitle, freshnessPromise, priceLabel } from "../copy/plain";
 import { runPurchase, type PurchaseEvent } from "../flow/purchase";
 import { recordRun } from "../flow/session";
 import { Stepper } from "../ui/Stepper";
-import { explorerUrl, truncateHash } from "../format";
+import { ensRecordUrl, explorerUrl, truncateHash } from "../format";
 
 const TX_RE = /^0x[0-9a-fA-F]{64}$/;
 
 /** Detail values: transaction hashes become ArcScan links; everything else prints as is. */
-function DetailValue({ value }: { value: string }): JSX.Element {
+function DetailValue({ value, label }: { value: string; label: string }): JSX.Element {
   const parts = value.split(",").map((v) => v.trim()).filter(Boolean);
-  if (parts.length > 0 && parts.every((v) => TX_RE.test(v))) {
+  const isTx = !/hash/i.test(label) || /tx/i.test(label);
+  if (isTx && parts.length > 0 && parts.every((v) => TX_RE.test(v))) {
     return (
       <>
         {parts.map((hash, i) => (
@@ -136,7 +137,10 @@ export function TryIt({ armed, onArmedConsumed }: { armed: "fresh" | "fail" | nu
             {quote ? (
               <>
                 {priceLabel(quote.amountUsdc)} per query · {freshnessPromise(quote.maxBlockLag, dataset.chain)} ·
-                price from the ENS record of {dataset.id}.openbook.eth (falls back to openbook.eth)
+                price from the ENS record of{" "}
+                <a href={ensRecordUrl(quote.priceName)} target="_blank" rel="noreferrer">
+                  {quote.priceName}
+                </a>
               </>
             ) : quoteError ? (
               `The price could not be read from ENS: ${quoteError}`
@@ -194,7 +198,7 @@ export function TryIt({ armed, onArmedConsumed }: { armed: "fresh" | "fail" | nu
                           {e.step} · {k}
                         </dt>
                         <dd>
-                          <DetailValue value={v} />
+                          <DetailValue value={v} label={k} />
                         </dd>
                       </div>
                     )),

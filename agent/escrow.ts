@@ -88,6 +88,9 @@ export function usdcAddress(): Address {
 
 export const ZERO_ADDRESS: Address = "0x0000000000000000000000000000000000000000";
 
+/** Standing USDC allowance for the escrow (6-dec): 50 USDC, so parallel demo runs never clash on approve. */
+export const STANDING_ALLOWANCE = 50_000_000n;
+
 /** Public Arc testnet RPC (chain 5042002). */
 export const ARC_RPC_URL = "https://rpc.testnet.arc.io";
 
@@ -110,6 +113,16 @@ export const USDC_ABI = [
     type: "function",
     stateMutability: "view",
     inputs: [{ name: "owner", type: "address" }],
+    outputs: [{ name: "", type: "uint256" }],
+  },
+  {
+    name: "allowance",
+    type: "function",
+    stateMutability: "view",
+    inputs: [
+      { name: "owner", type: "address" },
+      { name: "spender", type: "address" },
+    ],
     outputs: [{ name: "", type: "uint256" }],
   },
   {
@@ -333,13 +346,26 @@ export async function createJobWithSla(
       args: [jobId, amount6dec, "0x"],
     });
   }
-  // 3. BUYER approves USDC — 6 decimals, never 18 (verified Task 0)
-  await sendAndConfirm(publicClient, buyer, {
+  // 3. BUYER approves USDC — 6 decimals, never 18 (verified Task 0). The
+  //    allowance is checked first and topped up to a standing amount: two
+  //    concurrent runs from one key used to overwrite each other's exact
+  //    approve and the second fund() reverted (judge-observed, 2026-09-12).
+  const buyerAddress = requireAccount(buyer).address;
+  const allowance = (await publicClient.readContract({
     address: usdcAddress(),
     abi: USDC_ABI,
-    functionName: "approve",
-    args: [escrowAddress(), amount6dec],
-  });
+    functionName: "allowance",
+    args: [buyerAddress, escrowAddress()],
+  })) as bigint;
+  if (allowance < amount6dec) {
+    const standing = amount6dec * 200n > STANDING_ALLOWANCE ? amount6dec * 200n : STANDING_ALLOWANCE;
+    await sendAndConfirm(publicClient, buyer, {
+      address: usdcAddress(),
+      abi: USDC_ABI,
+      functionName: "approve",
+      args: [escrowAddress(), standing],
+    });
+  }
   // 4. BUYER funds — job moves to Funded (status 1)
   await sendAndConfirm(publicClient, buyer, {
     address: escrowAddress(),

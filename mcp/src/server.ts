@@ -64,6 +64,8 @@ export interface DatasetListing {
   pinned: boolean;
   /** true when the dataset is also advertised on the ENS svc.menu record */
   onEnsMenu: boolean;
+  /** where `price` came from: the live ENS record (authoritative) or the config (display only) */
+  priceSource: "ENS" | "config";
 }
 
 export interface ListDatasetsResult {
@@ -244,7 +246,25 @@ export function createApp(config: OpenBookConfig, deps: AppDeps = {}): OpenBookA
       description: dataset.description,
       pinned: dataset.pinned,
       onEnsMenu: false,
+      priceSource: "config" as const,
     }));
+    // The catalog quotes the live ENS price when the records resolve (the
+    // subname record wins over the parent), so list_datasets never shows an
+    // agent a number get_quote would contradict.
+    await Promise.all(
+      datasets.map(async (listing) => {
+        try {
+          const records = await resolveDatasetRecords(config.ens, listing.id, readEnsText);
+          if (records.price !== null) {
+            listing.price = records.price;
+            listing.priceUsdc = parsePriceToAmount6dec(records.price);
+            listing.priceSource = "ENS";
+          }
+        } catch {
+          // keep the config display price, labeled as such
+        }
+      }),
+    );
     // ENS merge is tolerant: the catalog must never disappear because Sepolia RPC
     // is down — only the quote (which needs records) hard-fails.
     try {

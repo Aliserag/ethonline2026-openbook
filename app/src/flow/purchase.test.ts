@@ -11,7 +11,7 @@ function deps(over: Partial<PurchaseDeps> = {}): PurchaseDeps {
     balance: async () => 1_000_000n,
     chainHead: async () => 1000,
     createJob: async () => 42n,
-    query: async () => ({ payloadHash: "0xab" as `0x${string}`, metaBlock: 990 }),
+    query: async () => ({ payloadHash: "0xab" as `0x${string}`, metaBlock: 990, proof: "deadbeef" }),
     submit: async () => "0xsubmit" as `0x${string}`,
     attest: async () => "0xattest" as `0x${string}`,
     simulateComplete: async () => ({ reverted: false }),
@@ -45,7 +45,8 @@ describe("runPurchase", () => {
       "quote:running", "quote:done",
       "pay:running", "pay:done",
       "deliver:running", "deliver:done",
-      "verdict:running", "verdict:done",
+      "verdict:running", "deliver:done",
+      "verdict:done",
       "settle:running", "settle:done",
       "split:running", "split:done",
     ]);
@@ -73,7 +74,8 @@ describe("runPurchase", () => {
       "quote:running", "quote:done",
       "deliver:running", "deliver:done",
       "pay:running", "pay:done",
-      "verdict:running", "verdict:done",
+      "verdict:running", "deliver:done",
+      "verdict:done",
       "settle:running", "settle:done",
     ]);
     expect(events.find((e) => e.step === "verdict" && e.status === "done")?.detail).toContain("SlaNotMet");

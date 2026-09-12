@@ -9,14 +9,13 @@
 import { keccak256, toBytes, type PublicClient, type WalletClient } from "viem";
 import { CONFIG, defaultQueryFor, type DatasetConfig } from "../config";
 import { env } from "../env";
-import { appGatewayQuery, attestViaApi, hasGatewayAccess } from "../data/api";
+import { attestViaApi, deliverViaApi, hasGatewayAccess } from "../data/api";
 import { ADDR } from "../data/addresses";
 import { getPublicClient } from "../data/chain";
 import { feeSplitFromReceipt, platformFee } from "../data/escrow";
 import type { FeeSplit } from "../data/types";
 import { createJobWithSla, ERC8183_ABI, submitDeliverable } from "../../../agent/escrow";
 import { reasonHash, verifyDelivery } from "../../../mcp/src/escrow";
-import { stripMeta } from "../../../mcp/src/gateway";
 import { defaultChainHeadResolver } from "../../../mcp/src/chainhead";
 import { createEnsTextReader } from "../../../mcp/src/ens";
 import {
@@ -63,9 +62,9 @@ export interface PurchaseDeps {
     params: { minBlock: number; schemaHash: `0x${string}`; maxLatencyMs: number; amount: bigint },
     trace: string[],
   ): Promise<bigint>;
-  query(dataset: DatasetConfig): Promise<{ payloadHash: `0x${string}`; metaBlock: number; preview?: string }>;
+  query(dataset: DatasetConfig): Promise<{ payloadHash: `0x${string}`; metaBlock: number; preview?: string; proof: string }>;
   submit(jobId: bigint, payloadHash: `0x${string}`): Promise<`0x${string}`>;
-  attest(jobId: bigint, payloadHash: `0x${string}`, metaBlock: number, minBlock: number): Promise<`0x${string}`>;
+  attest(jobId: bigint, payloadHash: `0x${string}`, metaBlock: number, minBlock: number, proof: string): Promise<`0x${string}`>;
   simulateComplete(jobId: bigint): Promise<{ reverted: boolean; reason?: string }>;
   verify(input: { jobId: string; payloadHash: `0x${string}`; metaBlock: number; minBlock: number }): Promise<{
     verdict: "APPROVE" | "REJECT";
@@ -132,20 +131,13 @@ export async function liveDeps(publicClient: PublicClient = getPublicClient()): 
       });
     },
     query: async (dataset) => {
-      const { data, meta } = await appGatewayQuery({
-        subgraphId: dataset.subgraphId,
-        query: defaultQueryFor(dataset),
-      });
-      if (meta.block === null || meta.block === undefined) {
-        throw new Error("the gateway answered without a freshness block, so nothing can be attested");
-      }
-      const payload = stripMeta(data);
-      return { payloadHash: keccak256(toBytes(JSON.stringify(payload))), metaBlock: meta.block, preview: previewOf(payload) };
+      const d = await deliverViaApi({ subgraphId: dataset.subgraphId, query: defaultQueryFor(dataset) });
+      return { payloadHash: d.payloadHash, metaBlock: d.metaBlock, preview: previewOf(d.data), proof: d.proof };
     },
     submit: async (jobId, hash) => (await submitDeliverable(publicClient, needWallet(), jobId, hash)).transactionHash,
     // the attester key lives on the server; it verifies the job onchain first
-    attest: (jobId, hash, metaBlock, minBlock) =>
-      attestViaApi({ jobId: jobId.toString(), deliverable: hash, metaBlock, minBlock }),
+    attest: (jobId, hash, metaBlock, minBlock, proof) =>
+      attestViaApi({ jobId: jobId.toString(), deliverable: hash, metaBlock, minBlock, proof }),
     simulateComplete: async (jobId) => {
       if (!signer) return { reverted: false };
       try {
@@ -206,7 +198,10 @@ const FAUCET_HINT =
 
 function plainReason(error: unknown): string {
   const text = error instanceof Error ? error.message : String(error);
-  if (/insufficient|fund/i.test(text)) return FAUCET_HINT;
+  if (/insufficient funds|insufficient balance|exceeds balance/i.test(text)) return FAUCET_HINT;
+  if (/nonce|replacement|already known|reverted onchain/i.test(text)) {
+    return `${formatSendError(error)} · another run from the shared demo wallet was probably in flight at the same time; wait a few seconds and try again`;
+  }
   return formatSendError(error);
 }
 
@@ -249,7 +244,7 @@ export async function runPurchase(
 
   const signer = d.signer;
   const schemaHash = keccak256(toBytes(dataset.schema));
-  let delivered: { payloadHash: `0x${string}`; metaBlock: number; preview?: string } | null = null;
+  let delivered: { payloadHash: `0x${string}`; metaBlock: number; preview?: string; proof: string } | null = null;
 
   const deliver = async (): Promise<PurchaseResult | null> => {
     emit({ step: "deliver", status: "running" });
@@ -319,7 +314,7 @@ export async function runPurchase(
     const r = await deliver();
     if (r) return r;
   }
-  const dl = delivered as unknown as { payloadHash: `0x${string}`; metaBlock: number; preview?: string };
+  const dl = delivered as unknown as { payloadHash: `0x${string}`; metaBlock: number; preview?: string; proof: string };
 
   emit({ step: "verdict", status: "running" });
   let submitTx: `0x${string}`;
@@ -328,9 +323,16 @@ export async function runPurchase(
   } catch (error) {
     return fail("verdict", `The delivery could not be recorded onchain: ${plainReason(error)}`);
   }
+  emit({
+    step: "deliver",
+    status: "done",
+    detail: `indexed at block ${dl.metaBlock.toLocaleString("en-US")}${dl.preview ? ` · ${dl.preview}` : ""} · recorded onchain`,
+    txHash: submitTx,
+    data: { metaBlock: String(dl.metaBlock), payloadHash: dl.payloadHash, submitTx, ...(dl.preview ? { rows: dl.preview } : {}) },
+  });
   let attestTx: `0x${string}`;
   try {
-    attestTx = await d.attest(jobId, dl.payloadHash, dl.metaBlock, minBlock);
+    attestTx = await d.attest(jobId, dl.payloadHash, dl.metaBlock, minBlock, dl.proof);
   } catch (error) {
     return fail("verdict", `The freshness proof could not be posted: ${plainReason(error)}`);
   }

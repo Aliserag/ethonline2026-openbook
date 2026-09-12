@@ -46,7 +46,7 @@ export function ReceiptCard({
         <Badge kind="refunded">Refunded</Badge>
       </div>
       <p className="receipt__amount">+{priceLabel(row.amount)}</p>
-      <p className="small receipt__sub">back to the buyer, executed by the escrow</p>
+      <p className="small receipt__sub">back to the buyer: the contract refused to pay, so the escrow returned it</p>
       <dl className="kv">
         <dt>{row.datasetId ? "dataset" : "seller"}</dt>
         <dd>{row.datasetId ? datasetTitle(row.datasetId) : (row.sellerName ?? (row.seller ? truncateHash(row.seller) : "onchain data query"))}</dd>

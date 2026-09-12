@@ -182,9 +182,9 @@ buyer), **sandbox** (safe re-enactments on the same live contracts).
 commands, sign with the demo buyer key (`VITE_DEMO_BUYER_KEY` in `app/.env.local`):
 testnet USDC as play money, spent live against the real escrow. When the balance runs
 out, refill the demo buyer address at [faucet.circle.com](https://faucet.circle.com)
-(Arc Testnet). The same key is the SLA hook's attester, so the full hook-gated path runs
-keyless for a judge while the signing role stays honest: it is our demo key, role-play,
-not a third-party attester.
+(Arc Testnet). The SLA hook's attester is a separate key that never reaches the browser:
+the page asks `/api/attest`, which verifies the job, its floor and the submitted
+deliverable onchain before it posts the proof. The demo key is only ever the buyer.
 
 **The marketplace.** Two reference sellers are live, both registered through the ENSv2
 storefront and priced by their own text records: `openbook.eth` (0.10 USDC/query, and
@@ -236,7 +236,7 @@ of `openbook.eth` (`"source": "ENS"`), and `get_pnl` returns the P&L rows the
 `open-book` subgraph indexed from the escrow + policy contracts on Arc testnet.
 
 ```bash
-bun test          # 366 unit tests across agent, mcp, app and scripts; mock-injected, no keys needed
+bun test          # 368 unit tests across agent, mcp, app and scripts; mock-injected, no keys needed
 cd app && bun run dev   # the product page on localhost:5173 (reads Studio directly; the
                         # deployed lanes read it through the cached /api/subgraph proxy)
 ```
@@ -266,7 +266,7 @@ Full tool reference + the one-command live-data path:
 | **Live demo (no keys needed)** | https://openbook.litai.ca, a real purchase and a real refund in two clicks, no wallet; every figure live from ENS, the subgraph and the escrow |
 | Frontend hosting | Cloudflare Pages project `openbook` (custom domain `openbook.litai.ca`); redeploy with `cd app && bun run build && npx wrangler pages deploy dist --project-name openbook` |
 | Storefront | `openbook.eth` on ENSv2 Sepolia (10 records: menu/price/SLA/payee/…/agent-registration; `agent-endpoint[web]` = the live demo URL) |
-| Escrow rail | ERC-8183 `0x0747EEf0706327138c69792bF28Cd525089e4583` on Arc testnet (chain 5042002) |
+| Escrow rail | OpenBook market escrow (ERC-8183 instance, 2% fee, SlaHook whitelisted) `0x967e005154D0F62C33Eac8E2F44b44d4C4C07Dd5` on Arc testnet (chain 5042002); the shared reference deployment `0x0747EEf0…4583` carries the early history |
 | Policy treasury | `PolicyWallet` `0x4e83eB15EE973A49E40D9A79aB2cA89a4Eb4894E` (Arc testnet) |
 | Agent identity | ERC-8004 **agentId 894065** on Arc testnet |
 | Audited books | `open-book` subgraph, `https://api.studio.thegraph.com/query/1760032/open-book/v0.0.6` (public; the page reads it through a cached same-origin proxy) |
@@ -281,7 +281,7 @@ fresh clone, not inferred from the code.
 | The judge path works with **no keys** | fresh clone → the stdio command above returns a quote (`"source": "ENS"`) and the indexed P&L in under a second |
 | A stale delivery **refunded the buyer onchain, automatically** | the [Refunded tx](https://testnet.arcscan.app/tx/0x25e7805ae79fd8320ccbc74d90dead9d87b082fd299ecfe5a5949a968e16063f) and the `refunds` row in the live P&L |
 | Treasury policy is enforced **onchain** | `PolicyWallet` verified on ArcScan; `PolicyBlocked` rows indexed by the subgraph |
-| Contracts and tests are real | 20 forge tests · 366 unit tests · 3-job CI (badge above) · 20-check browser audit (`scripts/app-audit.mjs`) |
+| Contracts and tests are real | 20 forge tests · 368 unit tests · 3-job CI (badge above) · 20-check browser audit (`scripts/app-audit.mjs`) |
 
 **Not proven, stated plainly:**
 

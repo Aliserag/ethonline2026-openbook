@@ -23,7 +23,7 @@
 import { BaseError, keccak256, toBytes, type Address, type WalletClient } from "viem";
 import { CONFIG, defaultQueryFor, type DatasetConfig } from "../../config";
 import { env } from "../../env";
-import { appGatewayQuery, attestViaApi, hasGatewayAccess } from "../../data/api";
+import { attestViaApi, deliverViaApi, hasGatewayAccess } from "../../data/api";
 import { ADDR } from "../../data/addresses";
 import { getProvider, arcWalletClient, ensureArcChain } from "../../arc";
 import { walletForDemo } from "../../data/chain";
@@ -36,7 +36,6 @@ import {
   parseSlaRecord,
   type EnsTextReader,
 } from "../../../../mcp/src/ens";
-import { stripMeta } from "../../../../mcp/src/gateway";
 import { defaultChainHeadResolver } from "../../../../mcp/src/chainhead";
 import {
   createJobWithSla,
@@ -93,6 +92,8 @@ export interface BuyArgs {
 export interface DatasetQuote {
   /** raw svc.price record (e.g. "0.10 USDC/query") */
   price: string;
+  /** the ENS name whose svc.price record answered (the dataset subname or the parent) */
+  priceName: string;
   amountUsdc: number;
   maxBlockLag: number;
   maxLatencyMs: number;
@@ -181,6 +182,7 @@ export async function resolveDatasetQuote(
   const parsedSla = parseSlaRecord(sla.value);
   return {
     price: price.value,
+    priceName: subPrice.ok && subPrice.value !== null ? sub : CONFIG.ens,
     amountUsdc,
     maxBlockLag: parsedSla.maxBlockLag,
     maxLatencyMs: parsedSla.maxLatencyMs,
@@ -293,6 +295,8 @@ export interface ActJob {
   deadline: bigint;
   payloadHash?: `0x${string}`;
   metaBlock?: number;
+  /** the server's deliver signature (required by /api/attest) */
+  proof?: string;
   /** unix seconds when the job was funded locally (recovery affordance) */
   createdAt: number;
   /** set once the job reached a terminal state (settle/refund executed) */
@@ -417,6 +421,9 @@ export function deserializeActJob(raw: string): ActJob | null {
   }
   if (typeof p["metaBlock"] === "number" && Number.isInteger(p["metaBlock"])) {
     job.metaBlock = p["metaBlock"];
+  }
+  if (typeof p["proof"] === "string" && /^[0-9a-f]{64}$/.test(p["proof"])) {
+    job.proof = p["proof"];
   }
   if (p["outcome"] === "settled" || p["outcome"] === "refunded") {
     job.outcome = p["outcome"];
@@ -737,23 +744,15 @@ const deliverCommand: Command = {
     const rows: KvRow[] = [["dataset", dataset.id], ["job", job.jobId]];
     let payloadHash: `0x${string}`;
     let metaBlock: number;
+    let proof = "";
     try {
-      const { data, meta } = await appGatewayQuery({
-        subgraphId: dataset.subgraphId,
-        query: defaultQueryFor(dataset),
-      });
-      if (meta.block === null || meta.block === undefined) {
-        return {
-          render: "kv",
-          data: {
-            rows: [...rows, ["delivery", "✗ no _meta in the gateway payload · nothing to attest"]],
-          },
-        };
-      }
-      payloadHash = keccak256(toBytes(JSON.stringify(stripMeta(data))));
-      metaBlock = meta.block;
+      const delivered = await deliverViaApi({ subgraphId: dataset.subgraphId, query: defaultQueryFor(dataset) });
+      payloadHash = delivered.payloadHash;
+      metaBlock = delivered.metaBlock;
+      proof = delivered.proof;
       rows.push(["payloadHash", truncateHash(payloadHash, 12, 10)]);
       rows.push(["metaBlock", metaBlock.toLocaleString("en-US")]);
+      rows.push(["observed by", proof.length > 0 ? "the server (signed)" : "this browser (local key, unsigned)"]);
     } catch (error) {
       return {
         render: "kv",
@@ -772,7 +771,7 @@ const deliverCommand: Command = {
 
     const signed = await resolveSigner();
     if (!signed.ok) {
-      setActJob({ ...job, payloadHash, metaBlock });
+      setActJob({ ...job, payloadHash, metaBlock, proof });
       return {
         render: "kv",
         data: {
@@ -796,7 +795,7 @@ const deliverCommand: Command = {
         data: { rows: [...rows, ["submit", `✗ ${formatSendError(error)}`]] },
       };
     }
-    setActJob({ ...job, payloadHash, metaBlock });
+    setActJob({ ...job, payloadHash, metaBlock, proof });
     return {
       render: "kv",
       data: { rows, note: `payload captured and submitted · next: settle ${dataset.id}` },
@@ -836,7 +835,7 @@ const settleCommand: Command = {
     // reason, never glossed over.
     try {
       await ensureChainFor(signer);
-      await attestViaApi({ jobId: job.jobId, deliverable: job.payloadHash, metaBlock: job.metaBlock, minBlock: job.minBlock });
+      await attestViaApi({ jobId: job.jobId, deliverable: job.payloadHash, metaBlock: job.metaBlock, minBlock: job.minBlock, proof: job.proof ?? "" });
     } catch (error) {
       return {
         render: "kv",
@@ -846,7 +845,7 @@ const settleCommand: Command = {
             ["attest", `✗ ${formatSendError(error)}`],
           ],
           note:
-            "the SlaHook attester gates attest · T13 provisions the demo key (OPENBOOK_ATTESTER_PK) and calls setAttester; until then this revert is the expected state",
+            "the attester runs on the server: it verifies the job, the floor and the submitted deliverable onchain and requires the deliver signature",
         },
       };
     }

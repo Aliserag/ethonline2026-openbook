@@ -373,6 +373,15 @@
   letter-spacing: 0;
 }
 
+.seller h3 a {
+  color: var(--ink);
+  text-decoration-color: var(--line-strong);
+}
+
+.seller h3 a:hover {
+  color: var(--accent);
+}
+
 .seller__promise {
   margin-top: 6px;
 }

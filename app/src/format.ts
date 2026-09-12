@@ -27,3 +27,8 @@ export function explorerUrl(txHash: string): string {
 export function clockTime(at: number): string {
   return new Date(at).toLocaleTimeString("en-US", { hour12: false });
 }
+
+/** The live ENSv2 record page for a name on Sepolia. */
+export function ensRecordUrl(name: string): string {
+  return `https://sepolia.app.ens.domains/${name}`;
+}

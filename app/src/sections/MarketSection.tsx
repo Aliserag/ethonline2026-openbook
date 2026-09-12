@@ -4,7 +4,7 @@ import { getPublicClient } from "../data/chain";
 import { platformFee } from "../data/escrow";
 import { useLiveValue } from "../ui/useLiveValue";
 import { datasetTitle, freshnessPromise, priceLabel } from "../copy/plain";
-import { explorerAddressUrl, truncateHash, usdc6 } from "../format";
+import { ensRecordUrl, explorerAddressUrl, truncateHash, usdc6 } from "../format";
 import { CONFIG } from "../config";
 import { parsePriceToAmount6dec } from "../../../mcp/src/ens";
 
@@ -24,7 +24,11 @@ function priceText(raw: string | null): string {
 function SellerCard({ row, statsNote }: { row: MarketSellerRow; statsNote: string | null }): JSX.Element {
   return (
     <article className="seller">
-      <h3>{row.name}</h3>
+      <h3>
+        <a href={ensRecordUrl(row.name)} target="_blank" rel="noreferrer" title="the live ENSv2 records on Sepolia">
+          {row.name}
+        </a>
+      </h3>
       <p className="small seller__promise">
         {row.sla ? freshnessPromise(row.sla.maxBlockLag, chainOf(row.menu[0]?.id ?? "")) : "no freshness promise published"}
       </p>
@@ -65,7 +69,7 @@ function SellerCard({ row, statsNote }: { row: MarketSellerRow; statsNote: strin
 }
 
 export function MarketSection(): JSX.Element {
-  const sellers = useLiveValue(readSellers, { pollMs: 60_000, staleAfterMs: 180_000, cacheKey: "market.sellers" });
+  const sellers = useLiveValue(readSellers, { pollMs: 120_000, staleAfterMs: 360_000, cacheKey: "market.sellers" });
   const venue = useLiveValue(() => platformFee(getPublicClient()), { pollMs: 60_000, staleAfterMs: 180_000 });
   return (
     <section id="market" className="section wrap" aria-labelledby="market-title">
