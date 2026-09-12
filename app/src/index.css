@@ -27,13 +27,13 @@
   --ink-2: #1c2530;
   --muted: #5e6670;
   --rule: #c9c6ba;
-  --rule-strong: #9a9588;
+  --rule-strong: #8a8578;
   /* money states — the only colors that carry meaning */
   --settled: #0e7a4f;
   --settled-bg: #e3efe8;
   --refunded: #b3402e;
   --refunded-bg: #f6e5e1;
-  --stale: #a97b1c;
+  --stale: #7d5a12;
   --stale-bg: #f4ecda;
   /* interactivity only */
   --accent: #2a4b8f;
