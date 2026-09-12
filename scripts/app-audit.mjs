@@ -224,7 +224,7 @@ async function audit(url) {
       );
       if (tryState.options.length === 5) pass("3.try five datasets listed", tryState.options.join(" / "));
       else fail("3.try five datasets listed", tryState.options.join(" / "));
-      if (/USDC per query · fresh within \d+ blocks/.test(tryState.quote)) pass("3.try ENS quote line renders", tryState.quote);
+      if (/USDC per query · fresh within \d+ (Arbitrum|Ethereum) blocks/.test(tryState.quote)) pass("3.try ENS quote line renders", tryState.quote);
       else if (isAmbient(tryState.quote)) skip("3.try ENS quote line renders", tryState.quote);
       else fail("3.try ENS quote line renders", tryState.quote);
       const enabled = tryState.buttons.length === 2 && tryState.buttons.every((b) => !b.disabled);
