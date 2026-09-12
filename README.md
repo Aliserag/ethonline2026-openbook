@@ -43,8 +43,9 @@ refunds column, no keys needed; [raw subgraph](https://api.studio.thegraph.com/q
 **Onchain data only, or any data?** The reference deployment sells
 **subgraph-queried, onchain-indexed data** — any of The Graph's 15,000+
 subgraphs becomes a sellable dataset with one config entry (`mcp/config/`).
-The mechanism itself (SLA + freshness floor + committed hash + escrow refund)
-is data-source-agnostic: selling offchain research would need a trustworthy
+The mechanism itself generalizes to **any feed that can be timestamped and
+hashed** — prices, sports odds, weather, news: the SLA binds whatever the
+seller can attest. Selling offchain research would need a trustworthy
 freshness attestation for that source, which is the buyer's call to accept —
 the shipped configs only claim what they can attest onchain.
 
