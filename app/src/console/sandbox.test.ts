@@ -94,7 +94,7 @@ describe("registry registration (carry-in names)", () => {
     if (result.render === "text") expect(result.data).toContain("usage: policy try-overspend");
   });
 
-  it("sandbox claim with no sandbox job prints the instruct line (no live reads)", async () => {
+  it("sandbox claim with no act job prints the instruct line (no live reads)", async () => {
     expect(getSandboxState()).toBeNull();
     const ctx = {
       publicClient: {} as never,
@@ -104,6 +104,6 @@ describe("registry registration (carry-in names)", () => {
     };
     const result = await dispatch("sandbox claim", ctx);
     expect(result.render).toBe("text");
-    if (result.render === "text") expect(result.data).toContain("run `sandbox stale` first");
+    if (result.render === "text") expect(result.data).toContain("no act job to claim");
   });
 });

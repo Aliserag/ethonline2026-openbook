@@ -47,6 +47,8 @@ import { register, type Command, type KvRow } from "../registry";
 import {
   classifyRevert,
   formatSendError,
+  getActJob,
+  isRecoveredActJob,
   resolveDatasetQuote,
   resolveSigner,
   setActJob,
@@ -411,6 +413,7 @@ const staleCommand: Command = {
       deadline,
       payloadHash,
       metaBlock,
+      createdAt: Math.floor(Date.now() / 1000),
     };
     setActJob(job);
     setSandboxState({ job, evidence, evidenceData });
@@ -434,9 +437,17 @@ const claimCommand: Command = {
   help: "execute claimRefund on the expired sandbox job for real (refund tx); shows the countdown while the deadline has not passed",
   kind: "sandbox",
   run: async (ctx) => {
-    const state = getSandboxState();
+    // The claim works on the sandbox job OR any recovered act job (a page
+    // reload strands the funded job — the sandbox evidence is session-only,
+    // but jobId + deadline survive via the act-job persistence).
+    const sandbox = getSandboxState();
+    const active = getActJob();
+    const state = sandbox ?? (active !== null ? { job: active, evidence: null } : null);
     if (!state) {
-      return { render: "text", data: "sandbox claim: no sandbox job — run `sandbox stale` first" };
+      return {
+        render: "text",
+        data: "sandbox claim: no act job to claim — run buy <dataset> (claimable after its deadline) or sandbox stale to stage one",
+      };
     }
     const job = state.job;
     const rows: KvRow[] = [
@@ -445,6 +456,8 @@ const claimCommand: Command = {
     ];
     if (state.evidence !== null) {
       rows.push(["protocol evidence", `complete() refused with ${state.evidence}${state.evidenceData ? ` (${state.evidenceData.slice(0, 10)}…)` : ""}`]);
+    } else if (isRecoveredActJob()) {
+      rows.push(["protocol evidence", "none captured (session restarted — the job was recovered; the refund path is unaffected)"]);
     } else {
       rows.push(["protocol evidence", "none captured (attestation or staleness did not land)"]);
     }
@@ -476,6 +489,9 @@ const claimCommand: Command = {
         data: { rows: [...rows, ["claim", `✗ ${formatSendError(error)}`]] },
       };
     }
+    // Terminal outcome (refunded) — no recovery affordance needed past this point.
+    setActJob(null);
+    setSandboxState(null);
     return {
       render: "tx",
       data: {

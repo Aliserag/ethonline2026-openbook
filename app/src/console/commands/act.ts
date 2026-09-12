@@ -71,6 +71,17 @@ const BALANCE_ABI = [
   },
 ] as const;
 
+/**
+ * Trimmed 6dp display: raw 6-dec USDC units → no forced 2dp ("0.003", "0.15",
+ * "1"). Mirrors agent/sell-cli.ts's `usdc6decToDisplay` for money surfaces
+ * where usdc6's 2dp would read as a zero fee (treasury 3000 raw = 0.003, not
+ * 0.00). sell-cli is not imported — its module drags node:fs/path/child_process
+ * into the browser bundle; this 2-line twin is deliberate and pinned by test.
+ */
+export function usdcTrim(value: bigint | number | string): string {
+  return (Number(value) / 1_000_000).toString();
+}
+
 /* ------------------------------------------------------------------ args */
 
 export interface BuyArgs {
@@ -279,16 +290,146 @@ export interface ActJob {
   deadline: bigint;
   payloadHash?: `0x${string}`;
   metaBlock?: number;
+  /** unix seconds when the job was funded locally (recovery affordance) */
+  createdAt: number;
 }
 
 let actJob: ActJob | null = null;
+let actJobRecovered = false;
 
 export function setActJob(job: ActJob | null): void {
   actJob = job;
+  actJobRecovered = false;
+  if (job === null) clearStoredActJob();
+  else persistActJob(job);
 }
 
 export function getActJob(): ActJob | null {
   return actJob;
+}
+
+/** True when the current act job was rehydrated from localStorage after a reload. */
+export function isRecoveredActJob(): boolean {
+  return actJobRecovered;
+}
+
+/* -------------------------------------------- act-job persistence (v1) */
+
+const ACT_JOB_STORAGE_KEY = "openbook.actjob.v1";
+
+/** Pure serializer — deadline is bigint, stored as a decimal string. */
+export function serializeActJob(job: ActJob): string {
+  return JSON.stringify({ version: 1, ...job, deadline: job.deadline.toString() });
+}
+
+/**
+ * Pure deserializer with shape validation. Returns null on ANY mismatch
+ * (corrupt JSON, wrong version, missing/invalid fields) — never throws, so
+ * the caller can clear the bad entry instead of crashing the console mount.
+ */
+export function deserializeActJob(raw: string): ActJob | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw) as unknown;
+  } catch {
+    return null;
+  }
+  if (typeof parsed !== "object" || parsed === null) return null;
+  const p = parsed as Record<string, unknown>;
+  if (p["version"] !== 1) return null;
+  if (typeof p["datasetId"] !== "string" || p["datasetId"].length === 0) return null;
+  if (typeof p["jobId"] !== "string" || !/^[0-9]+$/.test(p["jobId"])) return null;
+  if (typeof p["minBlock"] !== "number" || !Number.isInteger(p["minBlock"])) return null;
+  if (typeof p["amountUsdc"] !== "number" || !Number.isInteger(p["amountUsdc"])) return null;
+  if (typeof p["createdAt"] !== "number" || !Number.isInteger(p["createdAt"])) return null;
+  let deadline: bigint;
+  try {
+    deadline = BigInt(typeof p["deadline"] === "string" ? p["deadline"] : (p["deadline"] as number));
+  } catch {
+    return null;
+  }
+  if (deadline < 0n) return null;
+  const job: ActJob = {
+    datasetId: p["datasetId"] as string,
+    jobId: p["jobId"] as string,
+    minBlock: p["minBlock"] as number,
+    amountUsdc: p["amountUsdc"] as number,
+    createdAt: p["createdAt"] as number,
+    deadline,
+  };
+  if (typeof p["payloadHash"] === "string" && /^0x[0-9a-fA-F]{64}$/.test(p["payloadHash"])) {
+    job.payloadHash = p["payloadHash"] as `0x${string}`;
+  }
+  if (typeof p["metaBlock"] === "number" && Number.isInteger(p["metaBlock"])) {
+    job.metaBlock = p["metaBlock"];
+  }
+  return job;
+}
+
+function storage(): Storage | null {
+  try {
+    return typeof localStorage !== "undefined" ? localStorage : null;
+  } catch {
+    return null; // privacy mode / sandboxed iframe — persistence degrades to session-only
+  }
+}
+
+export function persistActJob(job: ActJob): void {
+  const store = storage();
+  if (store === null) return;
+  try {
+    store.setItem(ACT_JOB_STORAGE_KEY, serializeActJob(job));
+  } catch {
+    // quota/availability — the in-memory job still drives this session
+  }
+}
+
+export function clearStoredActJob(): void {
+  const store = storage();
+  if (store === null) return;
+  try {
+    store.removeItem(ACT_JOB_STORAGE_KEY);
+  } catch {
+    // ignore — nothing to recover anyway
+  }
+}
+
+/**
+ * Read the persisted act job (injectable store for tests). A corrupt entry is
+ * CLEARED and yields null — a reload must never crash the console. Runs at
+ * module scope (console mount) so deliver/settle/sandbox claim keep working
+ * after a page reload.
+ */
+export function rehydrateActJob(store?: Storage | null): ActJob | null {
+  const target = store !== undefined ? store : storage();
+  if (target === null) return null;
+  let raw: string | null = null;
+  try {
+    raw = target.getItem(ACT_JOB_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+  if (raw === null) return null;
+  const job = deserializeActJob(raw);
+  if (job === null) {
+    try {
+      target.removeItem(ACT_JOB_STORAGE_KEY);
+    } catch {
+      // corrupt entry may not be removable — still yield null
+    }
+    return null;
+  }
+  return job;
+}
+
+// Console mount: rehydrate any stranded act job (a reload between buy and
+// deliver/settle must not orphan the funded escrow).
+{
+  const recovered = rehydrateActJob();
+  if (recovered !== null) {
+    actJob = recovered;
+    actJobRecovered = true;
+  }
 }
 
 /* ----------------------------------------------------------- revert copy */
@@ -492,6 +633,7 @@ const buyCommand: Command = {
       minBlock: sla.minBlock,
       amountUsdc: args.amountUsdc,
       deadline,
+      createdAt: Math.floor(Date.now() / 1000),
     };
     setActJob(job);
     return {
@@ -698,13 +840,18 @@ const settleCommand: Command = {
           // (legal per the verified spec) — the seller side of the split is
           // the same address that funded the job.
           const split = feeSplitFromReceipt(receipt, terms.feeBP, signer.address);
-          rows.push(["split", `seller ${usdc6(split.seller)} · treasury ${usdc6(split.treasury)} · total ${usdc6(split.total)} (fee ${split.feeBP} bp)`]);
+          // Trimmed 6dp: a 3000-raw treasury fee is 0.003, never "0.00" (usdc6
+          // rounds to 2dp and would read as "no fee"); raw units stay visible.
+          rows.push(["split", `seller ${usdcTrim(split.seller)} · treasury ${usdcTrim(split.treasury)} · total ${usdcTrim(split.total)} (fee ${split.feeBP} bp — raw ${split.seller}/${split.treasury}/${split.total})`]);
         } catch (error) {
           rows.push(["split", `✗ ${reason(error)}`]);
         }
       } else {
         rows.push(["refund", "client refunded — full amount, no fee row"]);
       }
+      // Terminal outcome (settled or refunded) — the act job is spent; no
+      // recovery affordance needed past this point.
+      setActJob(null);
     } else {
       rows.push(["tx", "none — decision was returned without settlement (no signer given)"]);
     }

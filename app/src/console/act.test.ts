@@ -17,11 +17,16 @@ import type { EnsTextReader } from "../../../mcp/src/ens";
 import {
   canBuy,
   classifyRevert,
+  deserializeActJob,
   formatSendError,
   parseBuyArgs,
+  rehydrateActJob,
   resolveDatasetQuote,
   resolveDatasetRecord,
+  serializeActJob,
+  usdcTrim,
   walkRevertData,
+  type ActJob,
 } from "./commands/act";
 // Side-effect: registers buy/deliver/settle (same import the app will make).
 import "./commands/act";
@@ -219,6 +224,72 @@ describe("resolveDatasetQuote failure edge (quote == charge)", () => {
       return null;
     };
     await expect(resolveDatasetQuote(CONFIG.datasets[0], reader)).rejects.toThrow("svc.price is not set");
+  });
+});
+
+describe("usdcTrim (money display)", () => {
+  it("keeps sub-cent fees visible (no 2dp rounding)", () => {
+    expect(usdcTrim(3000n)).toBe("0.003");
+    expect(usdcTrim(147000n)).toBe("0.147");
+  });
+  it("trims trailing zeros", () => {
+    expect(usdcTrim(150000n)).toBe("0.15");
+    expect(usdcTrim(1_000_000n)).toBe("1");
+    expect(usdcTrim(0n)).toBe("0");
+  });
+});
+
+describe("act job persistence (localStorage v1)", () => {
+  const job: ActJob = {
+    datasetId: "aave-v3-arbitrum-lending",
+    jobId: "19",
+    minBlock: 504_301_782,
+    amountUsdc: 150000,
+    deadline: 1_789_191_000n,
+    payloadHash: `0x${"ab".repeat(32)}`,
+    metaBlock: 504_301_800,
+    createdAt: 1_789_190_000,
+  };
+
+  it("round-trips serialize → deserialize", () => {
+    const parsed = deserializeActJob(serializeActJob(job));
+    expect(parsed).toEqual(job);
+  });
+
+  it("corrupted JSON, wrong version and invalid fields all yield null (never throw)", () => {
+    expect(deserializeActJob("{ not json")).toBeNull();
+    expect(deserializeActJob(serializeActJob(job).replace('"version":1', '"version":2'))).toBeNull();
+    const noJobId = serializeActJob(job).replace('"jobId":"19"', '"jobId":"abc"');
+    expect(deserializeActJob(noJobId)).toBeNull();
+    const badDeadline = serializeActJob(job).replace('"deadline":"1789191000"', '"deadline":"soon"');
+    expect(deserializeActJob(badDeadline)).toBeNull();
+    const badAmount = serializeActJob(job).replace('"amountUsdc":150000', '"amountUsdc":"150000"');
+    expect(deserializeActJob(badAmount)).toBeNull();
+    expect(deserializeActJob(JSON.stringify({ version: 1 }))).toBeNull();
+  });
+
+  it("rehydrateActJob clears a corrupted entry instead of throwing", () => {
+    let removed: string | null = null;
+    const store = {
+      getItem: () => "{ not json",
+      removeItem: (key: string): void => {
+        removed = key;
+      },
+    } as unknown as Storage;
+    expect(rehydrateActJob(store)).toBeNull();
+    expect(removed).toBe("openbook.actjob.v1");
+  });
+
+  it("rehydrateActJob returns the persisted job", () => {
+    let removed: string | null = null;
+    const store = {
+      getItem: () => serializeActJob(job),
+      removeItem: (key: string): void => {
+        removed = key;
+      },
+    } as unknown as Storage;
+    expect(rehydrateActJob(store)).toEqual(job);
+    expect(removed).toBeNull();
   });
 });
 
