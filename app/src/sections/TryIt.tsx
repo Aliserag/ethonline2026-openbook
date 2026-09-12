@@ -164,8 +164,10 @@ export function TryIt({ armed, onArmedConsumed }: { armed: "fresh" | "fail" | nu
           </div>
           <p className="tiny try__hint">
             Buy runs the real purchase. Make it fail runs the same purchase but demands data newer than what
-            arrives, so the contract has to refuse payment and the escrow refunds. Both spend our demo wallet's
-            testnet USDC on Arc; that wallet is the buyer and the seller in these runs.
+            arrives, so the contract has to refuse payment and the escrow refunds. The buyer is a Circle
+            developer-controlled wallet on Arc that we fund with testnet USDC; the seller is a second Circle wallet,
+            the one the dataset's ENS record names as payee. Every transaction is signed on the server through
+            Circle, with gas sponsored by Circle Gas Station.
           </p>
         </div>
         <div className="try__run">

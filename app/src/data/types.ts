@@ -43,7 +43,7 @@ export interface FeeSplit {
   feeBP: number;
 }
 
-export type SignerKind = "demo" | "injected" | "none";
+export type SignerKind = "demo" | "injected" | "circle" | "none";
 
 /** Delivery verdict — re-exported verbatim from mcp/src/escrow (decideDelivery's return). */
 export type Verdict = DeliveryVerdict;

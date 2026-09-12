@@ -10,7 +10,7 @@ import { keccak256, toBytes, type PublicClient, type WalletClient } from "viem";
 import { CONFIG, defaultQueryFor, type DatasetConfig } from "../config";
 import { env } from "../env";
 import { truncateHash } from "../format";
-import { attestViaApi, deliverViaApi, hasGatewayAccess, recoverProofSigner, type Settlement } from "../data/api";
+import { attestViaApi, circleCreateJob, circleStatus, circleSubmit, deliverViaApi, hasGatewayAccess, recoverProofSigner, type Settlement } from "../data/api";
 import { ADDR } from "../data/addresses";
 import { readHookAttester } from "../data/hook";
 import { getPublicClient } from "../data/chain";
@@ -57,7 +57,9 @@ export interface PurchaseResult {
 
 export interface PurchaseDeps {
   quote(dataset: DatasetConfig): Promise<DatasetQuote>;
-  signer: Signer | null;
+  signer: Pick<Signer, "kind" | "address"> | null;
+  /** who is paid on settlement: the Circle seller wallet, or the single-key signer */
+  sellerAddress?: `0x${string}`;
   balance(address: `0x${string}`): Promise<bigint>;
   chainHead(chain: DatasetConfig["chain"]): Promise<number>;
   createJob(
@@ -69,7 +71,7 @@ export interface PurchaseDeps {
   proofSigner(payloadHash: `0x${string}`, metaBlock: number, proof: string): Promise<`0x${string}` | null>;
   /** the hook's attester onchain: the job's evaluator on every page purchase */
   attester(): Promise<`0x${string}`>;
-  submit(jobId: bigint, payloadHash: `0x${string}`): Promise<`0x${string}`>;
+  submit(jobId: bigint, payloadHash: `0x${string}`, observed: { metaBlock: number; proof: string }): Promise<`0x${string}`>;
   /** posts the freshness proof; `settle` is present when the attester, as evaluator, completed or refunded in the same call */
   attest(jobId: bigint, payloadHash: `0x${string}`, metaBlock: number, minBlock: number, proof: string): Promise<{ txHash: `0x${string}`; settle?: Settlement }>;
   simulateComplete(jobId: bigint): Promise<{ reverted: boolean; reason?: string }>;
@@ -107,6 +109,8 @@ const BALANCE_ABI = [
 const SEPOLIA_ENS = createEnsTextReader({ rpcUrl: env.sepoliaRpc });
 
 export async function liveDeps(publicClient: PublicClient = getPublicClient()): Promise<PurchaseDeps> {
+  const circle = await circleStatus();
+  if (circle.enabled && circle.buyer && circle.seller) return circleDeps(publicClient, circle.buyer, circle.seller);
   const signed = await resolveSigner();
   const signer = signed.ok ? signed.signer : null;
   const wallet = signer ? signer.wallet : null;
@@ -168,6 +172,46 @@ export async function liveDeps(publicClient: PublicClient = getPublicClient()): 
     verify: async (input) => {
       const r = await verifyDelivery({ ...input, settle: true }, { publicClient, walletClient: needWallet() });
       return { verdict: r.verdict, reason: r.reason, minBlock: r.minBlock, txHash: r.txHash };
+    },
+    split: async (txHash, provider) => {
+      const receipt = await publicClient.getTransactionReceipt({ hash: txHash });
+      const terms = await platformFee(publicClient);
+      return feeSplitFromReceipt(receipt, terms.feeBP, provider);
+    },
+    hasGatewayKey: hasGatewayAccess(),
+  };
+}
+
+/**
+ * Deps for a deployment with Circle developer-controlled wallets: the buyer and
+ * the seller are Circle SCA wallets on Arc, every transaction is signed on the
+ * server through Circle's API with gas sponsored by Circle Gas Station, and the
+ * browser holds no key at all.
+ */
+function circleDeps(publicClient: PublicClient, buyer: `0x${string}`, seller: `0x${string}`): PurchaseDeps {
+  return {
+    quote: (dataset) => resolveDatasetQuote(dataset, SEPOLIA_ENS),
+    signer: { kind: "circle", address: buyer },
+    sellerAddress: seller,
+    balance: (address) =>
+      publicClient.readContract({ address: ADDR.usdc, abi: BALANCE_ABI, functionName: "balanceOf", args: [address] }) as Promise<bigint>,
+    chainHead: (chain) => defaultChainHeadResolver(undefined)(chain),
+    createJob: async (p, trace) => {
+      const job = await circleCreateJob({ minBlock: p.minBlock, schemaHash: p.schemaHash, maxLatencyMs: p.maxLatencyMs, amount: p.amount.toString() });
+      for (const tx of [job.txs.createJob, job.txs.setBudget, job.txs.approve, job.txs.fund]) if (tx) trace.push(tx);
+      return BigInt(job.jobId);
+    },
+    query: async (dataset) => {
+      const d = await deliverViaApi({ subgraphId: dataset.subgraphId, query: defaultQueryFor(dataset) });
+      return { payloadHash: d.payloadHash, metaBlock: d.metaBlock, preview: previewOf(d.data), proof: d.proof };
+    },
+    proofSigner: recoverProofSigner,
+    attester: () => readHookAttester(publicClient),
+    submit: (jobId, hash, observed) => circleSubmit({ jobId: jobId.toString(), deliverable: hash, metaBlock: observed.metaBlock, proof: observed.proof }),
+    attest: (jobId, hash, metaBlock, minBlock, proof) => attestViaApi({ jobId: jobId.toString(), deliverable: hash, metaBlock, minBlock, proof }),
+    simulateComplete: async () => ({ reverted: false }),
+    verify: async () => {
+      throw new Error("settlement is the attester's, as the job's evaluator");
     },
     split: async (txHash, provider) => {
       const receipt = await publicClient.getTransactionReceipt({ hash: txHash });
@@ -342,7 +386,7 @@ export async function runPurchase(
   emit({ step: "verdict", status: "running" });
   let submitTx: `0x${string}`;
   try {
-    submitTx = await d.submit(jobId, dl.payloadHash);
+    submitTx = await d.submit(jobId, dl.payloadHash, { metaBlock: dl.metaBlock, proof: dl.proof });
   } catch (error) {
     return fail("verdict", `The delivery could not be recorded onchain: ${plainReason(error)}`);
   }
@@ -419,7 +463,7 @@ export async function runPurchase(
   if (outcome === "settled" && verdict.txHash) {
     emit({ step: "split", status: "running" });
     try {
-      const split = await d.split(verdict.txHash as `0x${string}`, signer.address);
+      const split = await d.split(verdict.txHash as `0x${string}`, d.sellerAddress ?? signer.address);
       emit({
         step: "split",
         status: "done",

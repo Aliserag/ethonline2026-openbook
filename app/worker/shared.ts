@@ -26,6 +26,7 @@ export const GATEWAY_BASE = "https://gateway.thegraph.com/api";
 export const ESCROW = "0x967e005154D0F62C33Eac8E2F44b44d4C4C07Dd5" as const;
 export const HOOK = "0x606075F3Cf9b5B66E7e4DD2ea369894374Ff0846" as const;
 export const ARC_RPC = "https://rpc.testnet.arc.io";
+export const USDC = "0x3600000000000000000000000000000000000000" as const;
 export const LLM_BASE_DEFAULT = "https://api.fireworks.ai/inference/v1";
 export const LLM_MODEL_DEFAULT = "accounts/fireworks/models/deepseek-v4-flash-0731";
 

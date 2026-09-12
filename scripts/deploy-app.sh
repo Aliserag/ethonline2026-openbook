@@ -24,8 +24,10 @@ bun run build:worker >/dev/null
 # root .env (DEMO_BUYER_PK / DEMO_BUYER_ADDRESS) so app/.env.local is never the
 # source of truth for a deploy.
 set +u; set -a; . "$APP_DIR/../.env"; set +a; set -u
-[ -n "${DEMO_BUYER_PK:-}" ] || { echo "FAIL: DEMO_BUYER_PK missing from .env"; exit 1; }
-VITE_DEMO_BUYER_KEY="$DEMO_BUYER_PK" VITE_DEMO_BUYER_ADDRESS="${DEMO_BUYER_ADDRESS},0xE4AAeE76c53E9F3f16fcA969c31E18F8522B41Ef" \
+[ -n "${CIRCLE_BUYER_WALLET_ADDRESS:-}" ] || { echo "FAIL: CIRCLE_BUYER_WALLET_ADDRESS missing from .env (the page buys through Circle wallets)"; exit 1; }
+# the page buys through Circle wallets (server-signed); only their ADDRESSES enter the bundle, no key
+VITE_CIRCLE_BUYER_ADDRESS="${CIRCLE_BUYER_WALLET_ADDRESS:-}" VITE_CIRCLE_SELLER_ADDRESS="${CIRCLE_SELLER_WALLET_ADDRESS:-}" \
+VITE_DEMO_BUYER_KEY= VITE_DEMO_BUYER_ADDRESS="${DEMO_BUYER_ADDRESS},0xE4AAeE76c53E9F3f16fcA969c31E18F8522B41Ef" \
 VITE_GRAPH_GATEWAY_KEY= VITE_ALCHEMY_API_KEY= VITE_LLM_API_KEY= BASE_PATH=/ ./node_modules/.bin/vite build >/dev/null
 echo "   dist: $(ls dist/assets | wc -l | tr -d ' ') assets"
 

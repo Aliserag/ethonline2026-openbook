@@ -5,8 +5,9 @@
  */
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { LLM_BASE_DEFAULT, LLM_MODEL_DEFAULT, STUDIO_UPSTREAM, ask, attest, deliver, parseAttestRequest, parseDeliverRequest, sepoliaRpc } from "./shared";
+import { circleCreateJob, circleEnvFrom, circleStatus, circleSubmit, parseCircleJobRequest, parseCircleSubmitRequest } from "./circle";
 
-export type Route = "subgraph" | "deliver" | "attest" | "ask" | "sepolia";
+export type Route = "subgraph" | "deliver" | "attest" | "ask" | "sepolia" | "circle-status" | "circle-job" | "circle-submit";
 
 const FRESH_MS = 20_000;
 const KEEP_MS = 1_800_000;
@@ -103,6 +104,33 @@ export async function handler(route: Route, req: IncomingMessage & { body?: unkn
       const out = await attest(parsed, process.env.OPENBOOK_ATTESTER_PK ?? "");
       if (out.ok) send(res, 200, JSON.stringify(out));
       else send(res, out.status, JSON.stringify({ error: out.error }));
+      return;
+    }
+    if (route.startsWith("circle-")) {
+      const cenv = circleEnvFrom((k) => process.env[k]);
+      if (route === "circle-status") {
+        send(res, 200, JSON.stringify(circleStatus(cenv)));
+        return;
+      }
+      if (cenv === null) {
+        send(res, 503, JSON.stringify({ error: "Circle wallets are not configured on this deployment" }));
+        return;
+      }
+      if (route === "circle-job") {
+        const parsed = parseCircleJobRequest(parseJson(body));
+        if (typeof parsed === "string") {
+          send(res, 400, JSON.stringify({ error: parsed }));
+          return;
+        }
+        send(res, 200, JSON.stringify(await circleCreateJob(cenv, parsed)));
+        return;
+      }
+      const parsed = parseCircleSubmitRequest(parseJson(body));
+      if (typeof parsed === "string") {
+        send(res, 400, JSON.stringify({ error: parsed }));
+        return;
+      }
+      send(res, 200, JSON.stringify(await circleSubmit(cenv, parsed, process.env.OPENBOOK_ATTESTER_PK ?? "")));
       return;
     }
     if (route === "sepolia") {

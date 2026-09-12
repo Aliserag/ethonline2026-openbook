@@ -60,8 +60,9 @@ export function Hero({ onBuy, onFail }: { onBuy(): void; onFail(): void }): JSX.
             </button>
           </div>
           <p className="tiny hero__note">
-            Both run a real purchase on the live escrow, right here, in about twenty seconds. No wallet, no keys:
-            our demo wallet pays with testnet USDC. Arc testnet, ENSv2 on Sepolia, The Graph.
+            Both run a real purchase on the live escrow, right here, in about thirty seconds. No wallet, no keys:
+            a Circle wallet buys, a second Circle wallet sells, gas is sponsored by Circle Gas Station. Arc
+            testnet, ENSv2 on Sepolia, The Graph.
           </p>
         </div>
         <ReceiptCard row={refund} state={feed.state} reason={feed.reason} />

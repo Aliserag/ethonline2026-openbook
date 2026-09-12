@@ -10,10 +10,14 @@
  *                        the deliver signature are required)
  *   POST /api/ask/chat/completions   the console's LLM, key held here
  *   POST /api/sepolia    JSON-RPC proxy to the configured Sepolia RPC (ENS reads)
+ *   POST /api/circle/status | /api/circle/job | /api/circle/submit
+ *                        Circle developer-controlled wallets (buyer, seller) on Arc:
+ *                        the page's keyless purchase signs nothing in the browser
  * Everything else is served from the static assets. No secret ever reaches the
  * browser: keys are Pages secrets (wrangler pages secret put).
  */
 import { LLM_BASE_DEFAULT, LLM_MODEL_DEFAULT, STUDIO_UPSTREAM, ask, attest, deliver, parseAttestRequest, parseDeliverRequest, sepoliaRpc } from "./shared";
+import { circleCreateJob, circleEnvFrom, circleStatus, circleSubmit, parseCircleJobRequest, parseCircleSubmitRequest } from "./circle";
 
 interface Env {
   ASSETS: { fetch(request: Request): Promise<Response> };
@@ -23,6 +27,12 @@ interface Env {
   LLM_BASE_URL?: string;
   LLM_MODEL?: string;
   SEPOLIA_RPC?: string;
+  CIRCLE_API_KEY?: string;
+  CIRCLE_ENTITY_SECRET?: string;
+  CIRCLE_BUYER_WALLET_ID?: string;
+  CIRCLE_SELLER_WALLET_ID?: string;
+  CIRCLE_BUYER_WALLET_ADDRESS?: string;
+  CIRCLE_SELLER_WALLET_ADDRESS?: string;
 }
 
 const FRESH_SECONDS = 20;
@@ -112,6 +122,21 @@ export default {
         if (typeof parsed === "string") return json({ error: parsed }, 400);
         const out = await attest(parsed, env.OPENBOOK_ATTESTER_PK ?? "");
         return out.ok ? json(out, 200) : json({ error: out.error }, out.status);
+      }
+      if (url.pathname.startsWith("/api/circle/")) {
+        const cenv = circleEnvFrom((k) => (env as unknown as Record<string, string | undefined>)[k]);
+        if (url.pathname === "/api/circle/status") return json(circleStatus(cenv), 200);
+        if (cenv === null) return json({ error: "Circle wallets are not configured on this deployment" }, 503);
+        if (url.pathname === "/api/circle/job") {
+          const parsed = parseCircleJobRequest(await readJson(request));
+          if (typeof parsed === "string") return json({ error: parsed }, 400);
+          return json(await circleCreateJob(cenv, parsed), 200);
+        }
+        if (url.pathname === "/api/circle/submit") {
+          const parsed = parseCircleSubmitRequest(await readJson(request));
+          if (typeof parsed === "string") return json({ error: parsed }, 400);
+          return json(await circleSubmit(cenv, parsed, env.OPENBOOK_ATTESTER_PK ?? ""), 200);
+        }
       }
       if (url.pathname === "/api/sepolia") {
         const out = await sepoliaRpc(await request.text(), env.SEPOLIA_RPC ?? "");

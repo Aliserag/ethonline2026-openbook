@@ -123,6 +123,65 @@ export async function attestViaApi(input: {
   return { txHash: root.txHash as `0x${string}`, settle };
 }
 
+// ---- Circle developer-controlled wallets (buyer + seller, server-signed) ----------------
+
+export interface CircleStatus {
+  enabled: boolean;
+  buyer: `0x${string}` | null;
+  seller: `0x${string}` | null;
+  gas: string;
+}
+
+let circleStatusCache: Promise<CircleStatus> | null = null;
+
+/** Whether this deployment buys and sells through Circle wallets (the browser signs nothing). */
+export function circleStatus(): Promise<CircleStatus> {
+  if (circleStatusCache) return circleStatusCache;
+  const base = apiBase();
+  circleStatusCache = (async () => {
+    if (base === null) return { enabled: false, buyer: null, seller: null, gas: "" };
+    try {
+      const { status, json } = await postJson(`${base}/api/circle/status`, {});
+      const root = (typeof json === "object" && json !== null ? json : {}) as Partial<CircleStatus>;
+      if (status !== 200 || root.enabled !== true || typeof root.buyer !== "string" || typeof root.seller !== "string") {
+        return { enabled: false, buyer: null, seller: null, gas: "" };
+      }
+      return { enabled: true, buyer: root.buyer, seller: root.seller, gas: root.gas ?? "" };
+    } catch {
+      return { enabled: false, buyer: null, seller: null, gas: "" };
+    }
+  })();
+  return circleStatusCache;
+}
+
+export interface CircleJob {
+  jobId: string;
+  buyer: `0x${string}`;
+  seller: `0x${string}`;
+  evaluator: `0x${string}`;
+  txs: { createJob: `0x${string}`; setBudget: `0x${string}`; approve?: `0x${string}`; fund: `0x${string}` };
+}
+
+/** The Circle buyer wallet opens and funds a job for the Circle seller wallet (four sponsored txs). */
+export async function circleCreateJob(input: { minBlock: number; schemaHash: `0x${string}`; maxLatencyMs: number; amount: string }): Promise<CircleJob> {
+  const base = apiBase();
+  if (base === null) throw new Error("Circle wallets run on the server; local runs use the demo key");
+  const { status, json, text } = await postJson(`${base}/api/circle/job`, input);
+  const root = (typeof json === "object" && json !== null ? json : {}) as Partial<CircleJob> & { error?: string };
+  if (status >= 400 || typeof root.jobId !== "string" || !root.txs) throw new Error(root.error ?? `circle job failed (${status}): ${text.slice(0, 160)}`);
+  return root as CircleJob;
+}
+
+/** The Circle seller wallet submits the deliverable the attester signed. */
+export async function circleSubmit(input: { jobId: string; deliverable: `0x${string}`; metaBlock: number; proof: string }): Promise<`0x${string}`> {
+  const base = apiBase();
+  if (base === null) throw new Error("Circle wallets run on the server; local runs use the demo key");
+  const { status, json, text } = await postJson(`${base}/api/circle/submit`, input);
+  const root = (typeof json === "object" && json !== null ? json : {}) as { txHash?: string; error?: string };
+  if (status >= 400 || typeof root.txHash !== "string") throw new Error(root.error ?? `circle submit failed (${status}): ${text.slice(0, 160)}`);
+  return root.txHash as `0x${string}`;
+}
+
 /** Where the console's ask mode sends chat requests: the server route on deployed origins. */
 export function askConfig(): { baseUrl: string; apiKey: string; model: string } | null {
   const base = apiBase();
