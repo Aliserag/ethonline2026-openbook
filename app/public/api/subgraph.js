@@ -2,7 +2,7 @@
 // contract as app/public/_worker.js: the POST body is forwarded to Studio,
 // fresh answers are cached 20 s per warm instance, and when Studio answers
 // 429 the last good copy is served (labeled STALE) for up to 30 minutes.
-const UPSTREAM = "https://api.studio.thegraph.com/query/1760032/open-book/v0.0.5";
+const UPSTREAM = "https://api.studio.thegraph.com/query/1760032/open-book/v0.0.6";
 const FRESH_MS = 20_000;
 const KEEP_MS = 1_800_000;
 const cache = new Map();

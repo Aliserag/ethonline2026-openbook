@@ -3,7 +3,7 @@
 // assets. Judges' browsers share one upstream call per query per 20 s instead
 // of each hitting Studio, and when Studio answers 429 the last good copy is
 // served (labeled STALE) for up to 30 minutes so the page never goes dark.
-const UPSTREAM = "https://api.studio.thegraph.com/query/1760032/open-book/v0.0.5";
+const UPSTREAM = "https://api.studio.thegraph.com/query/1760032/open-book/v0.0.6";
 const FRESH_SECONDS = 20;
 const KEEP_SECONDS = 1800;
 
