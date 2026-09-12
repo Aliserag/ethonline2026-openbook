@@ -708,7 +708,7 @@ export default function App() {
             >
               <div className="field">
                 <label htmlFor="dataset">
-                  <Tip text="Two standardized Messari subgraphs — the same query shape runs on both. That's The Graph's schema leverage.">dataset</Tip>
+                  <Tip text="Two standardized Messari subgraphs. The same query shape runs on both, which is the point of the standard.">dataset</Tip>
                 </label>
                 <select
                   id="dataset"
@@ -858,7 +858,7 @@ export default function App() {
                   <ol>
                     <li>
                       Get a free key at{" "}
-                      <Tip text="The Studio key gates Gateway queries and the hosted Subgraph MCP — one key, both."><a href="https://thegraph.com/studio" target="_blank" rel="noreferrer">thegraph.com/studio</a></Tip>{" "}
+                      <Tip text="The Studio key gates Gateway queries and the hosted Subgraph MCP. One key covers both."><a href="https://thegraph.com/studio" target="_blank" rel="noreferrer">thegraph.com/studio</a></Tip>{" "}
                       (account → API keys).
                     </li>
                     <li>
@@ -870,7 +870,7 @@ export default function App() {
               )}
               <div className="field">
                 <label htmlFor="query">
-                  <Tip text="The exact query the agent runs against the pinned Messari subgraph — you can edit it live.">graphql</Tip>
+                  <Tip text="The exact query the agent runs against the pinned Messari subgraph. You can edit it live.">graphql</Tip>
                 </label>
                 <textarea id="query" value={queryText} onChange={(event) => setQueryText(event.target.value)} />
               </div>
@@ -1146,7 +1146,7 @@ export default function App() {
         <span>
           SLA committed onchain at payment · verdict is deterministic open code · timeout defaults
           to the buyer (
-          <Tip text="claimRefund: if the agent's deadline lapses with no delivery, anyone can trigger the refund — the buyer never has to chase the agent.">claimRefund</Tip>
+          <Tip text="claimRefund: if the agent's deadline lapses with no delivery, anyone can trigger the refund, so the buyer never has to chase the agent.">claimRefund</Tip>
           )
         </span>
         <a

@@ -38,7 +38,7 @@ function arcChainParams(): Record<string, unknown> {
  */
 export async function ensureArcChain(): Promise<void> {
   const provider = getProvider();
-  if (!provider) throw new Error("no injected wallet (MetaMask/Rabby) — install one and connect");
+  if (!provider) throw new Error("no injected wallet (MetaMask or Rabby). Install one and connect.");
   const request = provider.request as unknown as (args: { method: string; params?: unknown[] }) => Promise<unknown>;
   try {
     await request({
@@ -74,7 +74,7 @@ export function tracingTransport(provider: EIP1193Provider, trace: string[]) {
  */
 export function arcWalletClient(address: Address, trace?: string[]): WalletClient {
   const provider = getProvider();
-  if (!provider) throw new Error("no injected wallet (MetaMask/Rabby) — install one and connect");
+  if (!provider) throw new Error("no injected wallet (MetaMask or Rabby). Install one and connect.");
   return createWalletClient({
     chain: arcChain,
     transport: trace ? tracingTransport(provider, trace) : custom(provider),

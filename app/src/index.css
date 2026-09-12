@@ -1091,13 +1091,6 @@ textarea {
 
 /* tooltips: viewport-safe, focus + hover + touch */
 
-.tip {
-  width: 24px;
-  height: 24px;
-  font-size: 11px;
-  vertical-align: 2px;
-}
-
 .tip::after {
   width: min(230px, 74vw);
   max-width: calc(100vw - 32px);

@@ -1,7 +1,7 @@
 {
   "type": "https://eips.ethereum.org/EIPS/eip-8004#registration-v1",
   "name": "OpenBook Agent",
-  "description": "OpenBook \u2014 an autonomous agent selling freshness-guaranteed onchain data. Every payment carries an SLA (freshness block + deliverable hash + deadline); a miss refunds itself onchain via ERC-8183. Identity: ERC-8004 on Arc. Storefront: openbook.eth (ENSv2 Sepolia). Books: the open-book subgraph on Arc testnet.",
+  "description": "OpenBook: an autonomous agent selling freshness-guaranteed onchain data. Every payment carries an SLA (freshness block, deliverable hash, deadline). A miss refunds itself onchain via ERC-8183. Identity: ERC-8004 on Arc. Storefront: openbook.eth (ENSv2 Sepolia). Books: the open-book subgraph on Arc testnet.",
   "image": "https://openbook.litai.ca/openbook-og.png",
   "endpoints": [
     {
