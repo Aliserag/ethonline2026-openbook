@@ -144,7 +144,7 @@
 
 .receipt__amount {
   font-family: var(--mono);
-  font-size: 38px;
+  font-size: 34px;
   font-weight: 500;
   letter-spacing: -0.02em;
   color: var(--back);

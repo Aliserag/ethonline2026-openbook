@@ -37,8 +37,8 @@ function SellerCard({ row, statsNote }: { row: MarketSellerRow; statsNote: strin
         ))}
       </ul>
       <dl className="kv">
-        <dt>purchases</dt>
-        <dd>{row.stats ? `${row.stats.jobs} · ${row.stats.delivered} delivered` : "none indexed yet"}</dd>
+        <dt>jobs</dt>
+        <dd>{row.stats ? `${row.stats.jobs} created · ${row.stats.delivered} delivered` : "none indexed yet"}</dd>
         <dt>settled</dt>
         <dd>{row.stats ? `${usdc6(row.stats.settled)} USDC` : "0.00 USDC"}</dd>
         <dt>refunded</dt>
@@ -74,8 +74,8 @@ export function MarketSection(): JSX.Element {
         <p className="lede">
           A seller is an ENS name with four records: what it sells, the price, the freshness promise, and where to
           pay. Publish them under openbook.eth and buyers can find you. Two reference sellers we operate are listed
-          today; purchases made from this page are sold by our demo wallet to itself and count in the books, not on
-          these cards.
+          today. Purchases made from this page are paid to our demo wallet, so they appear in the books below
+          and not on these cards.
         </p>
       </div>
       {sellers.value === null && (

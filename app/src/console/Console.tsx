@@ -213,6 +213,7 @@ export function Console(): JSX.Element {
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<AskMode>("command");
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const paletteOpenedDrawerRef = useRef(false);
   const [entries, setEntries] = useState<Entry[]>([]);
   const [input, setInput] = useState("");
   const [history, setHistory] = useState<string[]>([]);
@@ -253,9 +254,15 @@ export function Console(): JSX.Element {
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
       if (paletteOpen && event.key === "Escape") {
-        // wherever focus is, Escape closes the palette (it made the page inert)
+        // wherever focus is, Escape closes the palette (it made the page inert);
+        // when ⌘K opened the drawer for the palette, it closes the drawer too so
+        // focus returns to where the judge was
         event.preventDefault();
         setPaletteOpen(false);
+        if (paletteOpenedDrawerRef.current) {
+          paletteOpenedDrawerRef.current = false;
+          setOpen(false);
+        }
         return;
       }
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
@@ -263,6 +270,7 @@ export function Console(): JSX.Element {
         if (paletteOpen) {
           setPaletteOpen(false);
         } else {
+          paletteOpenedDrawerRef.current = !open;
           setOpen(true);
           setPaletteOpen(true);
         }

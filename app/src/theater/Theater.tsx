@@ -349,7 +349,15 @@ export function Theater({ jobId, onClose }: { jobId: string; onClose: () => void
   useModalFocus(true, {
     inertSelectors: ["main", ".console", ".console__launcher"],
     focus: () => rootRef.current?.querySelector<HTMLElement>("button, a[href]") ?? rootRef.current,
+    container: () => rootRef.current,
   });
+  // keyboard scrubbing moves focus with the selection (tablist contract)
+  useEffect(() => {
+    const active = document.activeElement;
+    if (active && active.closest(".theater__scrub")) {
+      rootRef.current?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]')?.focus();
+    }
+  }, [index]);
 
   return (
     <section

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { boardRows, latestRefund, totals } from "./feed";
+import { boardRows, latestRefund, marketJobs, totals } from "./feed";
 import type { JobView } from "./types";
 
 function job(over: Partial<JobView>): JobView {
@@ -71,6 +71,10 @@ describe("feed derivations", () => {
     const jobs = [job({ jobId: 7n, seller: "0xAbC" as `0x${string}`, state: "settled" })];
     expect(boardRows(jobs, [], 5, { "0xabc": "alpha.openbook.eth" })[0]!.sellerName).toBe("alpha.openbook.eth");
     expect(boardRows(jobs, [], 5)[0]!.sellerName).toBeUndefined();
+  });
+  test("marketJobs keeps the market escrow's small ids and drops the reference escrow's", () => {
+    const jobs = [job({ jobId: 52n }), job({ jobId: 185853n }), job({ jobId: 1n })];
+    expect(marketJobs(jobs).map((j) => j.jobId)).toEqual([52n, 1n]);
   });
   test("boardRows respects the limit", () => {
     const jobs = Array.from({ length: 20 }, (_, i) => job({ jobId: BigInt(i), timestamp: i }));

@@ -13,9 +13,10 @@ export function Builders({ onConsole, onBuy }: { onConsole(): void; onBuy(): voi
         <article className="builder">
           <h3>Arc holds the money</h3>
           <p className="small">
-            Payments sit in an escrow (ERC-8183) with the freshness floor written into the job. A hook contract we
-            wrote (SlaHook) checks the delivered block against the floor before any payout, so a stale delivery
-            cannot be paid. Gas is USDC. The venue's 2% goes to a treasury with onchain spending limits.
+            Payments sit in an escrow with the freshness promise written into the job. A small contract we wrote
+            checks the delivered block against that promise before any payout, so stale data cannot be paid. Gas
+            is USDC. The venue's 2% goes to a treasury with onchain spending limits. (Escrow: Circle's ERC-8183
+            reference; the check: our SlaHook.)
           </p>
         </article>
         <article className="builder">

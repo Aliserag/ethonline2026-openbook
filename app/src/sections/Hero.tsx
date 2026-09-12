@@ -35,7 +35,6 @@ export function Hero({ onBuy, onFail }: { onBuy(): void; onFail(): void }): JSX.
             OB
           </span>
           OpenBook
-          <span className="tiny">a data marketplace for AI agents</span>
         </span>
         <nav className="hero__nav" aria-label="sections">
           <a href="#try">Try it</a>
@@ -68,7 +67,7 @@ export function Hero({ onBuy, onFail }: { onBuy(): void; onFail(): void }): JSX.
         <ReceiptCard row={refund} state={feed.state} reason={feed.reason} />
       </div>
       <div className="counters" aria-label="live totals">
-        <div className="figure figure--back">
+        <div className="figure">
           <strong>{feed.value ? t.refundedCount : feed.state === "error" ? "?" : "…"}</strong>
           <span className="small">
             {feed.value
@@ -82,13 +81,13 @@ export function Hero({ onBuy, onFail }: { onBuy(): void; onFail(): void }): JSX.
           <strong>{feed.value ? priceLabel(t.settledUsdc) : feed.state === "error" ? "?" : "…"}</strong>
           <span className="small">
             {feed.value
-              ? `settled across ${t.settledCount} purchases · ${priceLabel(t.feesUsdc)} earned by the venue`
+              ? `settled to sellers on the OpenBook escrow · ${priceLabel(t.feesUsdc)} earned by the venue`
               : "settled to sellers"}
           </span>
         </div>
         <div className="figure">
           <strong>{sellerCount ?? "…"}</strong>
-          <span className="small">sellers listed under openbook.eth, read from ENS</span>
+          <span className="small">sellers listed on ENS (openbook.eth and its subnames)</span>
         </div>
       </div>
     </section>

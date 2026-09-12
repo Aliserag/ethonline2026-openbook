@@ -80,8 +80,8 @@ export function Books(): JSX.Element {
       <div className="section__head">
         <h2 id="books-title">The books are public</h2>
         <p className="lede">
-          Every payment, refund and fee is indexed straight from the chain by The Graph. Nothing on this page is
-          typed in.
+          Every payment, refund and fee on the OpenBook escrow, indexed straight from Arc by The Graph. Nothing on
+          this page is typed in.
         </p>
       </div>
       <div className="books__figures">
@@ -99,7 +99,7 @@ export function Books(): JSX.Element {
         </div>
         <div className="figure">
           <strong>{treasury.value !== null ? priceLabel(treasury.value) : "…"}</strong>
-          <span className="small">treasury balance, live from Arc</span>
+          <span className="small">treasury balance, live from Arc (fees plus seller revenue held under policy)</span>
         </div>
       </div>
       <p className="tiny books__state" aria-live="polite">
@@ -131,8 +131,8 @@ export function Books(): JSX.Element {
       <div className="refusals">
         <h3>
           {feed.value
-            ? `The treasury said no ${refusals.length} time${refusals.length === 1 ? "" : "s"}`
-            : "The treasury says no, onchain"}
+            ? `The treasury refused ${refusals.length} withdrawal${refusals.length === 1 ? "" : "s"}`
+            : "The treasury refuses withdrawals, onchain"}
         </h3>
         <p className="small">
           Seller revenue lands in a treasury with a per-transaction cap, a daily cap and an allowlist. Every refused

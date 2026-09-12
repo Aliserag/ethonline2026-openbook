@@ -206,6 +206,11 @@ export function Palette({
           <input
             ref={inputRef}
             className="palette__input"
+            role="combobox"
+            aria-expanded={visible.length > 0}
+            aria-controls="palette-listbox"
+            aria-activedescendant={visible.length > 0 ? `palette-opt-${Math.min(sel, visible.length - 1)}` : undefined}
+            aria-autocomplete="list"
             value={query}
             onChange={(event) => {
               setQuery(event.target.value);
@@ -222,7 +227,7 @@ export function Palette({
         {visible.length === 0 ? (
           <div className="palette__none">no match · enter still runs the line</div>
         ) : (
-          <ul className="palette__list" role="listbox" aria-activedescendant={`palette-opt-${sel}`}>
+          <ul className="palette__list" role="listbox" id="palette-listbox">
             {visible.map((item, i) => (
               <li
                 key={item.name}

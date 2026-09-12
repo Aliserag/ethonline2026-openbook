@@ -50,6 +50,19 @@ export interface BoardRow {
   gap?: number;
 }
 
+/**
+ * The OpenBook market escrow (0x967e…) is a fresh instance: its job ids are
+ * small (52 at submission). The shared reference escrow (0x0747…) is at six
+ * digits. The landing page books only the market escrow, so prices, ids and
+ * counts on the page describe one venue; the reference-escrow history stays
+ * reachable through the console and the replay theater.
+ */
+export const MARKET_ESCROW_MAX_JOB_ID = 100_000n;
+
+export function marketJobs(jobs: JobView[]): JobView[] {
+  return jobs.filter((j) => j.jobId < MARKET_ESCROW_MAX_JOB_ID);
+}
+
 export function latestRefund(jobs: JobView[]): JobView | null {
   let best: JobView | null = null;
   for (const j of jobs) {
@@ -140,7 +153,7 @@ export async function fetchFeed(): Promise<Feed> {
       .then(Number)
       .catch(() => null),
   ]);
-  return { jobs, refusals, indexed: null, head };
+  return { jobs: marketJobs(jobs), refusals, indexed: null, head };
 }
 
 type FeedLive = Live<Feed> & { refresh(): void };

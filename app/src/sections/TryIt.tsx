@@ -145,30 +145,31 @@ export function TryIt({ armed, onArmedConsumed }: { armed: "fresh" | "fail" | nu
             )}
           </p>
           <div className="try__actions">
-            <button ref={buyBtn} type="button" className="btn" disabled={busy || quote === null} onClick={() => run("fresh")}>
+            <button ref={buyBtn} type="button" className="btn btn--ghost" disabled={busy || quote === null} onClick={() => run("fresh")}>
               {busy && mode === "fresh" ? "Buying…" : `Buy a query · ${quote ? priceLabel(quote.amountUsdc) : "…"}`}
             </button>
             <button
               ref={failBtn}
               type="button"
-              className="btn btn--ghost"
+              className="linkbtn hero__alt"
               disabled={busy || quote === null}
               onClick={() => run("fail")}
             >
-              {busy && mode === "fail" ? "Failing on purpose…" : "Make it fail"}
+              {busy && mode === "fail" ? "failing on purpose…" : "or make it fail"}
             </button>
           </div>
           <p className="tiny try__hint">
             Buy runs the real purchase. Make it fail runs the same purchase but demands data newer than what
             arrives, so the contract has to refuse payment and the escrow refunds. Both spend our demo wallet's
-            testnet USDC on Arc; purchases from this page are sold by that wallet to itself.
+            testnet USDC on Arc; that wallet is the buyer and the seller in these runs.
           </p>
         </div>
         <div className="try__run">
           {events.length === 0 ? (
-            <p className="small try__idle">
-              The steps appear here as they happen onchain. A run takes about twenty seconds.
-            </p>
+            <>
+              <p className="small try__idle">What happens when you buy, step by step. Each row turns green as its transaction lands on Arc; a run takes about twenty seconds.</p>
+              <Stepper events={[]} mode="fresh" />
+            </>
           ) : (
             <Stepper events={events} mode={mode} />
           )}

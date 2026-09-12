@@ -699,6 +699,7 @@
 .console .console__input::placeholder { color: var(--muted); }
 
 .console .console__input:focus { outline: none; }
+.console .console__input:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: 4px; }
 
 .console .console__inputrow:focus-within {
   box-shadow: inset 0 -1px 0 var(--accent);
