@@ -13,7 +13,7 @@
  * Logic preserved verbatim from the prior revision; only presentation and
  * copy changed (plus aria + status semantics).
  */
-import { useEffect, useMemo, useState, type JSX, type ReactNode } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState, type JSX, type ReactNode } from "react";
 import { useAccount, useConnect } from "wagmi";
 import { createPublicClient, http, keccak256, toBytes, type PublicClient } from "viem";
 import { arcChain } from "./wagmi";
@@ -31,17 +31,23 @@ import { Console } from "./console/Console";
 import { TheaterRoute } from "./theater/Theater";
 import { SystemMap } from "./map/MapCanvas";
 
+// T12: the `#tour` walk over the shell (Task 12 brief). Brought in with
+// React.lazy so the tour's own import of App's shared derivations (StepCard,
+// deriveSteps, resolveStorefront, quoteWithNamespace) stays a one-way edge —
+// App remains the single root, no module cycle.
+const TourRoute = lazy(() => import("./tour/Tour").then((m) => ({ default: m.TourRoute })));
+
 // Chain-specific USDC (VITE_USDC_ADDRESS), mainnet override for the escrow module.
 if (env.usdcAddress !== undefined && /^0x[0-9a-fA-F]{40}$/.test(env.usdcAddress)) {
   setUsdcAddress(env.usdcAddress as `0x${string}`);
 }
 
-interface StorefrontState {
+export interface StorefrontState {
   records: { key: string; value: string | null }[];
   hardFail: string | null;
 }
 
-interface QuoteView {
+export interface QuoteView {
   datasetId: string;
   amount: number;
   amountUsdc: string;
@@ -50,13 +56,13 @@ interface QuoteView {
   payee: string;
 }
 
-interface JobState {
+export interface JobState {
   jobId: string;
   minBlock: number;
   hashes: string[];
 }
 
-interface DeliveryState {
+export interface DeliveryState {
   dataset: DatasetConfig;
   payloadHash: `0x${string}`;
   metaBlock: number | null;
@@ -65,7 +71,7 @@ interface DeliveryState {
   result: unknown;
 }
 
-interface SettleState {
+export interface SettleState {
   verdict: string;
   reason?: string;
   minBlock: number;
@@ -118,7 +124,7 @@ export function deriveSteps(
   };
 }
 
-function resolveStorefront(readEnsText: EnsTextReader): Promise<StorefrontState> {
+export function resolveStorefront(readEnsText: EnsTextReader): Promise<StorefrontState> {
   return Promise.all(SERVICE_KEYS.map((key) => readEnsText(CONFIG.ens, key))).then((values) => {
     const records = SERVICE_KEYS.map((key, index) => ({ key, value: values[index] ?? null }));
     const missing = missingHardFailKeys(records);
@@ -132,7 +138,7 @@ function resolveStorefront(readEnsText: EnsTextReader): Promise<StorefrontState>
   });
 }
 
-function quoteFromRecords(dataset: DatasetConfig, records: StorefrontState["records"]): QuoteView {
+export function quoteFromRecords(dataset: DatasetConfig, records: StorefrontState["records"]): QuoteView {
   const rec = (key: string): string => records.find((r) => r.key === key)?.value ?? "";
   const match = /^\s*([0-9]+(?:\.[0-9]+)?)\s*USDC\/query\s*$/i.exec(rec("svc.price"));
   if (!match) throw new Error(`invalid svc.price record: "${rec("svc.price")}"`);
@@ -156,7 +162,7 @@ function quoteFromRecords(dataset: DatasetConfig, records: StorefrontState["reco
  * specific records win (per-dataset pricing/SLA); the parent storefront is
  * the fallback. Mirrors the MCP's getQuote resolution.
  */
-async function quoteWithNamespace(
+export async function quoteWithNamespace(
   dataset: DatasetConfig,
   records: StorefrontState["records"],
   readEnsText: EnsTextReader,
@@ -187,10 +193,10 @@ function Tip({ text, children }: { text: string; children?: ReactNode }): JSX.El
   );
 }
 
-type StepStateAttr = "active" | "done" | "failed" | "blocked" | "idle";
+export type StepStateAttr = "active" | "done" | "failed" | "blocked" | "idle";
 
 /** One step card: the guided spine. */
-function StepCard(props: {
+export interface StepCardProps {
   n: number;
   state: StepStateAttr;
   stateLabel?: string;
@@ -198,7 +204,10 @@ function StepCard(props: {
   what: string;
   why?: string;
   children: React.ReactNode;
-}): JSX.Element {
+}
+
+/** One step card: the guided spine. */
+export function StepCard(props: StepCardProps): JSX.Element {
   const stateLabel =
     props.stateLabel ??
     (props.state === "done"
@@ -1257,6 +1266,9 @@ export default function App() {
       </footer>
 
       <Console />
+      <Suspense fallback={null}>
+        <TourRoute />
+      </Suspense>
       <TheaterRoute />
     </>
   );
