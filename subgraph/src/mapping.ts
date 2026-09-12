@@ -32,6 +32,7 @@ import {
   PaymentReleased as PaymentReleasedEvent,
   Refunded as RefundedEvent,
 } from "../generated/ERC8183/ERC8183";
+import { Attested as AttestedEvent } from "../generated/SlaHook/SlaHook";
 import {
   WithdrawalExecuted as WithdrawalExecutedEvent,
   PolicyBlocked as PolicyBlockedEvent,
@@ -267,8 +268,13 @@ export function handleFulfilled(event: JobSubmittedEvent): void {
   let fulfilled = new Fulfilled(id);
   fulfilled.jobId = event.params.jobId;
   fulfilled.payloadHash = event.params.deliverable;
-  fulfilled.metaBlock = event.block.number;
+  fulfilled.metaBlock = event.block.number; // Arc submit block until the hook attests the dataset-chain block
   fulfilled.save();
+  let paidRow = QueryPaid.load(Bytes.fromUTF8("qp-" + event.params.jobId.toString()));
+  if (paidRow != null) {
+    paidRow.fulfilledId = fulfilled.id;
+    paidRow.save();
+  }
 }
 
 // PaymentReleased(jobId, provider, amount) — escrow settlement to seller. This
@@ -363,4 +369,25 @@ export function handlePolicySet(event: PolicySetEvent): void {
   config.perTxCap = event.params.perTxCap;
   config.dailyCap = event.params.dailyCap;
   config.save();
+}
+
+// SlaHook: Attested(jobId, deliverable, metaBlock, minBlock) — the freshness
+// terms the hook binds at completion time. Only jobs on the OpenBook escrow
+// carry the hook, so this is the one place the ledger learns the dataset-chain
+// delivered block and the SLA floor (JobCreated/JobSubmitted only know Arc blocks).
+export function handleAttested(event: AttestedEvent): void {
+  let queryPaid = QueryPaid.load(Bytes.fromUTF8("qp-" + event.params.jobId.toString()));
+  if (queryPaid == null) {
+    return;
+  }
+  queryPaid.minBlock = event.params.minBlock;
+  queryPaid.deliveredBlock = event.params.metaBlock;
+  queryPaid.save();
+  if (queryPaid.fulfilledId !== null) {
+    let fulfilled = Fulfilled.load(queryPaid.fulfilledId as Bytes);
+    if (fulfilled != null) {
+      fulfilled.metaBlock = event.params.metaBlock;
+      fulfilled.save();
+    }
+  }
 }

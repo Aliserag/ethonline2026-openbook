@@ -22,10 +22,15 @@ type QueryPaid @entity(immutable: false) {
   buyer: Bytes!
   seller: Bytes!
   amount: BigInt!
+  """The SLA floor on the dataset chain once the hook's Attested event lands; the Arc creation block until then."""
   minBlock: BigInt!
   deadline: BigInt!
   blockNumber: BigInt!
   timestamp: BigInt!
+  """The delivered block on the dataset chain, from the hook's Attested event (null until attested)."""
+  deliveredBlock: BigInt
+  """The Fulfilled row for this job (set at JobSubmitted) so the attestation can update it."""
+  fulfilledId: Bytes
 }
 
 type Fulfilled @entity(immutable: true) {

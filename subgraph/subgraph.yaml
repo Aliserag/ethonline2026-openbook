@@ -94,6 +94,28 @@ dataSources:
         - event: Refunded(indexed uint256,indexed address,uint256)
           handler: handleRefund
       file: ./src/mapping.ts
+  # ---- SlaHook (onchain SLA adjudication) — the attested freshness terms ----
+  - kind: ethereum/contract
+    name: SlaHook
+    network: arc-testnet
+    source:
+      address: "0x606075F3Cf9b5B66E7e4DD2ea369894374Ff0846"
+      abi: SlaHook
+      startBlock: 61613129
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - QueryPaid
+        - Fulfilled
+      abis:
+        - name: SlaHook
+          file: ./abis/SlaHook.json
+      eventHandlers:
+        - event: Attested(indexed uint256,bytes32,uint256,uint256)
+          handler: handleAttested
+      file: ./src/mapping.ts
   # ---- PolicyWallet (Task 2) — withdrawn costs + policy blocks ----
   - kind: ethereum/contract
     name: PolicyWallet

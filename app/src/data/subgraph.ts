@@ -33,6 +33,8 @@ interface QueryPaidRaw {
   deadline?: unknown;
   blockNumber?: unknown;
   timestamp?: unknown;
+  /** dataset-chain delivered block from the hook's Attested event (v0.0.7+), null until attested */
+  deliveredBlock?: unknown;
 }
 interface FulfilledRaw { id?: unknown; jobId?: unknown; payloadHash?: unknown; metaBlock?: unknown }
 interface SettledRaw { id?: unknown; jobId?: unknown; seller?: unknown; amount?: unknown }
@@ -59,7 +61,7 @@ export function fetchJobs(
   const paidQuery = `{
   queryPaids(first: 200, orderBy: timestamp, orderDirection: desc,
     where: { or: [{ seller_in: [${oursList}] }, { buyer_in: [${oursList}] }] }) {
-    id jobId buyer seller amount minBlock deadline blockNumber timestamp
+    id jobId buyer seller amount minBlock deadline blockNumber timestamp deliveredBlock
   }
   _meta { block { number } }
 }`;
@@ -105,6 +107,8 @@ export function fetchJobs(
             const seller = addr(row["seller"]);
             if (!isOurs(buyer) && !isOurs(seller)) continue; // belt-and-suspenders scope
             const fulfilled = fulfilledByJob.get(key);
+            // the attested dataset-chain block wins over the Arc submit block
+            const attestedBlock = row["deliveredBlock"] !== null && row["deliveredBlock"] !== undefined ? Number(big(row["deliveredBlock"])) : undefined;
             const state: JobView["state"] = refundReason.has(key)
               ? "refunded"
               : settled.has(key)
@@ -121,7 +125,7 @@ export function fetchJobs(
               timestamp: Number(big(row["timestamp"])),
               state,
               payloadHash: fulfilled?.payloadHash,
-              metaBlock: fulfilled?.metaBlock,
+              metaBlock: attestedBlock ?? fulfilled?.metaBlock,
               refundReason: refundReason.get(key),
             });
           }
