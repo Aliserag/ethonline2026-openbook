@@ -15,6 +15,10 @@ export function truncateHash(hash: string, head = 6, tail = 4): string {
   return hash.length <= head + tail ? hash : `${hash.slice(0, head)}…${hash.slice(-tail)}`;
 }
 
+export function explorerAddressUrl(address: string): string {
+  return `https://testnet.arcscan.app/address/${address}`;
+}
+
 export function explorerUrl(txHash: string): string {
   return `https://testnet.arcscan.app/tx/${txHash}`;
 }

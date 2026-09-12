@@ -20,12 +20,12 @@ import { arcChain } from "./wagmi";
 import { env, hasAlchemyKey, hasGraphKey } from "./env";
 import { CONFIG, defaultQueryFor, type DatasetConfig } from "./config";
 import { arcWalletClient, ensureArcChain } from "./arc";
-import { explorerUrl, truncateHash, usdc6 } from "./format";
+import { explorerAddressUrl, explorerUrl, truncateHash, usdc6 } from "./format";
 import { fetchPnl, type PnlRow, type RefundEvent } from "./pnl";
 import { createEnsTextReader, type EnsTextReader } from "../../mcp/src/ens";
 import { gatewayQuery, stripMeta } from "../../mcp/src/gateway";
 import { defaultChainHeadResolver } from "../../mcp/src/chainhead";
-import { createJobWithSla, ERC8183, setUsdcAddress, usdcAddress, USDC_ABI, type Sla } from "../../agent/escrow";
+import { createJobWithSla, ERC8183, ERC8183_ABI, setUsdcAddress, usdcAddress, USDC_ABI, type Sla } from "../../agent/escrow";
 import { verifyDelivery } from "../../mcp/src/escrow";
 
 // Chain-specific USDC (VITE_USDC_ADDRESS), mainnet override for the escrow module.
@@ -245,6 +245,7 @@ export default function App() {
   const [pnl, setPnl] = useState<PnlRow[] | null>(null);
   const [refundEvents, setRefundEvents] = useState<RefundEvent[]>([]);
   const [pnlMeta, setPnlMeta] = useState<number | null>(null);
+  const [treasury, setTreasury] = useState<{ feeBP: number; treasury: string; balance: string } | null>(null);
   const [pnlHead, setPnlHead] = useState<number | null>(null);
   const [pnlError, setPnlError] = useState<string | null>(null);
   const [pnlUpdatedAt, setPnlUpdatedAt] = useState<Date | null>(null);
@@ -326,6 +327,37 @@ export default function App() {
       if (settleTimer !== undefined) clearTimeout(settleTimer);
     };
   }, [publicClient, pnlNonce]);
+
+  // The protocol fee, read live from the contract the app sells through: rate and
+  // treasury come from the escrow's own storage, the balance from USDC — the
+  // sustainability mechanism is a live row here, not a claim in a slide.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const escrow = CONFIG.escrow;
+        const [feeBP, treasuryAddr] = (await Promise.all([
+          publicClient.readContract({ address: escrow, abi: ERC8183_ABI, functionName: "platformFeeBP" }),
+          publicClient.readContract({ address: escrow, abi: ERC8183_ABI, functionName: "platformTreasury" }),
+        ])) as [bigint, `0x${string}`];
+        const balance = (await publicClient.readContract({
+          address: usdcAddress(),
+          abi: USDC_ABI,
+          functionName: "balanceOf",
+          args: [treasuryAddr],
+        })) as bigint;
+        if (!cancelled) {
+          setTreasury({ feeBP: Number(feeBP), treasury: treasuryAddr, balance: usdc6(balance) });
+        }
+      } catch (error) {
+        console.warn("treasury read failed:", error instanceof Error ? error.message : String(error));
+        if (!cancelled) setTreasury(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [publicClient]);
 
   // The brand is a printer, not a screenshot: the ledger refreshes itself every
   // 15s (and immediately when the tab comes back), so rows, block deltas and the
@@ -669,7 +701,7 @@ export default function App() {
               stateLabel={ensLoading ? "resolving…" : undefined}
               title="The storefront — what's for sale"
               what="This table is the storefront: the datasets on offer, their prices and their SLA, read live from openbook.eth."
-              why="The storefront is a name, not a file. openbook.eth publishes its menu, price and service-level promise as live ENSv2 records. If a record is missing, nothing gets priced: the agent will not quote a hard-coded value."
+              why="The storefront is a name, not a file. openbook.eth publishes its menu, price and service-level promise as live ENSv2 records. If a record is missing, nothing gets priced: the agent will not quote a hard-coded value. Every dataset is one config entry — any of The Graph's 15,000+ subgraphs can be sold this way."
             >
               {ensLoading && (
                 <p className="notice" role="status">
@@ -877,7 +909,7 @@ export default function App() {
               }
               title="Watch data arrive"
               what="One live query through The Graph gateway, with its freshness timestamp."
-              why="Every answer carries a proof of freshness, the _meta block. If the data is older than the SLA allows, the agent refuses to charge for it."
+              why="Every answer carries a proof of freshness, the _meta block. If the data is older than the SLA allows, the agent refuses to charge for it. In production the buyer is an MCP agent: this is the same query it runs through the server."
             >
               {!hasGraphKey && (
                 <div className="setupcard">
@@ -935,7 +967,7 @@ export default function App() {
               state={stepState(step.settle)}
               title="Settle or refund"
               what="The verdict is deterministic open code: fresh data settles, stale data refunds."
-              why="The payment itself checks the SLA. The agent is never paid for stale data, and the buyer never has to ask for a refund: it happens onchain."
+              why="The payment itself checks the SLA: our SlaHook contract reverts a stale completion onchain. The agent is never paid for stale data, the buyer never asks for a refund — and 2% of every settlement routes to the protocol treasury."
             >
               <p style={{ marginTop: 0 }}>
                 <button
@@ -1012,7 +1044,7 @@ export default function App() {
                 <div className="steptitle">
                   <h2 id="pnl-title">The agent's books</h2>
                   <p className="what">
-                    Running P&amp;L, onchain and queryable. Every settlement lands here.
+                    Running P&amp;L, onchain and queryable. Every settlement — and the protocol fee — lands here.
                   </p>
                 </div>
                 <span className="stepstate">
@@ -1061,6 +1093,25 @@ export default function App() {
                           </a>
                         </li>
                       ))}
+                    </ul>
+                  </div>
+                )}
+                {treasury !== null && (
+                  <div className="refunds-live">
+                    <p className="cap">
+                      the protocol fee — {(treasury.feeBP / 100).toFixed(0)}% of every settlement, read live
+                      from the escrow. The treasury is the same policy-gated wallet that receives settlements.
+                    </p>
+                    <ul className="running">
+                      <li>
+                        <span className="cap">
+                          treasury ·{" "}
+                          <a href={explorerAddressUrl(treasury.treasury)} target="_blank" rel="noreferrer">
+                            {truncateHash(treasury.treasury)}
+                          </a>
+                        </span>
+                        <span className="fig settled hero">{treasury.balance} USDC</span>
+                      </li>
                     </ul>
                   </div>
                 )}
