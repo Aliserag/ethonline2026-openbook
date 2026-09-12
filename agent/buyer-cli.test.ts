@@ -10,7 +10,7 @@
 import { describe, expect, it } from "bun:test";
 import { keccak256, toBytes } from "viem";
 import { loadConfigFile, type OpenBookConfig } from "../mcp/src/datasets";
-import { deliverQuery, runBuyerFlow } from "./buyer-cli";
+import { deliverQuery, resolveAttesterPk, runBuyerFlow } from "./buyer-cli";
 import { defaultQueryFor } from "./src/queries";
 import * as path from "node:path";
 
@@ -25,13 +25,29 @@ const ensFixtures = {
   payee: "0x3600000000000000000000000000000000000000",
 };
 
-/** ENS text reader stub (null = record not set — same shape the MCP tests use). */
-function stubEns(records: Partial<typeof ensFixtures> | null) {
+/** One storefront record; null = deliberately unset (hard-fail tests). */
+type EnsRecord = string | null;
+type EnsFixtures = Record<keyof typeof ensFixtures, EnsRecord>;
+
+/**
+ * ENS text reader stub (null = record not set — same shape the MCP tests
+ * use). `subnames` holds dataset-subname override records (fold 1): only
+ * svc.price/svc.sla are read there, and they default to unset.
+ */
+function stubEns(
+  records: Partial<EnsFixtures> | null,
+  subnames?: Record<string, Partial<EnsFixtures>>,
+) {
   return async (name: string, key: string): Promise<string | null> => {
-    expect(name).toBe("openbook.eth");
+    if (name !== "openbook.eth") {
+      const sub = subnames?.[name];
+      if (!sub) return null;
+      const bareKey = key.replace(/^svc\./, "");
+      return sub[bareKey as keyof EnsFixtures] ?? null;
+    }
     if (!records) return null;
     const bareKey = key.replace(/^svc\./, "");
-    return records[bareKey as keyof typeof ensFixtures] ?? null;
+    return records[bareKey as keyof EnsFixtures] ?? null;
   };
 }
 
@@ -108,6 +124,47 @@ describe("buyer-cli quote flow", () => {
     await expect(
       runBuyerFlow(CONFIG, { datasetId: "nope", onlyQuote: true }, { env: {}, readEnsText: stubEns(ensFixtures) }),
     ).rejects.toThrow(/unknown dataset/);
+  });
+
+  it("fold 1: the dataset-subname svc.price overrides the parent (quote == the MCP's charge)", async () => {
+    const result = await runBuyerFlow(
+      CONFIG,
+      { datasetId: "aave-v3-arbitrum-lending", onlyQuote: true },
+      {
+        env: {},
+        readEnsText: stubEns(ensFixtures, {
+          "aave-v3-arbitrum-lending.openbook.eth": { price: "0.15 USDC/query" },
+        }),
+      },
+    );
+    expect(result.quote).toMatchObject({
+      amount: 150000,
+      amountUsdc: "0.15",
+      priceRecord: "0.15 USDC/query",
+    });
+    // the parent SLA is the fallback when the subname overrides price only
+    expect(result.quote.minBlockLag).toBe(50);
+  });
+});
+
+// --- attester override (fold 2, OPENBOOK_ATTESTER_PK) -------------------------
+
+describe("attester override (OPENBOOK_ATTESTER_PK)", () => {
+  const providerPk = ("0x" + "11".repeat(32)) as `0x${string}`;
+  const attesterPk = ("0x" + "22".repeat(32)) as `0x${string}`;
+
+  it("defaults to the provider key when the override is unset", () => {
+    expect(resolveAttesterPk({}, providerPk)).toBe(providerPk);
+  });
+
+  it("OPENBOOK_ATTESTER_PK wins over the provider key", () => {
+    expect(resolveAttesterPk({ OPENBOOK_ATTESTER_PK: attesterPk }, providerPk)).toBe(attesterPk);
+  });
+
+  it("a malformed override hard-fails with a clear message (never signs with junk)", () => {
+    expect(() => resolveAttesterPk({ OPENBOOK_ATTESTER_PK: "0xshort" }, providerPk)).toThrow(
+      /OPENBOOK_ATTESTER_PK must be a 0x \+ 64 hex private key/,
+    );
   });
 });
 

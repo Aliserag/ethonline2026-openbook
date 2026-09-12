@@ -1,10 +1,13 @@
 /**
- * buyer-cli.ts — OpenBook buyer driver (Task 7).
+ * buyer-cli.ts — OpenBook buyer driver (Task 7, marketplace W2).
  *
  * The buyer side of the loop, driven from the terminal:
  *
  *   quote    → ENSv2 svc.* records (Sepolia) → price/SLA/payee (HARD-FAILS
- *              on any missing record — never quotes a hard-coded value)
+ *              on any missing record — never quotes a hard-coded value).
+ *              Resolves the parent storefront PLUS the dataset-subname
+ *              override (`<dataset>.openbook.eth`) — the SAME resolution the
+ *              MCP get_quote uses, so quote == charge everywhere.
  *   pay      → createJobWithSla: buyer signs createJob/approve/fund, the
  *              provider (seller key) signs setBudget → jobId + fund tx
  *   deliver  → run the dataset query through the Gateway (fresh) — or through
@@ -15,6 +18,12 @@
  *   settle   → APPROVE → complete() (PaymentReleased) · REJECT →
  *              rejectAndRefund() (Refunded — the money shot)
  *
+ * Marketplace mode (W2): `--schema <schema> --compare` lists every seller
+ * offering that schema from the live ENS directory (each with its ENS price
+ * and SLA); `--prefer fresh|cheap` (default `fresh`: tighter maxBlockLag
+ * wins, price breaks ties) picks one and the flow runs against the chosen
+ * seller — listing, quote and charge all read the same ENS records.
+ *
  * --stale routes the delivery query through the stale proxy (default
  * http://127.0.0.1:8787, scripts/stale-proxy.ts) which replays a cached old
  * `_meta` block — the ONLY deterministic way to fire the refund money shot
@@ -22,10 +31,16 @@
  *
  * Key-guarded: pay/deliver/verify need ARC_TESTNET_PK (buyer) + a provider
  * key (ARC_RECIPIENT_PK or the config operator key — the job's provider
- * signs setBudget) + GRAPH_GATEWAY_KEY (deliver). quote --only-quote runs
- * fully keyless. Missing keys → clean skip, exit 0.
+ * signs setBudget) + GRAPH_GATEWAY_KEY (deliver). quote --only-quote and
+ * --compare run fully keyless. Missing keys → clean skip, exit 0.
+ *
+ * OPENBOOK_ATTESTER_PK — who signs the onchain freshness attestation
+ * (SlaHook.attest) when a hook is configured; default = the provider key.
+ * Living-protocol T13 flips the hook's attester to the demo-buyer key, so
+ * the CLI attests as that key while still acting as provider.
  *
  * Run: bun agent/buyer-cli.ts [--config mcp/config/openbook.json] [--dataset aave-v3-arbitrum-lending]
+ *                              [--schema lending/3.1.0] [--compare] [--prefer fresh|cheap]
  *                              [--stale] [--only-quote] [--expiry 3600] [--json]
  */
 
@@ -62,9 +77,12 @@ import {
   createEnsTextReader,
   parsePriceToAmount6dec,
   parseSlaRecord,
-  resolveServiceRecords,
+  resolveDatasetRecords,
   type EnsTextReader,
+  type ServiceRecords,
 } from "../mcp/src/ens";
+import { listSellers, sellersForSchema } from "../mcp/src/directory";
+import { pickSeller, type SellerQuote } from "../mcp/src/router";
 import { defaultQueryFor } from "./src/queries";
 import { verifyDelivery } from "../mcp/src/escrow";
 import {
@@ -127,6 +145,8 @@ export interface BuyerFlowOptions {
   expirySeconds?: number;
   /** stop after the quote — fully keyless */
   onlyQuote?: boolean;
+  /** optional SlaHook address — enables onchain SLA adjudication for the job */
+  hook?: string;
 }
 
 export interface BuyerDeps {
@@ -136,6 +156,10 @@ export interface BuyerDeps {
   publicClient?: PublicClient;
   buyerWallet?: WalletClient;
   providerWallet?: WalletClient;
+  /** who signs the onchain freshness attestation — defaults to the
+   * OPENBOOK_ATTESTER_PK override, then the provider wallet (via the same
+   * walletFromKey path); injectable for tests */
+  attesterWallet?: WalletClient;
   /** freshness head resolver — defaults to Alchemy via mcp/src/chainhead.ts
    * (the Gateway's _meta has no chainHeadBlock field; live probe 2026-09-09) */
   chainHead?: (chain: "arbitrum" | "ethereum") => Promise<number>;
@@ -158,7 +182,11 @@ function walletFromKey(key: `0x${string}`, rpcUrl: string): WalletClient {
 export async function deliverQuery(
   config: OpenBookConfig,
   options: { datasetId: string; query?: string; stale?: boolean; staleProxyUrl?: string },
-  deps: { env?: Record<string, string | undefined>; fetchImpl?: FetchLike } = {},
+  deps: {
+    env?: Record<string, string | undefined>;
+    fetchImpl?: FetchLike;
+    chainHead?: (chain: "arbitrum" | "ethereum") => Promise<number>;
+  } = {},
 ): Promise<DeliveryRecord> {
   const env = deps.env ?? {};
   const gatewayKey = resolveGatewayKey(config, env);
@@ -214,6 +242,75 @@ export function requiredEnv(env: Record<string, string | undefined>, key: string
 }
 
 /**
+ * Which key signs the onchain freshness attestation (SlaHook.attest) when a
+ * hook is configured. OPENBOOK_ATTESTER_PK overrides the provider key —
+ * living-protocol T13 flips the hook's attester to the demo-buyer key so the
+ * CLI attests as that identity while still acting as provider (both worlds
+ * share one attester). Default = provider key, so current behavior is
+ * unchanged when the env var is unset.
+ */
+export function resolveAttesterPk(
+  env: Record<string, string | undefined>,
+  providerPk: `0x${string}`,
+): `0x${string}` {
+  const override = env["OPENBOOK_ATTESTER_PK"];
+  if (override === undefined) return providerPk;
+  if (!/^0x[0-9a-fA-F]{64}$/.test(override)) {
+    throw new Error("buyer-cli: OPENBOOK_ATTESTER_PK must be a 0x + 64 hex private key");
+  }
+  return override as `0x${string}`;
+}
+
+/**
+ * Marketplace mode (W2): every offer for a schema — the parent storefront's
+ * datasets plus every ENS-discovered subname seller advertising the schema —
+ * with prices/SLAs/payees resolved through the SAME `resolveDatasetRecords`
+ * the quote and the MCP use, so listing == quote == charge. A seller whose
+ * namespace is unpriceable today is skipped honestly: the buy path hard-fails
+ * on it too, so the comparison lists only purchasable offers.
+ */
+export async function offersForSchema(
+  config: OpenBookConfig,
+  schema: string,
+  readEnsText: EnsTextReader,
+): Promise<SellerQuote[]> {
+  const offers: SellerQuote[] = [];
+  for (const dataset of config.datasets) {
+    if (dataset.schema !== schema) continue;
+    const records = await resolveDatasetRecords(config.ens, dataset.id, readEnsText);
+    offers.push({
+      name: config.ens,
+      datasetId: dataset.id,
+      priceUsdc: parsePriceToAmount6dec(records.price as string),
+      maxBlockLag: parseSlaRecord(records.sla as string).maxBlockLag,
+      payee: records.payee as Address,
+      stats: null,
+    });
+  }
+  const sellers = await listSellers(config.ens, { readEnsText });
+  for (const seller of sellersForSchema(sellers, schema)) {
+    for (const entry of seller.menu) {
+      if (entry.schema !== schema) continue;
+      let records: ServiceRecords;
+      try {
+        records = await resolveDatasetRecords(seller.name, entry.id, readEnsText);
+      } catch {
+        continue; // no priceable records → the buy path would hard-fail; skip
+      }
+      offers.push({
+        name: seller.name,
+        datasetId: entry.id,
+        priceUsdc: parsePriceToAmount6dec(records.price as string),
+        maxBlockLag: parseSlaRecord(records.sla as string).maxBlockLag,
+        payee: records.payee as Address,
+        stats: null,
+      });
+    }
+  }
+  return offers.sort((a, b) => a.name.localeCompare(b.name) || a.datasetId.localeCompare(b.datasetId));
+}
+
+/**
  * Full buyer flow. `onlyQuote` stops after the ENS quote and is the keyless
  * path tests exercise; everything after it requires the buyer key.
  */
@@ -225,9 +322,10 @@ export async function runBuyerFlow(
   const env = deps.env ?? {};
   const log = deps.log ?? defaultLog;
 
-  // 1. quote — ENS-gated, hard-fails without records
+  // 1. quote — ENS-gated, hard-fails without records. Same resolution the MCP
+  // get_quote uses (parent + dataset-subname override): quote == charge.
   const readEnsText = deps.readEnsText ?? createEnsTextReader({ rpcUrl: env["SEPOLIA_RPC"] });
-  const records = await resolveServiceRecords(config.ens, readEnsText);
+  const records = await resolveDatasetRecords(config.ens, options.datasetId, readEnsText);
   const amount = parsePriceToAmount6dec(records.price as string);
   const slaRecord = parseSlaRecord(records.sla as string);
   const dataset = config.datasets.find((d) => d.id === options.datasetId);
@@ -274,6 +372,12 @@ export async function runBuyerFlow(
   const providerWallet = deps.providerWallet ?? walletFromKey(providerPk as `0x${string}`, rpcUrl);
   const providerAddress = providerWallet.account?.address;
   if (!providerAddress) throw new Error("buyer-cli: provider wallet has no attached account");
+  // attester: who signs the freshness proof the hook enforces at complete().
+  // OPENBOOK_ATTESTER_PK overrides the provider key (living-protocol T13 flips
+  // the hook's attester to the demo-buyer key; the CLI keeps acting as the
+  // provider everywhere else).
+  const attesterWallet =
+    deps.attesterWallet ?? walletFromKey(resolveAttesterPk(env, providerPk as `0x${string}`), rpcUrl);
 
   const head = await publicClient.getBlockNumber();
   const sla: Sla = {
@@ -331,7 +435,7 @@ export async function runBuyerFlow(
   if (hookAddress !== undefined) {
     await attestDelivery(
       publicClient,
-      providerWallet,
+      attesterWallet,
       hookAddress,
       jobId,
       delivery.payloadHash,
@@ -391,6 +495,12 @@ interface CliOptions {
   json: boolean;
   /** optional SlaHook address — enables onchain SLA adjudication for the job */
   hook?: string;
+  /** marketplace mode (W2): only consider offers for this schema */
+  schema?: string;
+  /** marketplace mode: list every seller offering the schema, then stop (keyless) */
+  compare: boolean;
+  /** marketplace mode: which seller wins — fresh (tighter maxBlockLag) or cheap */
+  prefer: "fresh" | "cheap";
 }
 
 function parseCli(argv: string[]): CliOptions {
@@ -405,6 +515,8 @@ function parseCli(argv: string[]): CliOptions {
     stale: false,
     onlyQuote: false,
     json: false,
+    compare: false,
+    prefer: "fresh",
   };
   const config = value("--config") ?? value("-c");
   if (config !== undefined) options.config = config;
@@ -418,9 +530,19 @@ function parseCli(argv: string[]): CliOptions {
   if (expiry !== undefined) options.expirySeconds = Number.parseInt(expiry, 10);
   const hook = value("--hook");
   if (hook !== undefined) options.hook = hook;
+  const schema = value("--schema");
+  if (schema !== undefined) options.schema = schema;
+  const prefer = value("--prefer");
+  if (prefer !== undefined) {
+    if (prefer !== "fresh" && prefer !== "cheap") {
+      throw new Error(`buyer-cli: --prefer must be fresh or cheap (got '${prefer}')`);
+    }
+    options.prefer = prefer;
+  }
   if (args.includes("--stale")) options.stale = true;
   if (args.includes("--only-quote")) options.onlyQuote = true;
   if (args.includes("--json")) options.json = true;
+  if (args.includes("--compare")) options.compare = true;
   return options;
 }
 
@@ -443,22 +565,89 @@ function loadDotEnv(env: Record<string, string | undefined>): void {
   }
 }
 
+/**
+ * Marketplace mode (W2): compare every seller offering a schema, print the
+ * offers with their live ENS prices/SLAs, then — unless `--compare` — buy
+ * from the `pickSeller`-chosen seller. The chosen seller's ENS namespace
+ * becomes the flow's quote root, so compare == quote == charge.
+ */
+export async function runMarketplaceFlow(
+  config: OpenBookConfig,
+  options: CliOptions,
+  env: Record<string, string | undefined>,
+): Promise<void> {
+  const readEnsText = createEnsTextReader({ rpcUrl: env["SEPOLIA_RPC"] });
+  const schema = options.schema as string;
+  const offers = await offersForSchema(config, schema, readEnsText);
+  if (offers.length === 0) {
+    console.log(
+      `[buyer] compare: no seller offers schema=${schema} (checked ${config.ens} and its ENS subnames)`,
+    );
+    return;
+  }
+  console.log(`[buyer] compare schema=${schema}: ${offers.length} offer${offers.length === 1 ? "" : "s"}`);
+  offers.forEach((offer, index) => {
+    console.log(
+      `  ${index + 1}. ${offer.name} (${offer.datasetId}): ${(offer.priceUsdc / 1_000_000).toFixed(2)} USDC/query, ` +
+        `maxBlockLag=${offer.maxBlockLag}, payee=${offer.payee}`,
+    );
+  });
+  if (options.compare) return;
+
+  const chosen = pickSeller(offers, options.prefer);
+  console.log(
+    `[buyer] router: prefer=${options.prefer} -> ${chosen.name} (${chosen.datasetId}) ` +
+      `${(chosen.priceUsdc / 1_000_000).toFixed(2)} USDC/query maxBlockLag=${chosen.maxBlockLag}`,
+  );
+  const sellerConfig: OpenBookConfig = {
+    ...config,
+    ens: chosen.name,
+    datasets: config.datasets.filter((d) => d.id === chosen.datasetId),
+  };
+  if (sellerConfig.datasets.length === 0) {
+    throw new Error(
+      `buyer-cli: no local dataset config for ${chosen.datasetId} (offer of ${chosen.name}) — cannot build the delivery query`,
+    );
+  }
+  const result = await runBuyerFlow(
+    sellerConfig,
+    {
+      datasetId: chosen.datasetId,
+      query: options.query,
+      stale: options.stale,
+      staleProxyUrl: options.staleProxyUrl,
+      expirySeconds: options.expirySeconds,
+      onlyQuote: options.onlyQuote,
+      hook: options.hook,
+    },
+    { env },
+  );
+  if (options.json) {
+    console.log(JSON.stringify(result, null, 2));
+  }
+}
+
 export async function main(argv: string[]): Promise<void> {
   loadDotEnv(process.env);
   const options = parseCli(argv);
   const config = loadConfigFile(options.config);
 
-  // keyless discipline: only the quote is keyless; anything else needs keys
+  // keyless discipline: only the quote (and the compare listing) are keyless;
+  // anything else needs keys
   const hasBuyerKey = /^0x[0-9a-fA-F]{64}$/.test(process.env["ARC_TESTNET_PK"] ?? "");
   const hasGatewayKey = (resolveGatewayKey(config, process.env) ?? "").length > 0;
-  if (!options.onlyQuote && (!hasBuyerKey || !hasGatewayKey)) {
+  if (!options.onlyQuote && !options.compare && (!hasBuyerKey || !hasGatewayKey)) {
     console.log(
       `[buyer] SKIP: ${!hasBuyerKey ? "ARC_TESTNET_PK" : ""}${!hasBuyerKey && !hasGatewayKey ? " and " : ""}${!hasGatewayKey ? "GRAPH_GATEWAY_KEY" : ""} ` +
-        `missing — pay/deliver/verify are keyed steps; run --only-quote keyless, or set the keys (the setup notes).`,
+        `missing — pay/deliver/verify are keyed steps; run --only-quote or --compare keyless, or set the keys (the setup notes).`,
     );
     return;
   }
 
+  if (options.schema !== undefined) {
+    await runMarketplaceFlow(config, options, process.env);
+    return;
+  }
   const result = await runBuyerFlow(config, options, { env: process.env });
   if (options.json) {
     console.log(JSON.stringify(result, null, 2));

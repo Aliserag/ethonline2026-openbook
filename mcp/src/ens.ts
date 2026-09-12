@@ -63,6 +63,35 @@ export async function resolveServiceRecords(
   return records;
 }
 
+/**
+ * Resolve the storefront records for ONE dataset: the parent's svc.* records
+ * plus the dataset-subname override (`<datasetId>.<parentEns>`), when that
+ * dataset publishes its own svc.price/svc.sla at its subname (ENSv2
+ * hierarchical namespace — the most specific records win; the parent is the
+ * fallback, so new datasets scale without a new deployment). The parent's
+ * price/sla/payee still HARD-FAIL (ENS_RESOLUTION_FAILED) when unset; the
+ * override is additive only.
+ *
+ * This is the single quote == charge price resolution: the MCP get_quote and
+ * the buyer CLI both use it, so the amount quoted is always the amount
+ * charged (marketplace plan Task M4, fold 1).
+ */
+export async function resolveDatasetRecords(
+  parentEns: string,
+  datasetId: string,
+  readEnsText: EnsTextReader,
+): Promise<ServiceRecords> {
+  const records = await resolveServiceRecords(parentEns, readEnsText); // hard-fails ENS_RESOLUTION_FAILED
+  const datasetName = `${datasetId}.${parentEns}`;
+  const [subPrice, subSla] = await Promise.all([
+    readEnsText(datasetName, "svc.price"),
+    readEnsText(datasetName, "svc.sla"),
+  ]);
+  if (subPrice !== null) records.price = subPrice;
+  if (subSla !== null) records.sla = subSla;
+  return records;
+}
+
 /** Parse "0.10 USDC/query" into 6-decimal USDC units (100000). Throws on junk. */
 export function parsePriceToAmount6dec(price: string): number {
   const match = /^\s*([0-9]+(?:\.[0-9]+)?)\s*USDC\/query\s*$/i.exec(price);
