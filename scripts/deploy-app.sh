@@ -19,7 +19,13 @@ echo "== [2/6] build"
 cd "$APP_DIR"
 bun run build:worker >/dev/null
 ./node_modules/.bin/tsc --noEmit
-# secrets never enter the browser bundle: the server routes hold them
+# secrets never enter the browser bundle: the server routes hold them. The only
+# key the page carries is the demo buyer (testnet play money), taken from the
+# root .env (DEMO_BUYER_PK / DEMO_BUYER_ADDRESS) so app/.env.local is never the
+# source of truth for a deploy.
+set +u; set -a; . "$APP_DIR/../.env"; set +a; set -u
+[ -n "${DEMO_BUYER_PK:-}" ] || { echo "FAIL: DEMO_BUYER_PK missing from .env"; exit 1; }
+VITE_DEMO_BUYER_KEY="$DEMO_BUYER_PK" VITE_DEMO_BUYER_ADDRESS="${DEMO_BUYER_ADDRESS},0xE4AAeE76c53E9F3f16fcA969c31E18F8522B41Ef" \
 VITE_GRAPH_GATEWAY_KEY= VITE_ALCHEMY_API_KEY= VITE_LLM_API_KEY= BASE_PATH=/ ./node_modules/.bin/vite build >/dev/null
 echo "   dist: $(ls dist/assets | wc -l | tr -d ' ') assets"
 

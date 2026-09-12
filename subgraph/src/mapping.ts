@@ -383,11 +383,4 @@ export function handleAttested(event: AttestedEvent): void {
   queryPaid.minBlock = event.params.minBlock;
   queryPaid.deliveredBlock = event.params.metaBlock;
   queryPaid.save();
-  if (queryPaid.fulfilledId !== null) {
-    let fulfilled = Fulfilled.load(queryPaid.fulfilledId as Bytes);
-    if (fulfilled != null) {
-      fulfilled.metaBlock = event.params.metaBlock;
-      fulfilled.save();
-    }
-  }
 }
