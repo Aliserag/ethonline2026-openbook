@@ -1140,17 +1140,25 @@ export default function App() {
                 )}
                 <p className="statline">
                   <span className={pnlError !== null ? "ob-live off" : "ob-live"} aria-hidden="true" />
-                  <Tip
-                    text={
-                      pnlMeta !== null && pnlHead !== null
-                        ? `The books are a subgraph indexed from Arc: it has read up to block ${pnlMeta}, the chain head is ${pnlHead}, ${Math.max(0, pnlHead - pnlMeta)} blocks behind, seconds of lag.`
-                        : "The books are a subgraph indexed from Arc; block freshness is being checked."
-                    }
-                  >
-                    live
-                  </Tip>
-                  {" · "}
-                  {pnl !== null ? pnl.length : "…"} daily row{pnl !== null && pnl.length === 1 ? "" : "s"}
+                  {pnlError !== null ? (
+                    "error"
+                  ) : pnl === null ? (
+                    "loading the ledger…"
+                  ) : (
+                    <>
+                      <Tip
+                        text={
+                          pnlMeta !== null && pnlHead !== null
+                            ? `The books are a subgraph indexed from Arc: it has read up to block ${pnlMeta}, the chain head is ${pnlHead}, ${Math.max(0, pnlHead - pnlMeta)} blocks behind, seconds of lag.`
+                            : "The books are a subgraph indexed from Arc; block freshness is being checked."
+                        }
+                      >
+                        live
+                      </Tip>
+                      {" · "}
+                      {pnl.length} daily row{pnl.length === 1 ? "" : "s"}
+                    </>
+                  )}
                   {pnlUpdatedAt !== null && (
                     <>
                       {" · "}
@@ -1207,10 +1215,12 @@ export default function App() {
                     </tbody>
                   </table>
                 ) : (
-                  <p className="notice">
-                    {pnl === null
-                      ? "loading the ledger…"
-                      : "daily rows appear here once settlements land."}
+                  <p className={pnlError !== null ? "notice error" : "notice"}>
+                    {pnlError !== null
+                      ? `the ledger could not be read: ${pnlError}`
+                      : pnl === null
+                        ? "loading the ledger…"
+                        : "daily rows appear here once settlements land."}
                   </p>
                 )}
               </div>
