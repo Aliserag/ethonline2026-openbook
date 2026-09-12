@@ -33,8 +33,46 @@ import { truncateHash, usdc6 } from "../format";
 import { EDGES, NODES, edgeTarget, type NodeLive, type NodeLiveData } from "./nodes";
 import { Drawer } from "./Drawer";
 
-const MAP_POLL_MS = 20_000;
-const MAP_STALE_MS = 60_000;
+const MAP_POLL_MS = 30_000;
+const MAP_STALE_MS = 90_000;
+
+/**
+ * Stagger each node's poll schedule: the public Arc RPC rate-limits broad
+ * simultaneous bursts (observed 429s when all 8 nodes read at once), so the
+ * first read is delayed per node and every poll cadence is offset a little.
+ */
+function nodeOpts(index: number): { pollMs: number; staleAfterMs: number } {
+  return {
+    pollMs: MAP_POLL_MS + index * 1_000,
+    staleAfterMs: MAP_STALE_MS + index * 1_000,
+  };
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Short-TTL shared probe: several nodes read the SAME slow-moving config
+ * (PolicyWallet caps, ENS storefront records). A small TTL keeps the public
+ * RPCs — which rate-limit browser bursts — from being hit once per node per
+ * poll: ens+mcp share one storefront read, agent+policy share one readPolicy.
+ * A failed read evicts itself so the next node poll retries.
+ */
+function ttl<T>(read: () => Promise<T>, ttlMs: number): () => Promise<T> {
+  let at = 0;
+  let value: Promise<T> | null = null;
+  return () => {
+    const now = Date.now();
+    if (value !== null && now - at < ttlMs) return value;
+    at = now;
+    value = read().catch((error) => {
+      value = null;
+      throw error;
+    });
+    return value;
+  };
+}
 
 /** Our ERC-8004 identity token (carry-in, verified live) — never token 1. */
 const AGENT_TOKEN_ID = 894065n;
@@ -55,20 +93,22 @@ const HOOK_ABI = parseAbi([
   "function attester() view returns (address)",
 ]);
 
-async function allowlistedCount(client: ReturnType<typeof getPublicClient>, owner: `0x${string}`, agent: `0x${string}`): Promise<number> {
-  const [ownerOk, agentOk] = await Promise.all([
-    client.readContract({ address: ADDR.policy, abi: ALLOWLIST_ABI, functionName: "allowlisted", args: [owner] }),
-    client.readContract({ address: ADDR.policy, abi: ALLOWLIST_ABI, functionName: "allowlisted", args: [agent] }),
-  ]);
-  return (ownerOk ? 1 : 0) + (agentOk ? 1 : 0);
+interface StorefrontRecords {
+  price: string | null;
+  sla: string | null;
+  payee: string | null;
+  menu: string | null;
+  maxBlockLag: number | null;
 }
 
-async function readEnsNode(): Promise<NodeLiveData> {
+/** One ENSv2 storefront probe set, shared by the ens, mcp (and theater-adjacent) nodes. */
+const storefrontCached = ttl(async (): Promise<StorefrontRecords> => {
   const reader = createEnsTextReader({ rpcUrl: env.sepoliaRpc });
-  const [price, sla, payee] = await Promise.all([
+  const [price, sla, payee, menu] = await Promise.all([
     reader(CONFIG.ens, "svc.price").catch(() => null),
     reader(CONFIG.ens, "svc.sla").catch(() => null),
     reader(CONFIG.ens, "svc.payee").catch(() => null),
+    reader(CONFIG.ens, "svc.menu").catch(() => null),
   ]);
   let maxBlockLag: number | null = null;
   if (sla !== null) {
@@ -78,25 +118,44 @@ async function readEnsNode(): Promise<NodeLiveData> {
       // unreadable record — shown as "—", never an invented figure
     }
   }
+  return { price, sla, payee, menu, maxBlockLag };
+}, 12_000);
+
+/** PolicyWallet caps/spend, shared by the agent + policy nodes (15s TTL). */
+const policyCached = ttl(() => readPolicy(getPublicClient()), 15_000);
+
+/** The owner+agent allowlist check, one round for both consumers. */
+const allowlistCached = ttl(async (): Promise<number> => {
+  const client = getPublicClient();
+  const view = await policyCached();
+  const [ownerOk, agentOk] = await Promise.all([
+    client.readContract({ address: ADDR.policy, abi: ALLOWLIST_ABI, functionName: "allowlisted", args: [view.owner] }),
+    client.readContract({ address: ADDR.policy, abi: ALLOWLIST_ABI, functionName: "allowlisted", args: [view.agent] }),
+  ]);
+  return (ownerOk ? 1 : 0) + (agentOk ? 1 : 0);
+}, 15_000);
+
+async function readEnsNode(): Promise<NodeLiveData> {
+  const records = await storefrontCached();
   return {
-    summary: price ?? "✗ svc.price",
+    summary: records.price ?? "✗ svc.price",
     rows: [
       ["name", CONFIG.ens],
-      ["svc.price", price ?? "✗ unset"],
-      ["svc.sla", sla ?? "✗ unset"],
-      ["maxBlockLag", maxBlockLag !== null ? `${maxBlockLag} blocks` : "—"],
-      ["svc.payee", payee ?? "✗ unset"],
+      ["svc.price", records.price ?? "✗ unset"],
+      ["svc.sla", records.sla ?? "✗ unset"],
+      ["maxBlockLag", records.maxBlockLag !== null ? `${records.maxBlockLag} blocks` : "—"],
+      ["svc.payee", records.payee ?? "✗ unset"],
     ],
   };
 }
 
 async function readAgentNode(): Promise<NodeLiveData> {
   const client = getPublicClient();
-  const [identity, policy] = await Promise.all([
+  const [identity, policy, allowed] = await Promise.all([
     readIdentity(client, AGENT_TOKEN_ID),
-    readPolicy(client),
+    policyCached(),
+    allowlistCached(),
   ]);
-  const allowed = await allowlistedCount(client, policy.owner, policy.agent);
   return {
     summary: `#${AGENT_TOKEN_ID} · ${truncateHash(identity?.owner ?? "0x0")} · spent ${usdc6(policy.spentToday)}`,
     rows: [
@@ -113,9 +172,7 @@ async function readAgentNode(): Promise<NodeLiveData> {
 }
 
 async function readPolicyNode(): Promise<NodeLiveData> {
-  const client = getPublicClient();
-  const view = await readPolicy(client);
-  const allowed = await allowlistedCount(client, view.owner, view.agent);
+  const [view, allowed] = await Promise.all([policyCached(), allowlistCached()]);
   return {
     summary: `perTx ${usdc6(view.perTxCap)} · daily ${usdc6(view.dailyCap)} · spent ${usdc6(view.spentToday)}`,
     rows: [
@@ -133,21 +190,19 @@ async function readPolicyNode(): Promise<NodeLiveData> {
 }
 
 async function readMcpNode(): Promise<NodeLiveData> {
-  const reader = createEnsTextReader({ rpcUrl: env.sepoliaRpc });
-  const [menu, price, sla, head] = await Promise.all([
-    reader(CONFIG.ens, "svc.menu").catch(() => null),
-    reader(CONFIG.ens, "svc.price").catch(() => null),
-    reader(CONFIG.ens, "svc.sla").catch(() => null),
+  const [records, head] = await Promise.all([
+    storefrontCached(),
     defaultChainHeadResolver(undefined)("arbitrum").catch(() => null),
   ]);
-  const menuCell = menu === null ? "✗ unreadable" : menu.length > 52 ? `${menu.slice(0, 52)}…` : menu;
+  const menuCell =
+    records.menu === null ? "✗ unreadable" : records.menu.length > 52 ? `${records.menu.slice(0, 52)}…` : records.menu;
   return {
-    summary: `${price ?? "✗ price"} · arb ${head !== null ? head.toLocaleString("en-US") : "✗"}`,
+    summary: `${records.price ?? "✗ price"} · arb ${head !== null ? head.toLocaleString("en-US") : "✗"}`,
     rows: [
       ["name", "sla-subgraph-mcp"],
       ["menu", menuCell],
-      ["ens price", price ?? "✗ unreadable"],
-      ["sla", sla ?? "✗ unreadable"],
+      ["ens price", records.price ?? "✗ unreadable"],
+      ["sla", records.sla ?? "✗ unreadable"],
       ["arbitrum head", head !== null ? head.toLocaleString("en-US") : "✗ unreadable"],
     ],
   };
@@ -272,14 +327,16 @@ function NodeShape({
 export function SystemMap(): JSX.Element {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   // One poll loop per node — the chips and the drawer share the same live value.
-  const ensLive = useLiveValue(() => READERS.ens(), { pollMs: MAP_POLL_MS, staleAfterMs: MAP_STALE_MS });
-  const agentLive = useLiveValue(() => READERS.agent(), { pollMs: MAP_POLL_MS, staleAfterMs: MAP_STALE_MS });
-  const policyLive = useLiveValue(() => READERS.policy(), { pollMs: MAP_POLL_MS, staleAfterMs: MAP_STALE_MS });
-  const mcpLive = useLiveValue(() => READERS.mcp(), { pollMs: MAP_POLL_MS, staleAfterMs: MAP_STALE_MS });
-  const gatewayLive = useLiveValue(() => READERS.gateway(), { pollMs: MAP_POLL_MS, staleAfterMs: MAP_STALE_MS });
-  const subgraphLive = useLiveValue(() => READERS.subgraph(), { pollMs: MAP_POLL_MS, staleAfterMs: MAP_STALE_MS });
-  const escrowLive = useLiveValue(() => READERS.escrow(), { pollMs: MAP_POLL_MS, staleAfterMs: MAP_STALE_MS });
-  const hookLive = useLiveValue(() => READERS.hook(), { pollMs: MAP_POLL_MS, staleAfterMs: MAP_STALE_MS });
+  // Reads and poll cadences are staggered (nodeOpts) so the public Arc RPC never
+  // sees all 8 nodes burst at once (it rate-limits broad bursts with 429s).
+  const ensLive = useLiveValue(() => sleep(0).then(() => READERS.ens()), nodeOpts(0));
+  const agentLive = useLiveValue(() => sleep(700).then(() => READERS.agent()), nodeOpts(1));
+  const policyLive = useLiveValue(() => sleep(1_400).then(() => READERS.policy()), nodeOpts(2));
+  const mcpLive = useLiveValue(() => sleep(2_100).then(() => READERS.mcp()), nodeOpts(3));
+  const gatewayLive = useLiveValue(() => sleep(2_800).then(() => READERS.gateway()), nodeOpts(4));
+  const subgraphLive = useLiveValue(() => sleep(3_500).then(() => READERS.subgraph()), nodeOpts(5));
+  const escrowLive = useLiveValue(() => sleep(4_200).then(() => READERS.escrow()), nodeOpts(6));
+  const hookLive = useLiveValue(() => sleep(4_900).then(() => READERS.hook()), nodeOpts(7));
   const lives: Record<string, NodeLive> = {
     ens: ensLive,
     agent: agentLive,

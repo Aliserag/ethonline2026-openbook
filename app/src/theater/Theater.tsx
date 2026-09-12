@@ -63,6 +63,115 @@ interface TheaterData {
   ens: { price: string; maxBlockLag: number };
 }
 
+interface HeavyData {
+  job: JobView;
+  split: FeeSplit | null;
+  splitError?: string;
+  tx: `0x${string}` | null;
+}
+
+/**
+ * The heavy path — onchain job read, subgraph event trail, chain-log terminal
+ * discovery and the receipt-derived split — replays HISTORY, so it is computed
+ * once per jobId and cached: the 30s poll only re-reads the live parts (heads
+ * + ENS records). This also keeps the public Arc RPC from being hit with a
+ * multi-window log scan on every poll.
+ */
+const heavyCache = new Map<string, Promise<HeavyData>>();
+
+function heavyData(jobId: bigint): Promise<HeavyData> {
+  const key = jobId.toString();
+  const existing = heavyCache.get(key);
+  if (existing !== undefined) return existing;
+  const loading = loadHeavy(jobId).catch((error) => {
+    // a transient failure may succeed on retry — evict so the next poll retries
+    heavyCache.delete(key);
+    throw error;
+  });
+  heavyCache.set(key, loading);
+  return loading;
+}
+
+async function loadHeavy(jobId: bigint): Promise<HeavyData> {
+  const publicClient = getPublicClient();
+  const events = await fetchJobEvents(jobId);
+  const onchain = await readJob(publicClient, jobId);
+  const hasChain = onchain !== null && onchain.jobId !== 0n; // shared escrow rows we don't own decode as zero
+  const paid = events.paid;
+  if (!hasChain && paid === undefined) {
+    throw new Error(`job ${jobId} is unknown onchain and unindexed — the replay has nothing to read`);
+  }
+
+  const state: JobView["state"] = events.refunded
+    ? "refunded"
+    : events.settled
+      ? "settled"
+      : hasChain
+        ? onchain.state
+        : "open";
+
+  // After the guard, `paid` exists or `onchain` is a real row — the `!` is the
+  // throw above, not a fabricated fallback.
+  const job: JobView = {
+    jobId,
+    buyer: paid?.buyer ?? onchain!.buyer,
+    seller: paid?.seller ?? onchain!.seller,
+    amount: paid?.amount ?? onchain!.amount,
+    minBlock: hasChain && onchain!.minBlock > 0n ? onchain!.minBlock : (paid?.minBlock ?? 0n),
+    deadline: paid?.deadline ?? onchain!.deadline,
+    blockNumber: paid?.blockNumber ?? onchain!.blockNumber,
+    timestamp: paid?.timestamp ?? onchain!.timestamp,
+    state,
+    payloadHash: events.fulfilled?.payloadHash,
+    metaBlock: events.fulfilled?.metaBlock,
+    refundReason: events.refunded?.reason,
+  };
+
+  // Terminal tx: subgraph entity id first (185853), chain scan as the fallback
+  // (job 4 predates the index). The scan also replays fulfillment for jobs the
+  // subgraph never saw.
+  const needFulfillment = job.metaBlock === undefined || job.payloadHash === undefined;
+  const terminalEntity: "settleds" | "refundIssueds" = state === "refunded" ? "refundIssueds" : "settleds";
+  const subgraphTx = await subgraphTerminalTx(jobId, terminalEntity);
+  let tx = subgraphTx;
+  const chain = needFulfillment || subgraphTx === null ? await chainScan(publicClient, jobId) : null;
+  if (tx === null && chain !== null) tx = chain.payment?.tx ?? chain.refund?.tx ?? null;
+  if (job.metaBlock === undefined && chain?.submitted) {
+    job.metaBlock = Number(chain.submitted.block);
+    job.payloadHash = chain.submitted.deliverable;
+  }
+
+  let split: FeeSplit | null = null;
+  let splitError: string | undefined;
+  if (state === "settled" && tx !== null) {
+    try {
+      const fee = await platformFee(publicClient);
+      const receipt = await publicClient.getTransactionReceipt({ hash: tx });
+      split = feeSplitFromReceipt(receipt, fee.feeBP, job.seller);
+    } catch (error) {
+      splitError = error instanceof Error ? error.message : String(error);
+    }
+  }
+
+  return { job, split, splitError, tx };
+}
+
+async function loadHeads(publicClient: PublicClient): Promise<{ arc: bigint; subgraph: bigint }> {
+  const [arc, subgraph] = await Promise.all([publicClient.getBlockNumber(), fetchLag()]);
+  return { arc, subgraph: BigInt(subgraph.indexed) };
+}
+
+/** Compose the theater's live inputs: cached history + freshly polled heads/ENS. */
+async function loadTheater(jobId: bigint): Promise<TheaterData> {
+  const publicClient = getPublicClient();
+  const [heavy, heads, ens] = await Promise.all([
+    heavyData(jobId),
+    loadHeads(publicClient),
+    loadEns(),
+  ]);
+  return { ...heavy, heads, ens };
+}
+
 /** Decode the terminal tx hash from a subgraph event entity id (settled/refundIssued). */
 async function subgraphTerminalTx(
   jobId: bigint,
@@ -148,78 +257,6 @@ async function loadEns(): Promise<{ price: string; maxBlockLag: number }> {
  * subgraph's paid row (blockNumber/timestamp) over the onchain read (whose
  * parseSla minBlock is the TRUE SLA floor the verdict was judged against).
  */
-async function loadTheater(jobId: bigint): Promise<TheaterData> {
-  const publicClient = getPublicClient();
-  const events = await fetchJobEvents(jobId);
-  const onchain = await readJob(publicClient, jobId);
-  const hasChain = onchain !== null && onchain.jobId !== 0n; // shared escrow rows we don't own decode as zero
-  const paid = events.paid;
-  if (!hasChain && paid === undefined) {
-    throw new Error(`job ${jobId} is unknown onchain and unindexed — the replay has nothing to read`);
-  }
-
-  const state: JobView["state"] = events.refunded
-    ? "refunded"
-    : events.settled
-      ? "settled"
-      : hasChain
-        ? onchain.state
-        : "open";
-
-  // After the guard, `paid` exists or `onchain` is a real row — the `!` is the
-  // throw above, not a fabricated fallback.
-  const job: JobView = {
-    jobId,
-    buyer: paid?.buyer ?? onchain!.buyer,
-    seller: paid?.seller ?? onchain!.seller,
-    amount: paid?.amount ?? onchain!.amount,
-    minBlock: hasChain && onchain!.minBlock > 0n ? onchain!.minBlock : (paid?.minBlock ?? 0n),
-    deadline: paid?.deadline ?? onchain!.deadline,
-    blockNumber: paid?.blockNumber ?? onchain!.blockNumber,
-    timestamp: paid?.timestamp ?? onchain!.timestamp,
-    state,
-    payloadHash: events.fulfilled?.payloadHash,
-    metaBlock: events.fulfilled?.metaBlock,
-    refundReason: events.refunded?.reason,
-  };
-
-  // Terminal tx: subgraph entity id first (185853), chain scan as the fallback
-  // (job 4 predates the index). The scan also replays fulfillment for jobs the
-  // subgraph never saw.
-  const needFulfillment = job.metaBlock === undefined || job.payloadHash === undefined;
-  const terminalEntity: "settleds" | "refundIssueds" = state === "refunded" ? "refundIssueds" : "settleds";
-  const subgraphTx = await subgraphTerminalTx(jobId, terminalEntity);
-  let tx = subgraphTx;
-  const chain = needFulfillment || subgraphTx === null ? await chainScan(publicClient, jobId) : null;
-  if (tx === null && chain !== null) tx = chain.payment?.tx ?? chain.refund?.tx ?? null;
-  if (job.metaBlock === undefined && chain?.submitted) {
-    job.metaBlock = Number(chain.submitted.block);
-    job.payloadHash = chain.submitted.deliverable;
-  }
-
-  let split: FeeSplit | null = null;
-  let splitError: string | undefined;
-  if (state === "settled" && tx !== null) {
-    try {
-      const fee = await platformFee(publicClient);
-      const receipt = await publicClient.getTransactionReceipt({ hash: tx });
-      split = feeSplitFromReceipt(receipt, fee.feeBP, job.seller);
-    } catch (error) {
-      splitError = error instanceof Error ? error.message : String(error);
-    }
-  }
-
-  const [heads, ens] = await Promise.all([
-    (async () => ({
-      arc: await publicClient.getBlockNumber(),
-      subgraph: BigInt((await fetchLag()).indexed),
-    }))(),
-    loadEns(),
-  ]);
-
-  return { job, split, splitError, tx, heads, ens };
-}
-
 const THEATER_POLL_MS = 30_000;
 const THEATER_STALE_MS = 90_000;
 
