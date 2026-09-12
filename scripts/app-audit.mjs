@@ -35,7 +35,7 @@ const AMBIENT = /429|too many requests|rate[ _-]?limit(ed)?/i;
 const EXTENSION_ORIGIN = /^chrome-extension:\/\//i;
 const HEADLINE = "When an agent buys stale data, the money comes back. Automatically.";
 const COMMAND_NAMES = [
-  "help", "status", "ens show", "datasets", "quote", "books", "jobs", "job", "lag", "policy show", "replay",
+  "help", "status", "ens show", "ens can-edit", "datasets", "quote", "books", "jobs", "job", "lag", "policy show", "replay",
   "buy", "deliver", "settle", "policy refusals", "policy try-overspend", "sandbox stale", "sandbox claim",
 ];
 
@@ -86,7 +86,9 @@ function loadPuppeteer() {
 async function openDock(page) {
   await page.evaluate(() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "k", metaKey: true })));
   await page.waitForSelector(".console", { timeout: 8000 });
-  await page.keyboard.press("Escape");
+  // ⌘K opens the dock; a palette only appears on a second ⌘K, and Escape would close the dock
+  const paletteOpen = await page.evaluate(() => !!document.querySelector(".palette"));
+  if (paletteOpen) await page.keyboard.press("Escape");
   await sleep(400);
 }
 
@@ -292,8 +294,8 @@ async function audit(url) {
       pass("6.console ⌘K opens the dock", ".console present");
       const help = await runCmd(page, "help", { timeout: 30000 });
       const missing = COMMAND_NAMES.filter((c) => !help.includes(c));
-      if (missing.length === 0) pass("6.console help lists 18 commands", `${COMMAND_NAMES.length} commands`);
-      else fail("6.console help lists 18 commands", `missing: ${missing.join(", ")}`);
+      if (missing.length === 0) pass("6.console help lists 19 commands", `${COMMAND_NAMES.length} commands`);
+      else fail("6.console help lists 19 commands", `missing: ${missing.join(", ")}`);
       let quote = await runCmd(page, "quote aave-v3-arbitrum-lending", { timeout: 45000 });
       let rows = new Map(await kvRows(page));
       if ((rows.get("ens price") ?? "").includes("✗")) {

@@ -53,7 +53,7 @@ hash, a subgraph row, or a measured value. The scripted half of this is
 ## J6: secondary surfaces
 
 - Replay theater from any board row (`#theater/<jobId>`), the system map (`#map`), and
-  the console (`⌘K`, or the footer link on desktop): `help` lists 18 commands, `quote`
+  the console (`⌘K`, or the footer link on desktop): `help` lists 19 commands, `quote`
   renders the ENS price and floor.
 
 ## Accessibility and motion (measured)
