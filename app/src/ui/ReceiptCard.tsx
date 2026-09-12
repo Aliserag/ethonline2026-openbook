@@ -49,7 +49,7 @@ export function ReceiptCard({
       <p className="small receipt__sub">back to the buyer, executed by the escrow</p>
       <dl className="kv">
         <dt>{row.datasetId ? "dataset" : "seller"}</dt>
-        <dd>{row.datasetId ? datasetTitle(row.datasetId) : row.sellerName ?? "onchain data query"}</dd>
+        <dd>{row.datasetId ? datasetTitle(row.datasetId) : (row.sellerName ?? (row.seller ? truncateHash(row.seller) : "onchain data query"))}</dd>
         <dt>why</dt>
         <dd>{refundWhy(row.refundReason)}</dd>
         <dt>job</dt>

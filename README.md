@@ -39,7 +39,7 @@ the refund executes onchain, automatically.** Money flows both ways.
 `_meta` block got `REJECT (STALE_DATA)` and the escrow refunded the buyer on its own, 
 [Refunded tx 0x25e7805a…6063f on ArcScan](https://testnet.arcscan.app/tx/0x25e7805ae79fd8320ccbc74d90dead9d87b082fd299ecfe5a5949a968e16063f),
 indexed in the agent's books ([live P&L panel](https://openbook.litai.ca), 
-refunds column, no keys needed; [raw subgraph](https://api.studio.thegraph.com/query/1760032/open-book/version/latest)).
+refunds column, no keys needed; [raw subgraph](https://api.studio.thegraph.com/query/1760032/open-book/v0.0.6)).
 On the marketplace escrow the same mechanic refunded two stale deliveries in full:
 [job 42 (0.15)](https://testnet.arcscan.app/tx/0xcef2e16b6028c650d6a33f9e3838d57f3d99e62963d6c6e3194e71ed19c40ca1)
 and [job 46 (0.12)](https://testnet.arcscan.app/tx/0x85ef3525ea9e57818a6c99f8e858ed36a2994be1d30b8ce02b3d78a76964b9aa) —
@@ -47,7 +47,7 @@ refund == funded amount for both, and the hook refuses stale payments first
 (`MissingAttestation` revert, settle at
 [0xd93aa95e…3ec4b6](https://testnet.arcscan.app/tx/0xd93aa95ee6552568653a8acfda21998a3173a87f537ebca79cf2d35ffd3ec4b6)).
 
-![The agent's books, live P&L with the refund row](docs/images/pnl-refund-panel.png)
+![The books: the settlement board with the latest refunds and settlements](docs/images/app-books.png)
 
 ## FAQ — what exactly is being sold, and to whom
 
@@ -111,23 +111,47 @@ are organs, not stickers:
   `aave-v3-arbitrum-lending.openbook.eth` prices itself, and the quote reads
   the most specific records through the hierarchical registry.
 
-## Living protocol: the app
+## The app
 
-Open the live app and you are standing in the marketplace, not a mockup:
-**The data marketplace for agents, with automatic refunds for every stale delivery.**
-Every figure on the page resolves live from ENS records, the
-`open-book` subgraph and the Arc escrow. Nothing is pinned; when a dependency
-degrades, the page says so instead of inventing data.
+Open [https://openbook.litai.ca](https://openbook.litai.ca) and you are standing in the
+marketplace. One page, five sections, every figure read live from ENS, the `open-book`
+subgraph and the Arc escrow:
 
-**Two lanes, one bundle.** [https://openbook.litai.ca](https://openbook.litai.ca)
-is the canonical URL (Cloudflare Pages, and the ENS `agent-endpoint[web]`
-record); [https://ethonline2026-openbook.vercel.app](https://ethonline2026-openbook.vercel.app)
-is the backup alias. `scripts/deploy-app.sh` publishes both lanes from the
-same `dist/` and verifies both serve the same bundle before it reports PASS.
+1. **The refund.** The latest real refund the escrow executed, as a receipt with its
+   ArcScan link, and three live counters (refunds executed, USDC settled, sellers listed).
+2. **Try it, keyless.** Pick a dataset, see the ENS price and the freshness promise in
+   plain words, click **Buy**. Our demo wallet pays on the live escrow and a stepper shows
+   every transaction as it lands: paid into escrow, data delivered with its block,
+   freshness checked onchain, settled, 98/2 fee split. **Make it fail** runs the same
+   purchase with the floor one block above the delivery: the hook refuses (`SlaNotMet`)
+   and the escrow refunds, in the same click.
+3. **The market.** Both sellers as cards, priced by their own ENS records, with the
+   venue fee read from the escrow. Labeled honestly: two reference sellers we operate.
+4. **The books.** Settled, refunded, venue fees and the treasury balance; a settlement
+   board of the latest jobs (a judge's own runs appear immediately and confirm once the
+   subgraph indexes them); the treasury's onchain refusals.
+5. **How it works.** Arc, The Graph and ENS in plain words, the MCP quickstart, and the
+   console for power users.
 
-**The console (`⌘K`)** drives the whole marketplace, 18 commands in three
-families: **inspect** (read every live surface), **act** (transact as the
-demo buyer), **sandbox** (safe re-enactments on the same live contracts).
+![The hero: the latest refund the escrow executed, with live counters](docs/images/app-hero.png)
+
+**Reliability.** Subgraph Studio rate-limits the public query endpoint per caller, so
+both hosting lanes serve a same-origin cached proxy at `/api/subgraph`
+(`app/public/_worker.js` on Cloudflare Pages, `app/public/api/subgraph.js` on Vercel):
+fresh answers are cached 20 seconds and the last good copy is served, labeled, if Studio
+answers 429. The page makes one subgraph poll per 20 seconds for all its sections.
+
+**Two lanes, one bundle.** [https://openbook.litai.ca](https://openbook.litai.ca) is the
+canonical URL (Cloudflare Pages, and the ENS `agent-endpoint[web]` record);
+[https://ethonline2026-openbook.vercel.app](https://ethonline2026-openbook.vercel.app) is
+the backup alias. `scripts/deploy-app.sh` publishes both from the same `dist/` and
+verifies the bundles and the proxy before it reports PASS. `scripts/app-audit.mjs` is the
+release gate: 20 browser assertions over the live page (hero, try it, market, books,
+console, overflow at three widths, font floor, console errors).
+
+**The console (`⌘K`)** is still there for judges who want the raw surfaces: 18 commands in
+three families, **inspect** (read every live surface), **act** (transact as the demo
+buyer), **sandbox** (safe re-enactments on the same live contracts).
 
 | family | command | what it does |
 | --- | --- | --- |
@@ -150,37 +174,30 @@ demo buyer), **sandbox** (safe re-enactments on the same live contracts).
 | sandbox | `sandbox stale` | floor pinned one block above the delivery so `complete()` reverts `SlaNotMet`; arm the refund |
 | sandbox | `sandbox claim` | execute `claimRefund` for real after the deadline (live countdown) |
 
-**Demo-buyer policy.** The act and sandbox commands sign with the demo buyer
-key (`VITE_DEMO_BUYER_KEY` in `app/.env.local`): testnet USDC as play money,
-spent live against the real escrow. When the balance runs out, refill the
-demo buyer address at [faucet.circle.com](https://faucet.circle.com) (Arc
-Testnet). The same key is the SLA hook's attester (the browser signs the
-attest in `settle`/`sandbox stale`), so the full hook-gated path runs keyless
-for a judge while the signing role stays honest: it is our demo key, role-play,
+**Demo-buyer policy.** The Buy and Make it fail buttons, and the act and sandbox
+commands, sign with the demo buyer key (`VITE_DEMO_BUYER_KEY` in `app/.env.local`):
+testnet USDC as play money, spent live against the real escrow. When the balance runs
+out, refill the demo buyer address at [faucet.circle.com](https://faucet.circle.com)
+(Arc Testnet). The same key is the SLA hook's attester, so the full hook-gated path runs
+keyless for a judge while the signing role stays honest: it is our demo key, role-play,
 not a third-party attester.
 
-**The marketplace.** Two reference sellers are live, both registered through
-the ENSv2 storefront and priced by their own text records: `openbook.eth`
-(the original storefront, 0.10 USDC/query, and 0.15 for the
-`aave-v3-arbitrum-lending` subname) and `alpha.openbook.eth`
+**The marketplace.** Two reference sellers are live, both registered through the ENSv2
+storefront and priced by their own text records: `openbook.eth` (0.10 USDC/query, and
+0.15 for the `aave-v3-arbitrum-lending` subname) and `alpha.openbook.eth`
 ([`sellers/alpha.json`](sellers/alpha.json), 0.12 USDC/query, payout to
-`0xe09C8F90931E97d0aEE998885b306DDF08CE08Cc`). Both sell through the shared
-market escrow `0x967e005154D0F62C33Eac8E2F44b44d4C4C07Dd5`, whose 2 percent
-venue fee (`platformFeeBP`, rendered live in the app's venue row) routes every
-settlement's cut to the policy-gated treasury. The market panel labels this
-honestly: "two reference sellers we operate", not third-party liquidity. A
-chosen-seller settlement is onchain: job 45 was picked by price
-(`--prefer cheap`), and the receipt split
-[0.1176 USDC to alpha and 0.0024 USDC to the PolicyWallet (2%/98% of the 0.12 job, tx 0xd122ade9…6466f0d)](https://testnet.arcscan.app/tx/0xd122ade9f2b057ea55a9d9e5163f57cf9e440f0bf8ac35401737832fa6646f0d).
-The venue earns from anyone, not just our demo.
+`0xe09C8F90931E97d0aEE998885b306DDF08CE08Cc`). Both sell through the shared market escrow
+`0x967e005154D0F62C33Eac8E2F44b44d4C4C07Dd5`, whose 2 percent venue fee (`platformFeeBP`)
+routes every settlement's cut to the policy-gated treasury. A chosen-seller settlement is
+onchain: job 45 was picked by price (`--prefer cheap`), and the receipt split
+[0.1176 USDC to alpha and 0.0024 USDC to the PolicyWallet (tx 0xd122ade9…6466f0d)](https://testnet.arcscan.app/tx/0xd122ade9f2b057ea55a9d9e5163f57cf9e440f0bf8ac35401737832fa6646f0d).
 
-**The ENS-edit story.** The storefront is text records, so running the
-marketplace is editing records: repricing `alpha.openbook.eth` is one
-`ens set text`, and the app and the buyer CLI pick it up on the next read,
-no redeploy and no config release. Quotes prefer the most specific records
-through the hierarchical subname registry, and a storefront without
-`svc.price`/`svc.sla`/`svc.payee` hard-fails ("No ENS, no payment") rather
-than defaulting to anything.
+**The ENS-edit story.** The storefront is text records, so running the marketplace is
+editing records: repricing `alpha.openbook.eth` is one `ens set text`, and the app and the
+buyer CLI pick it up on the next read, no redeploy. Quotes prefer the most specific
+records through the hierarchical subname registry, and a storefront without
+`svc.price`/`svc.sla`/`svc.payee` hard-fails ("No ENS, no payment") rather than
+defaulting to anything.
 
 ## Repo layout
 
@@ -188,7 +205,7 @@ than defaulting to anything.
 - `agent/`: agent loop, ERC-8183 settlement spine, buyer CLI
 - `mcp/`: `sla-subgraph-mcp` (the Graph tooling entry) + `SKILL.md`
 - `subgraph/`: the P&L subgraph source (deployed to Studio as `open-book`, Arc testnet)
-- `app/`: minimal Vite + wagmi frontend (storefront → pay → P&L)
+- `app/`: the product page (Vite + React): hero refund, keyless live purchase, market, books, console
 - `scripts/`: ENS setup, spikes, stale-replay proxy
 - `docs/`: architecture, design decisions, demo script, submission copy
 
@@ -242,13 +259,13 @@ Full tool reference + the one-command live-data path:
 
 | piece | where |
 | --- | --- |
-| **Live demo (no keys needed)** | https://openbook.litai.ca, quote + P&L resolve keyless from live ENS records and the public subgraph |
+| **Live demo (no keys needed)** | https://openbook.litai.ca, a real purchase and a real refund in two clicks, no wallet; every figure live from ENS, the subgraph and the escrow |
 | Frontend hosting | Cloudflare Pages project `openbook` (custom domain `openbook.litai.ca`); redeploy with `cd app && bun run build && npx wrangler pages deploy dist --project-name openbook` |
 | Storefront | `openbook.eth` on ENSv2 Sepolia (10 records: menu/price/SLA/payee/…/agent-registration; `agent-endpoint[web]` = the live demo URL) |
 | Escrow rail | ERC-8183 `0x0747EEf0706327138c69792bF28Cd525089e4583` on Arc testnet (chain 5042002) |
 | Policy treasury | `PolicyWallet` `0x4e83eB15EE973A49E40D9A79aB2cA89a4Eb4894E` (Arc testnet) |
 | Agent identity | ERC-8004 **agentId 894065** on Arc testnet |
-| Audited books | `open-book` subgraph, `https://api.studio.thegraph.com/query/1760032/open-book/version/latest` (public) |
+| Audited books | `open-book` subgraph, `https://api.studio.thegraph.com/query/1760032/open-book/v0.0.6` (public; the page reads it through a cached same-origin proxy) |
 
 ## What's proven, and what isn't
 

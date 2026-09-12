@@ -27,7 +27,7 @@ function Row({ row, isNew }: { row: BoardRow; isNew: boolean }): JSX.Element {
     <li className={`board__row${isNew ? " board__row--new" : ""}`}>
       <span className="tiny">{relativeTime(row.at)}</span>
       <span className="mono">#{row.jobId}</span>
-      <span>{row.datasetId ? datasetTitle(row.datasetId) : row.sellerName ? `sold by ${row.sellerName}` : "onchain data query"}</span>
+      <span>{row.datasetId ? datasetTitle(row.datasetId) : `sold by ${row.sellerName ?? (row.seller ? truncateHash(row.seller) : "an unlisted seller")}`}</span>
       <span className="mono">{priceLabel(row.amount)}</span>
       <span>
         <Badge kind={kind}>
