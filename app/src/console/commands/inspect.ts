@@ -15,7 +15,9 @@ import { env, hasGraphKey } from "../../env";
 import { ADDR } from "../../data/addresses";
 import { demoAddress } from "../../data/chain";
 import { readPolicy } from "../../data/policy";
-import { fetchJobEvents, fetchJobs, fetchLag, scopedTotals } from "../../data/subgraph";
+import { fetchJobEventsResilient, fetchJobsResilient, fetchLagResilient, scopedTotals, type JobEventView, type Resilient } from "../../data/subgraph";
+import type { JobView } from "../../data/types";
+import { cachedAsOfLabel } from "../../data/cache";
 import { truncateHash, usdc6 } from "../../format";
 import { createEnsTextReader, parsePriceToAmount6dec, parseSlaRecord } from "../../../../mcp/src/ens";
 import { defaultChainHeadResolver } from "../../../../mcp/src/chainhead";
@@ -24,6 +26,11 @@ import { actJobStatusRow, getActJob, isRecoveredActJob } from "./act";
 
 function reason(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+/** Append the honest label when a command served the last-good cache. */
+function cachedSuffix(out: { source: "live" | "cache"; at: number }): string {
+  return out.source === "cache" ? ` · ${cachedAsOfLabel(out.at)}` : "";
 }
 
 /** Value of a --flag that appears after the command name; undefined when absent. */
@@ -157,8 +164,13 @@ const statusCommand: Command = {
       rows.push(["arc head", `✗ RPC unreachable: ${reason(error)}`]);
     }
     try {
-      const lag = await fetchLag();
-      rows.push(["subgraph", `indexed block ${lag.indexed.toLocaleString("en-US")} · ${lag.rows} rows proxied`]);
+      const lag = await fetchLagResilient();
+      rows.push([
+        "subgraph",
+        lag.source === "cache"
+          ? `indexed block ${lag.value.indexed.toLocaleString("en-US")} · ${lag.value.rows} rows proxied · ${cachedAsOfLabel(lag.at)}`
+          : `indexed block ${lag.value.indexed.toLocaleString("en-US")} · ${lag.value.rows} rows proxied`,
+      ]);
     } catch (error) {
       rows.push(["subgraph", `✗ subgraph unreachable: ${reason(error)}`]);
     }
@@ -407,12 +419,13 @@ const booksCommand: Command = {
   run: async (_ctx, argv) => {
     const days = parseDays(argv);
     if ("error" in days) return { render: "text", data: days.error };
-    let jobs: Awaited<ReturnType<typeof fetchJobs>>;
+    let out: Resilient<JobView[]>;
     try {
-      jobs = await fetchJobs();
+      out = await fetchJobsResilient();
     } catch (error) {
       return { render: "text", data: `books failed: ${reason(error)} · is the subgraph reachable? (try lag)` };
     }
+    const jobs = out.value;
     const totals = scopedTotals(jobs);
     const cutoff = Math.floor(Date.now() / 1000) - days.days * 86_400;
     const rows = jobs
@@ -430,7 +443,7 @@ const booksCommand: Command = {
       data: {
         columns: JOB_COLUMNS,
         rows,
-        summary: `net ${usdc6(totals.net)} USDC · revenue ${usdc6(totals.revenue)} · refunds ${usdc6(totals.refunds)} · ${jobs.length} jobs, ${rows.length} in the ${days.days}d window`,
+        summary: `net ${usdc6(totals.net)} USDC · revenue ${usdc6(totals.revenue)} · refunds ${usdc6(totals.refunds)} · ${jobs.length} jobs, ${rows.length} in the ${days.days}d window${cachedSuffix(out)}`,
       },
     };
   },
@@ -448,12 +461,13 @@ const jobsCommand: Command = {
     if (stateArg !== undefined && !["settled", "refunded", "open"].includes(stateArg)) {
       return { render: "text", data: `unknown job state: ${stateArg} · use settled|refunded|open` };
     }
-    let jobs: Awaited<ReturnType<typeof fetchJobs>>;
+    let out: Resilient<JobView[]>;
     try {
-      jobs = await fetchJobs();
+      out = await fetchJobsResilient();
     } catch (error) {
       return { render: "text", data: `jobs failed: ${reason(error)} · is the subgraph reachable? (try lag)` };
     }
+    const jobs = out.value;
     const filtered = stateArg === undefined ? jobs : jobs.filter((j) => j.state === stateArg);
     if (filtered.length === 0) {
       return {
@@ -469,7 +483,7 @@ const jobsCommand: Command = {
       data: {
         columns: JOB_COLUMNS,
         rows: filtered.map((j) => jobTableRow(j)),
-        summary: `${filtered.length} scoped job${filtered.length === 1 ? "" : "s"} (ours: buyer or seller in OUR_ADDRESSES)`,
+        summary: `${filtered.length} scoped job${filtered.length === 1 ? "" : "s"} (ours: buyer or seller in OUR_ADDRESSES)${cachedSuffix(out)}`,
       },
     };
   },
@@ -490,15 +504,16 @@ const jobCommand: Command = {
     } catch {
       return { render: "text", data: `job: invalid id "${id}" · a numeric job id` };
     }
-    let events: Awaited<ReturnType<typeof fetchJobEvents>>;
+    let events: Resilient<JobEventView>;
     try {
-      events = await fetchJobEvents(BigInt(id));
+      events = await fetchJobEventsResilient(BigInt(id));
     } catch (error) {
       return { render: "text", data: `job ${id} failed: ${reason(error)}` };
     }
     const rows: KvRow[] = [["job", id]];
-    if (events.paid) {
-      const p = events.paid;
+    const ev = events.value;
+    if (ev.paid) {
+      const p = ev.paid;
       rows.push(
         ["paid.buyer", truncateHash(p.buyer)],
         ["paid.seller", truncateHash(p.seller)],
@@ -511,24 +526,24 @@ const jobCommand: Command = {
     } else {
       rows.push(["paid", "no queryPaid indexed for this job"]);
     }
-    if (events.fulfilled) {
+    if (ev.fulfilled) {
       rows.push(
-        ["fulfilled.payloadHash", truncateHash(events.fulfilled.payloadHash, 12, 10)],
-        ["fulfilled.metaBlock", String(events.fulfilled.metaBlock)],
+        ["fulfilled.payloadHash", truncateHash(ev.fulfilled.payloadHash, 12, 10)],
+        ["fulfilled.metaBlock", String(ev.fulfilled.metaBlock)],
       );
     } else {
       rows.push(["fulfilled", "not delivered yet"]);
     }
-    if (events.settled) {
-      rows.push(["settled", `${truncateHash(events.settled.seller)} · ${usdc6(events.settled.amount)} USDC`]);
-    } else if (events.refunded) {
-      rows.push(["refunded", events.refunded.reason]);
+    if (ev.settled) {
+      rows.push(["settled", `${truncateHash(ev.settled.seller)} · ${usdc6(ev.settled.amount)} USDC`]);
+    } else if (ev.refunded) {
+      rows.push(["refunded", ev.refunded.reason]);
     } else {
       rows.push(["outcome", "open: neither settled nor refunded yet"]);
     }
     return {
       render: "kv",
-      data: { rows, note: `replay ${id} opens the frame-by-frame theater; job 185853 is the cited refund` },
+      data: { rows, note: `replay ${id} opens the frame-by-frame theater; job 185853 is the cited refund${cachedSuffix(events)}` },
     };
   },
 };
@@ -546,20 +561,20 @@ const lagCommand: Command = {
     } catch (error) {
       return { render: "text", data: `lag failed: arc RPC unreachable · ${reason(error)}` };
     }
-    let lagv: Awaited<ReturnType<typeof fetchLag>>;
+    let lagv: Resilient<{ indexed: number; rows: number }>;
     try {
-      lagv = await fetchLag();
+      lagv = await fetchLagResilient();
     } catch (error) {
       return { render: "text", data: `lag failed: subgraph unreachable · ${reason(error)}` };
     }
-    const delta = Number(head) - lagv.indexed;
+    const delta = Number(head) - lagv.value.indexed;
     const note =
       delta >= 0
-        ? `${delta} block${delta === 1 ? "" : "s"} behind arc head · ${lagv.rows} rows indexed (head probe proxy)`
-        : `indexed ${-delta} blocks AHEAD of arc head (staged subgraph?) · ${lagv.rows} rows`;
+        ? `${delta} block${delta === 1 ? "" : "s"} behind arc head · ${lagv.value.rows} rows indexed (head probe proxy)${cachedSuffix(lagv)}`
+        : `indexed ${-delta} blocks AHEAD of arc head (staged subgraph?) · ${lagv.value.rows} rows${cachedSuffix(lagv)}`;
     return {
       render: "ruler",
-      data: { delivered: lagv.indexed, head: Number(head), label: "subgraph indexed vs arc head", note },
+      data: { delivered: lagv.value.indexed, head: Number(head), label: "subgraph indexed vs arc head", note },
     };
   },
 };

@@ -12,6 +12,7 @@
  * `jobs.filter(j => oursBuyer(j) && j.state === "settled")`.
  */
 import { hostedQuery, type FetchLike } from "../../../mcp/src/gateway";
+import { readLastGood, shared, writeLastGood } from "./cache";
 import { CONFIG } from "../config";
 import { OUR_ADDRESSES } from "./addresses";
 import type { JobView } from "./types";
@@ -248,4 +249,85 @@ export function scopedTotals(jobs: JobView[]): { revenue: bigint; refunds: bigin
     else if (job.state === "refunded") refunds += job.amount;
   }
   return { revenue, refunds, net: revenue - refunds };
+}
+
+/* ---------------------------------------------------------------------------
+ * Demo resilience (shared reads + last-good fallbacks)
+ * ------------------------------------------------------------------------- */
+
+/** One short-TTL window for the Studio-backed pollers (map nodes, console
+ *  chips, theater heads): simultaneous polls coalesce into ONE upstream
+ *  request instead of one per node tick. */
+const SUBGRAPH_TTL_MS = 15_000;
+const JOBS_CACHE_KEY = "subgraph.jobs";
+const LAG_CACHE_KEY = "subgraph.lag";
+const REFUSALS_CACHE_KEY = "subgraph.refusals";
+
+/** fetchJobs with a shared 15s TTL + in-flight coalescing (poll-loop dedupe). */
+export const fetchJobsShared = shared(() => fetchJobs(), SUBGRAPH_TTL_MS);
+
+/** fetchLag with a shared 15s TTL + in-flight coalescing (poll-loop dedupe). */
+export const fetchLagShared = shared(() => fetchLag(), SUBGRAPH_TTL_MS);
+
+/** One shared instance per job, so every theater poll shares the same window. */
+const jobEventShared = new Map<string, () => Promise<JobEventView>>();
+
+/** fetchJobEvents with a shared 15s TTL + in-flight coalescing (per job). */
+export function fetchJobEventsShared(jobId: bigint): Promise<JobEventView> {
+  const key = jobId.toString();
+  let read = jobEventShared.get(key);
+  if (read === undefined) {
+    read = shared(() => fetchJobEvents(jobId), SUBGRAPH_TTL_MS);
+    jobEventShared.set(key, read);
+  }
+  return read();
+}
+
+/** A last-good serve: the live value normally, the cached payload otherwise. */
+export interface Resilient<T> {
+  value: T;
+  source: "live" | "cache";
+  /** when the payload was taken (now for live, the cache write otherwise) */
+  at: number;
+  /** the live read failed but the cache served — the raw reason is kept for hover */
+  liveError?: unknown;
+}
+
+/**
+ * fetchJobs with a persistent last-good fallback: on a failed live read the
+ * last successful payload is served (and the caller labels it) instead of the
+ * raw upstream error. Throws when there is no cache either.
+ */
+export async function fetchJobsResilient(): Promise<Resilient<JobView[]>> {
+  return resilient(() => fetchJobs(), JOBS_CACHE_KEY);
+}
+
+/** fetchLag with a persistent last-good fallback (same contract). */
+export async function fetchLagResilient(): Promise<Resilient<{ indexed: number; rows: number }>> {
+  return resilient(() => fetchLag(), LAG_CACHE_KEY);
+}
+
+/** fetchJobEvents with a persistent last-good fallback for one job. */
+export async function fetchJobEventsResilient(jobId: bigint): Promise<Resilient<JobEventView>> {
+  const key = `subgraph.jobEvents:${jobId.toString()}`;
+  return resilient(() => fetchJobEvents(jobId), key);
+}
+
+/** fetchPolicyRefusals with a persistent last-good fallback (same contract). */
+export async function fetchPolicyRefusalsResilient(): Promise<Resilient<PolicyRefusalView[]>> {
+  return resilient(() => fetchPolicyRefusals(), REFUSALS_CACHE_KEY);
+}
+
+async function resilient<T>(live: () => Promise<T>, cacheKey: string): Promise<Resilient<T>> {
+  try {
+    const value = await live();
+    writeLastGood(cacheKey, value);
+    return { value, source: "live", at: Date.now() };
+  } catch (liveError) {
+    const cached = readLastGood<T>(cacheKey);
+    if (cached !== null) {
+      return { value: cached.value, source: "cache", at: cached.at, liveError };
+    }
+    throw liveError;
+  }
 }

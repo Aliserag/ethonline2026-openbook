@@ -36,6 +36,11 @@ const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
 await page.route("**://api.studio.thegraph.com/**", (route) =>
   route.fulfill({ status: 500, contentType: "application/json", body: "{}" }).catch(() => {}),
 );
+// The build-time snapshot fallback must not mask the error state here: this
+// check pins the TRUE hard-failure copy (live + cache + snapshot all absent).
+await page.route("**/pnl-snapshot.json", (route) =>
+  route.fulfill({ status: 404, contentType: "application/json", body: "{}" }).catch(() => {}),
+);
 
 await page.goto(process.env.TARGET ?? "http://localhost:5173", { waitUntil: "domcontentloaded", timeout: 45000 });
 await page.waitForTimeout(4000);

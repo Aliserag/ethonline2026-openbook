@@ -23,13 +23,15 @@ import {
 } from "../../../mcp/src/ens";
 import { hostedQuery } from "../../../mcp/src/gateway";
 import type { ProviderStats } from "../../../mcp/src/router";
+import { loadSnapshotProvidersView } from "../pnl";
+import { isRateLimit, readLastGood, writeLastGood } from "../data/cache";
 import { CONFIG } from "../config";
 import { ADDR } from "../data/addresses";
 import { getPublicClient } from "../data/chain";
 import { platformFee } from "../data/escrow";
-import type { Live, LiveState } from "../data/types";
+import type { Live, LiveSource, LiveState } from "../data/types";
 import { env } from "../env";
-import { truncateHash, usdc6 } from "../format";
+import { clockTime, truncateHash, usdc6 } from "../format";
 import { useLiveValue } from "../ui/useLiveValue";
 
 /** The storefront every seller row is discovered from (the app's own namespace). */
@@ -69,6 +71,10 @@ export interface MarketSellerRow {
 
 export interface MarketView {
   sellers: MarketSellerRow[];
+  /** where the providers stats came from (labeled per seller row when degraded) */
+  statsSource: LiveSource;
+  /** when the providers payload was taken */
+  statsAt: number;
 }
 
 /** Live parent storefront records, tolerantly read (null when unset). */
@@ -214,21 +220,37 @@ async function subnameRow(ref: SellerRef, providers: readonly ProviderStats[]): 
 }
 
 /** Every seller on the storefront: the parent's own catalog + every ENS
- *  subname seller, each with live records and subgraph stats. */
+ *  subname seller, each with live records and subgraph stats. Stats degrade
+ *  through the last-good cache / build-time snapshot when Studio is walled. */
 async function readSellers(): Promise<MarketView> {
   const [parent, subnames, providers] = await Promise.all([
     readParentRecords(),
     listSellers(STOREFRONT, { readEnsText: marketEnsReader, client: directoryClient }),
-    fetchProviders(),
+    fetchProvidersResilient(),
   ]);
-  const rows: MarketSellerRow[] = [await parentRow(parent, providers)];
-  for (const sub of subnames) rows.push(await subnameRow(sub, providers));
-  return { sellers: rows };
+  const rows: MarketSellerRow[] = [await parentRow(parent, providers.stats)];
+  for (const sub of subnames) rows.push(await subnameRow(sub, providers.stats));
+  return { sellers: rows, statsSource: providers.source, statsAt: providers.at };
 }
 
-async function fetchProviders(): Promise<ProviderStats[]> {
-  const { data } = await hostedQuery({ url: CONFIG.pnl.endpoint, query: PROVIDERS_QUERY });
-  return parseProviderRows(data);
+const MARKET_PROVIDERS_KEY = "market.providers";
+
+/** Providers: live → last-good cache → build-time snapshot, labeled serves. */
+async function fetchProvidersResilient(): Promise<{ stats: ProviderStats[]; source: LiveSource; at: number }> {
+  try {
+    const { data } = await hostedQuery({ url: CONFIG.pnl.endpoint, query: PROVIDERS_QUERY });
+    const stats = parseProviderRows(data);
+    writeLastGood(MARKET_PROVIDERS_KEY, stats);
+    return { stats, source: "live", at: Date.now() };
+  } catch (liveError) {
+    const cached = readLastGood<ProviderStats[]>(MARKET_PROVIDERS_KEY);
+    if (cached !== null) return { stats: cached.value, source: "cache", at: cached.at };
+    const snapshot = await loadSnapshotProvidersView();
+    if (snapshot !== null) {
+      return { stats: parseProviderRows({ providers: snapshot.providers }), source: "snapshot", at: snapshot.takenAt };
+    }
+    throw liveError;
+  }
 }
 
 // --- render -----------------------------------------------------------------
@@ -244,7 +266,7 @@ function MarketStateChip({ state, reason }: { state: LiveState; reason?: string 
   );
 }
 
-function SellerBlock({ row }: { row: MarketSellerRow }): JSX.Element {
+function SellerBlock({ row, statsSource, statsAt }: { row: MarketSellerRow; statsSource: LiveSource; statsAt: number }): JSX.Element {
   return (
     <article className="market__seller">
       <div className="market__seller-head">
@@ -290,6 +312,14 @@ function SellerBlock({ row }: { row: MarketSellerRow }): JSX.Element {
               <dt>avg lag</dt>
               <dd>{row.stats.avgLagBlocks.toFixed(1)} blocks</dd>
             </div>
+            {statsSource !== "live" && (
+              <div className="market__kvrow" title={statsSource === "cache" ? "served from the last successful read because the live read failed" : "served from the build-time snapshot because the live read failed"}>
+                <dt>stats source</dt>
+                <dd className="market__muted">
+                  {statsSource === "cache" ? `as of ${clockTime(statsAt)} · cached` : `snapshot taken ${clockTime(statsAt)}`}
+                </dd>
+              </div>
+            )}
           </>
         ) : (
           <div className="market__kvrow">
@@ -315,14 +345,20 @@ function VenueRow({ venue }: { venue: Live<{ feeBP: number; treasury: `0x${strin
       </span>
       <MarketStateChip state={venue.state} reason={venue.reason} />
       {venue.state === "error" && venue.value === null && venue.reason !== undefined && (
-        <span className="market__venue-note">{venue.reason}</span>
+        <span className="market__venue-note" title={venue.reason}>
+          {isRateLimit(new Error(venue.reason)) ? "unreachable · hover for the precise reason" : venue.reason}
+        </span>
       )}
     </footer>
   );
 }
 
 export function Market(): JSX.Element {
-  const sellers = useLiveValue(readSellers, { pollMs: MARKET_POLL_MS, staleAfterMs: MARKET_STALE_MS });
+  const sellers = useLiveValue(readSellers, {
+    pollMs: MARKET_POLL_MS,
+    staleAfterMs: MARKET_STALE_MS,
+    cacheKey: "market.sellers",
+  });
   const venue = useLiveValue(() => platformFee(getPublicClient()), {
     pollMs: MARKET_POLL_MS,
     staleAfterMs: MARKET_STALE_MS,
@@ -343,9 +379,11 @@ export function Market(): JSX.Element {
           two reference sellers we operate · every figure reads live from ENS, the subgraph and the escrow
         </p>
 
-        {sellers.state === "error" && sellers.value === null && (
-          <p className="market__error" role="alert">
-            ✗ {sellers.reason}
+        {sellers.state === "error" && sellers.value === null && sellers.reason !== undefined && (
+          <p className="market__error" role="alert" title={sellers.reason}>
+            {isRateLimit(new Error(sellers.reason))
+              ? "the storefront is unreachable right now · hover for the precise reason"
+              : `✗ ${sellers.reason}`}
           </p>
         )}
         {sellers.state === "loading" && sellers.value === null && (
@@ -356,13 +394,19 @@ export function Market(): JSX.Element {
             {sellers.state} · {sellers.reason}
           </p>
         )}
-        {sellers.value !== null && sellers.value.sellers.length === 0 && (
-          <p className="market__muted">no sellers discovered on {STOREFRONT}</p>
-        )}
-
-        {sellers.value?.sellers.map((row) => (
-          <SellerBlock key={row.name} row={row} />
-        ))}
+        {sellers.value !== null && (() => {
+          const view = sellers.value;
+          return (
+            <>
+              {view.sellers.length === 0 && (
+                <p className="market__muted">no sellers discovered on {STOREFRONT}</p>
+              )}
+              {view.sellers.map((row) => (
+                <SellerBlock key={row.name} row={row} statsSource={view.statsSource} statsAt={view.statsAt} />
+              ))}
+            </>
+          );
+        })()}
 
         <VenueRow venue={venue} />
       </div>

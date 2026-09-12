@@ -25,7 +25,8 @@ import { ADDR } from "../data/addresses";
 import { getPublicClient } from "../data/chain";
 import { readIdentity } from "../data/identity";
 import { readPolicy } from "../data/policy";
-import { fetchJobs, fetchLag, scopedTotals } from "../data/subgraph";
+import { fetchJobsShared, fetchLagShared, scopedTotals } from "../data/subgraph";
+import { STUDIO_GATE } from "../data/cache";
 import { useLiveValue } from "../ui/useLiveValue";
 import { createEnsTextReader, parseSlaRecord } from "../../../mcp/src/ens";
 import { defaultChainHeadResolver } from "../../../mcp/src/chainhead";
@@ -215,7 +216,7 @@ async function readMcpNode(): Promise<NodeLiveData> {
 }
 
 async function readGatewayNode(): Promise<NodeLiveData> {
-  const lag = await fetchLag();
+  const lag = await fetchLagShared();
   return {
     summary: `ok · ${lag.rows} rows`,
     rows: [
@@ -227,7 +228,7 @@ async function readGatewayNode(): Promise<NodeLiveData> {
 }
 
 async function readSubgraphNode(): Promise<NodeLiveData> {
-  const [lag, head] = await Promise.all([fetchLag(), getPublicClient().getBlockNumber()]);
+  const [lag, head] = await Promise.all([fetchLagShared(), getPublicClient().getBlockNumber()]);
   const delta = Number(head) - lag.indexed;
   return {
     summary: `idx ${lag.indexed.toLocaleString("en-US")} · ${delta} behind`,
@@ -242,7 +243,7 @@ async function readSubgraphNode(): Promise<NodeLiveData> {
 }
 
 async function readEscrowNode(): Promise<NodeLiveData> {
-  const jobs = await fetchJobs();
+  const jobs = await fetchJobsShared();
   let settled = 0;
   let refunded = 0;
   let open = 0;
@@ -302,7 +303,13 @@ function NodeShape({
   onSelect: () => void;
 }): JSX.Element {
   const chip =
-    live.state === "loading" ? "…" : live.state === "error" ? "✗ error" : (live.value?.summary ?? "✗");
+    live.state === "loading"
+      ? "…"
+      : live.value === null
+        ? "offline"
+        : live.source === "cache" || live.source === "snapshot"
+          ? `${live.value.summary} · ${live.source === "cache" ? "cached" : "snapshot"}`
+          : live.value.summary;
   return (
     <g
       className={`map__node ${live.state}${active ? " active" : ""}`}
@@ -335,14 +342,25 @@ export function SystemMap(): JSX.Element {
   // One poll loop per node — the chips and the drawer share the same live value.
   // Reads and poll cadences are staggered (nodeOpts) so the public Arc RPC never
   // sees all 8 nodes burst at once (it rate-limits broad bursts with 429s).
-  const ensLive = useLiveValue(() => sleep(0).then(() => READERS.ens()), nodeOpts(0));
-  const agentLive = useLiveValue(() => sleep(700).then(() => READERS.agent()), nodeOpts(1));
-  const policyLive = useLiveValue(() => sleep(1_400).then(() => READERS.policy()), nodeOpts(2));
-  const mcpLive = useLiveValue(() => sleep(2_100).then(() => READERS.mcp()), nodeOpts(3));
-  const gatewayLive = useLiveValue(() => sleep(2_800).then(() => READERS.gateway()), nodeOpts(4));
-  const subgraphLive = useLiveValue(() => sleep(3_500).then(() => READERS.subgraph()), nodeOpts(5));
-  const escrowLive = useLiveValue(() => sleep(4_200).then(() => READERS.escrow()), nodeOpts(6));
-  const hookLive = useLiveValue(() => sleep(4_900).then(() => READERS.hook()), nodeOpts(7));
+  //
+  // Every node keeps its last-good payload in localStorage (`map.<id>`), so a
+  // walled gateway degrades to a labeled cached chip instead of a raw upstream
+  // error. The Studio-backed nodes (gateway/subgraph/escrow) additionally
+  // share STUDIO_GATE: one 429 pauses them all through the cooldown instead of
+  // each re-hammering the wall on its own tick.
+  const nodeOptsWith = (index: number): Record<string, unknown> => ({
+    ...nodeOpts(index),
+    cacheKey: `map.${NODES[index].id}`,
+    gateKey: index >= 4 && index <= 6 ? STUDIO_GATE : undefined,
+  });
+  const ensLive = useLiveValue(() => sleep(0).then(() => READERS.ens()), nodeOptsWith(0));
+  const agentLive = useLiveValue(() => sleep(700).then(() => READERS.agent()), nodeOptsWith(1));
+  const policyLive = useLiveValue(() => sleep(1_400).then(() => READERS.policy()), nodeOptsWith(2));
+  const mcpLive = useLiveValue(() => sleep(2_100).then(() => READERS.mcp()), nodeOptsWith(3));
+  const gatewayLive = useLiveValue(() => sleep(2_800).then(() => READERS.gateway()), nodeOptsWith(4));
+  const subgraphLive = useLiveValue(() => sleep(3_500).then(() => READERS.subgraph()), nodeOptsWith(5));
+  const escrowLive = useLiveValue(() => sleep(4_200).then(() => READERS.escrow()), nodeOptsWith(6));
+  const hookLive = useLiveValue(() => sleep(4_900).then(() => READERS.hook()), nodeOptsWith(7));
   const lives: Record<string, NodeLive> = {
     ens: ensLive,
     agent: agentLive,

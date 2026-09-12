@@ -1660,6 +1660,14 @@ button.tour-entry {
 
 .theater__job { color: var(--rule); }
 
+.theater__cached {
+  color: var(--rule);
+  border: 1px solid var(--rule-strong);
+  border-radius: 3px;
+  padding: 1px 6px;
+  letter-spacing: 0.05em;
+}
+
 .theater__head .stamp {
   margin-left: 4px;
   font-size: 12px;

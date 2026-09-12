@@ -28,7 +28,8 @@ import { env } from "../env";
 import { ADDR } from "../data/addresses";
 import { getPublicClient } from "../data/chain";
 import { feeSplitFromReceipt, platformFee, readJob } from "../data/escrow";
-import { fetchJobEvents, fetchLag } from "../data/subgraph";
+import { fetchJobEvents, fetchLagShared } from "../data/subgraph";
+import { cachedAsOfLabel } from "../data/cache";
 import type { FeeSplit, JobView } from "../data/types";
 import { useLiveValue } from "../ui/useLiveValue";
 import { createEnsTextReader, parseSlaRecord } from "../../../mcp/src/ens";
@@ -175,7 +176,7 @@ async function loadHeavy(jobId: bigint): Promise<HeavyData> {
 }
 
 async function loadHeads(publicClient: PublicClient): Promise<{ arc: bigint; subgraph: bigint }> {
-  const [arc, subgraph] = await Promise.all([publicClient.getBlockNumber(), fetchLag()]);
+  const [arc, subgraph] = await Promise.all([publicClient.getBlockNumber(), fetchLagShared()]);
   return { arc, subgraph: BigInt(subgraph.indexed) };
 }
 
@@ -307,7 +308,11 @@ export function TheaterRoute(): JSX.Element | null {
 export function Theater({ jobId, onClose }: { jobId: string; onClose: () => void }): JSX.Element {
   const [index, setIndex] = useState(0);
   const id = useMemo(() => BigInt(jobId), [jobId]);
-  const live = useLiveValue(() => loadTheater(id), { pollMs: THEATER_POLL_MS, staleAfterMs: THEATER_STALE_MS });
+  const live = useLiveValue(() => loadTheater(id), {
+    pollMs: THEATER_POLL_MS,
+    staleAfterMs: THEATER_STALE_MS,
+    cacheKey: `theater.${jobId}`,
+  });
 
   const frames = useMemo(() => {
     const data = live.value;
@@ -356,6 +361,7 @@ export function Theater({ jobId, onClose }: { jobId: string; onClose: () => void
           <span className="theater__title">replay theater</span>
           <span className={`stamp ${stateStamp}`}>{stateStamp}</span>
           <span className="theater__job">job {jobId}</span>
+          {live.source === "cache" && <span className="theater__cached">{cachedAsOfLabel(live.at)}</span>}
           <button type="button" className="theater__close" onClick={onClose} aria-label="close theater (esc)">
             ×
           </button>

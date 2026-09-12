@@ -12,23 +12,26 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 APP_DIR="$(pwd)/app"
 
-echo "== [1/4] build"
+echo "== [1/5] pnl snapshot (build-time fallback for a walled Studio gateway)"
+node scripts/fetch-pnl-snapshot.mjs
+
+echo "== [2/5] build"
 cd "$APP_DIR"
 ./node_modules/.bin/tsc --noEmit
 BASE_PATH=/ ./node_modules/.bin/vite build >/dev/null
 echo "   dist: $(ls dist/assets | wc -l | tr -d ' ') assets"
 
-echo "== [2/4] Vercel (project dist, team pyefi)"
+echo "== [3/5] Vercel (project dist, team pyefi)"
 DEPLOY_URL="$(vercel deploy dist --prod --yes 2>/dev/null | grep -oE 'https://dist-[a-z0-9]+-pyefi\.vercel\.app' | head -1)"
 [ -n "$DEPLOY_URL" ] || { echo "FAIL: vercel deploy produced no URL"; exit 1; }
 vercel alias set "$DEPLOY_URL" ethonline2026-openbook.vercel.app >/dev/null 2>&1
 echo "   $DEPLOY_URL → ethonline2026-openbook.vercel.app"
 
-echo "== [3/4] Cloudflare Pages (project openbook → openbook.litai.ca)"
+echo "== [4/5] Cloudflare Pages (project openbook → openbook.litai.ca)"
 cd /tmp && npx --yes wrangler pages deploy "$APP_DIR/dist" \
   --project-name openbook --branch main --commit-dirty=true 2>&1 | grep -E "Deployment complete|https://" | head -3
 
-echo "== [4/4] verify both lanes serve the same bundle"
+echo "== [5/5] verify both lanes serve the same bundle"
 cd /tmp
 V=$(curl -s -m 20 "https://ethonline2026-openbook.vercel.app/?cb=$(date +%s)" | grep -oE 'assets/index-[^"]+\.js' | head -1)
 echo "   vercel: $V"

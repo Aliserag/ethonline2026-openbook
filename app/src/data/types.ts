@@ -4,11 +4,17 @@ import type { DeliveryVerdict } from "../../../mcp/src/escrow";
 
 export type LiveState = "live" | "loading" | "stale" | "error";
 
+/** Where a shown value came from — live is the default; cache/snapshot are
+ *  ALWAYS labeled when rendered (a degraded read must never look fresh). */
+export type LiveSource = "live" | "cache" | "snapshot";
+
 export interface Live<T> {
   value: T | null;
   state: LiveState;
   reason?: string; // human-readable, shown in degraded states
-  at: number;      // epoch ms of the last successful read (0 = never)
+  at: number;      // epoch ms of the value's read (0 = never); for cache/snapshot
+                   // serves this is the time the payload was taken, not now
+  source?: LiveSource;
 }
 
 export interface JobView {

@@ -22,3 +22,8 @@ export function explorerAddressUrl(address: string): string {
 export function explorerUrl(txHash: string): string {
   return `https://testnet.arcscan.app/tx/${txHash}`;
 }
+
+/** HH:MM:SS wall clock for "as of" labels on cached/snapshot data. */
+export function clockTime(at: number): string {
+  return new Date(at).toLocaleTimeString("en-US", { hour12: false });
+}

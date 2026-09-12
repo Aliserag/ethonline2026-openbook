@@ -29,7 +29,8 @@ import { env, hasGraphKey } from "../../env";
 import { ensureArcChain } from "../../arc";
 import { ADDR } from "../../data/addresses";
 import { checkWithdrawal, readPolicy, simulateOverspend } from "../../data/policy";
-import { fetchPolicyRefusals } from "../../data/subgraph";
+import { fetchPolicyRefusalsResilient, type PolicyRefusalView, type Resilient } from "../../data/subgraph";
+import { cachedAsOfLabel } from "../../data/cache";
 import { truncateHash, usdc6 } from "../../format";
 import { createEnsTextReader } from "../../../../mcp/src/ens";
 import { gatewayQuery, stripMeta } from "../../../../mcp/src/gateway";
@@ -102,19 +103,21 @@ const refusalsCommand: Command = {
   help: "real PolicyBlocked rows from the subgraph (PER_TX_CAP / DAILY_CAP / NOT_ALLOWLISTED)",
   kind: "sandbox",
   run: async () => {
-    let refusals: Awaited<ReturnType<typeof fetchPolicyRefusals>>;
+    let refusals: Resilient<PolicyRefusalView[]>;
     try {
-      refusals = await fetchPolicyRefusals();
+      refusals = await fetchPolicyRefusalsResilient();
     } catch (error) {
       return { render: "text", data: `policy refusals failed: ${reason(error)} · is the subgraph reachable? (try lag)` };
     }
-    if (refusals.length === 0) {
+    if (refusals.value.length === 0) {
       return {
         render: "text",
-        data: "no PolicyBlocked events indexed · the policy wallet has never refused an intent onchain (blank, not zeroed)",
+        data:
+          "no PolicyBlocked events indexed · the policy wallet has never refused an intent onchain (blank, not zeroed)" +
+          (refusals.source === "cache" ? ` · ${cachedAsOfLabel(refusals.at)}` : ""),
       };
     }
-    const rows = refusals.map((r) => {
+    const rows = refusals.value.map((r) => {
       const txHash = r.id.length >= 66 ? r.id.slice(0, 66) : r.id;
       return { reason: r.reason, tx: truncateHash(txHash) };
     });
@@ -124,8 +127,9 @@ const refusalsCommand: Command = {
         columns: ["reason", "tx"],
         rows,
         summary:
-          `${refusals.length} policy refusal${refusals.length === 1 ? "" : "s"} onchain · ` +
-          "PolicyWallet.sol emits PolicyBlocked instead of reverting · these events are the refusal evidence",
+          `${refusals.value.length} policy refusal${refusals.value.length === 1 ? "" : "s"} onchain · ` +
+          "PolicyWallet.sol emits PolicyBlocked instead of reverting · these events are the refusal evidence" +
+          (refusals.source === "cache" ? ` · ${cachedAsOfLabel(refusals.at)}` : ""),
       },
     };
   },

@@ -72,8 +72,8 @@ export function Drawer({
       </div>
 
       {live.state === "error" && live.value === null && (
-        <p className="map__drawer-error" role="alert">
-          ✗ {live.reason}
+        <p className="map__drawer-error" role="alert" title={live.reason}>
+          offline · {live.reason}
         </p>
       )}
 

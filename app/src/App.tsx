@@ -21,7 +21,8 @@ import { env, hasAlchemyKey, hasGraphKey } from "./env";
 import { CONFIG, defaultQueryFor, type DatasetConfig } from "./config";
 import { arcWalletClient, ensureArcChain } from "./arc";
 import { explorerAddressUrl, explorerUrl, truncateHash, usdc6 } from "./format";
-import { fetchPnl, type PnlRow, type RefundEvent } from "./pnl";
+import { fetchPnlResilient, type PnlRow, type PnlSource, type RefundEvent } from "./pnl";
+import { cachedAsOfLabel, gateRemainingMs, isRateLimit, markRateLimit, snapshotLabel, STUDIO_GATE } from "./data/cache";
 import { createEnsTextReader, type EnsTextReader } from "../../mcp/src/ens";
 import { gatewayQuery, stripMeta } from "../../mcp/src/gateway";
 import { defaultChainHeadResolver } from "../../mcp/src/chainhead";
@@ -268,6 +269,11 @@ export default function App() {
   const [treasury, setTreasury] = useState<{ feeBP: number; treasury: string; balance: string } | null>(null);
   const [pnlHead, setPnlHead] = useState<number | null>(null);
   const [pnlError, setPnlError] = useState<string | null>(null);
+  /** where the shown books came from (labels every degraded serve) */
+  const [pnlSource, setPnlSource] = useState<PnlSource | null>(null);
+  /** when the served payload was taken (cache/snapshot); raw live error for hover */
+  const [pnlTakenAt, setPnlTakenAt] = useState<number | null>(null);
+  const [pnlLiveError, setPnlLiveError] = useState<string | null>(null);
   const [pnlUpdatedAt, setPnlUpdatedAt] = useState<Date | null>(null);
   const [pnlNonce, setPnlNonce] = useState(0);
   const [payError, setPayError] = useState<string | null>(null);
@@ -320,31 +326,50 @@ export default function App() {
   }, [dataset]);
 
   // P&L ledger: the open-book subgraph via Studio, public endpoint, no key.
+  // Demo resilient: live read → persistent last-good cache → build-time
+  // snapshot, every degraded serve labeled; while the shared Studio gate is
+  // cooling down from a 429 the poll skips instead of re-hammering the wall.
   useEffect(() => {
     let cancelled = false;
     let settleTimer: ReturnType<typeof setTimeout> | undefined;
     setPnlRefreshing(true);
-    Promise.all([fetchPnl(env.graphKey), publicClient.getBlockNumber()])
-      .then(([result, head]) => {
+    (async () => {
+      if (gateRemainingMs(STUDIO_GATE) > 0) {
+        // the upstream is cooling down: keep the current (labeled) rows, no fire
+        if (!cancelled) setPnlRefreshing(false);
+        return;
+      }
+      try {
+        const [result, head] = await Promise.all([fetchPnlResilient(env.graphKey), publicClient.getBlockNumber()]);
         if (cancelled) return;
+        if (result.liveError !== undefined && isRateLimit(result.liveError)) markRateLimit(STUDIO_GATE);
         setPnl(result.rows);
         setRefundEvents(result.refundEvents);
         setPnlMeta(result.metaBlock);
         setPnlHead(Number(head));
+        setPnlSource(result.source);
+        setPnlTakenAt(result.takenAt);
+        setPnlLiveError(result.liveError !== undefined
+          ? result.liveError instanceof Error ? result.liveError.message : String(result.liveError)
+          : null);
         setPnlError(null);
-        setPnlUpdatedAt(new Date());
+        setPnlUpdatedAt(result.source === "live" ? new Date() : null);
         setPnlJustRefreshed(true);
         settleTimer = setTimeout(() => setPnlJustRefreshed(false), 2500);
-      })
-      .catch((error) => {
-        if (!cancelled) setPnlError(error instanceof Error ? error.message : String(error));
-      })
-      .finally(() => {
+      } catch (error) {
+        if (cancelled) return;
+        if (isRateLimit(error)) markRateLimit(STUDIO_GATE);
+        const message = error instanceof Error ? error.message : String(error);
+        setPnlSource(null);
+        setPnlLiveError(message);
+        setPnlError(message);
+      } finally {
         if (!cancelled) setPnlRefreshing(false);
-      });
+      }
+    })();
     return () => {
       cancelled = true;
-      if (settleTimer !== undefined) clearTimeout(settleTimer);
+      clearTimeout(settleTimer);
     };
   }, [publicClient, pnlNonce]);
 
@@ -418,6 +443,15 @@ export default function App() {
   }, []);
 
   const flowBusy = paying || querying || settling;
+
+  // Ledger presentation: a rate-limited live read degrades calmly (no raw
+  // upstream text on the landing surface — the precise reason sits on hover);
+  // cached/snapshot serves are always labeled with their taken time.
+  const pnlRateLimited = pnlError !== null && isRateLimit(new Error(pnlError));
+  const pnlHoverReason = pnlLiveError ?? pnlError;
+  const pnlDegraded = pnlSource === "cache" || pnlSource === "snapshot";
+  const pnlDotTone =
+    pnlError !== null ? "ob-live off" : pnlDegraded ? "ob-live stale" : "ob-live";
 
   // Switching datasets invalidates the previous quote/delivery/verdict; the pay
   // button must never fund the previous dataset's price. Refused while a flow is in
@@ -1092,11 +1126,27 @@ export default function App() {
                   </p>
                 </div>
                 <span className="stepstate">
-                  {pnlError !== null ? "error" : pnl === null ? "loading…" : pnl.length > 0 ? "live" : "waiting"}
+                  {pnlError !== null
+                    ? pnlRateLimited
+                      ? "offline"
+                      : "error"
+                    : pnl === null
+                      ? "loading…"
+                      : pnl.length > 0
+                        ? pnlDegraded
+                          ? "cached"
+                          : "live"
+                        : "waiting"}
                 </span>
               </div>
               <div className="body">
-                {pnlError !== null && <p className="notice error">{pnlError}</p>}
+                {pnlError !== null && (
+                  <p className={pnlRateLimited ? "notice" : "notice error"} title={pnlError}>
+                    {pnlRateLimited
+                      ? "the books could not be read right now · hover for the precise reason"
+                      : pnlError}
+                  </p>
+                )}
                 {pnl !== null && pnl.length === 0 && (
                   <p className="notice">no settlement rows yet. The ledger fills as jobs complete.</p>
                 )}
@@ -1160,11 +1210,25 @@ export default function App() {
                   </div>
                 )}
                 <p className="statline">
-                  <span className={pnlError !== null ? "ob-live off" : "ob-live"} aria-hidden="true" />
+                  <span className={pnlDotTone} aria-hidden="true" />
                   {pnlError !== null ? (
-                    "error"
+                    pnlRateLimited ? "offline" : "error"
                   ) : pnl === null ? (
                     "loading the ledger…"
+                  ) : pnlDegraded && pnlTakenAt !== null ? (
+                    <>
+                      <Tip
+                        text={
+                          pnlSource === "cache"
+                            ? "The books are the last successfully read payload, served because the live read failed."
+                            : "The books are the build-time snapshot, served because the live read failed."
+                        }
+                      >
+                        {pnlSource === "cache" ? cachedAsOfLabel(pnlTakenAt) : snapshotLabel(pnlTakenAt)}
+                      </Tip>
+                      {" · "}
+                      {pnl.length} daily row{pnl.length === 1 ? "" : "s"}
+                    </>
                   ) : (
                     <>
                       <Tip
@@ -1180,10 +1244,12 @@ export default function App() {
                       {pnl.length} daily row{pnl.length === 1 ? "" : "s"}
                     </>
                   )}
-                  {pnlUpdatedAt !== null && (
+                  {(pnlUpdatedAt !== null || pnlDegraded) && (
                     <>
                       {" · "}
-                      <span className="live-stamp">updated {pnlUpdatedAt.toLocaleTimeString()}</span>{" "}
+                      {pnlUpdatedAt !== null && !pnlDegraded && (
+                        <span className="live-stamp">updated {pnlUpdatedAt.toLocaleTimeString()}</span>
+                      )}{" "}
                       <button
                         type="button"
                         className="ob-refresh"
@@ -1211,34 +1277,43 @@ export default function App() {
               </div>
               <div className="body">
                 {pnl !== null && pnl.length > 0 ? (
-                  <table className="ledger" aria-label="daily P&L rows">
-                    <thead>
-                      <tr>
-                        <th scope="col">day</th>
-                        <th scope="col">revenue</th>
-                        <th scope="col">costs</th>
-                        <th scope="col">refunds</th>
-                        <th scope="col">net</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {pnl.map((row) => (
-                        <tr key={row.id}>
-                          <td className="key" title={row.id}>
-                            {dayLabel(row)}
-                          </td>
-                          <td className="val">{usdc6(row.revenue)}</td>
-                          <td className="val">{usdc6(row.costs)}</td>
-                          <td className="val">{usdc6(row.refunds)}</td>
-                          <td className={row.net.startsWith("-") ? "val missing" : "val ok"}>{usdc6(row.net)}</td>
+                  <>
+                    {pnlDegraded && pnlTakenAt !== null && (
+                      <p className="notice" title={pnlHoverReason ?? undefined}>
+                        {pnlSource === "cache" ? cachedAsOfLabel(pnlTakenAt) : snapshotLabel(pnlTakenAt)} · the live read is unavailable right now
+                      </p>
+                    )}
+                    <table className="ledger" aria-label="daily P&L rows">
+                      <thead>
+                        <tr>
+                          <th scope="col">day</th>
+                          <th scope="col">revenue</th>
+                          <th scope="col">costs</th>
+                          <th scope="col">refunds</th>
+                          <th scope="col">net</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {pnl.map((row) => (
+                          <tr key={row.id}>
+                            <td className="key" title={row.id}>
+                              {dayLabel(row)}
+                            </td>
+                            <td className="val">{usdc6(row.revenue)}</td>
+                            <td className="val">{usdc6(row.costs)}</td>
+                            <td className="val">{usdc6(row.refunds)}</td>
+                            <td className={row.net.startsWith("-") ? "val missing" : "val ok"}>{usdc6(row.net)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </>
                 ) : (
                   <p className={pnlError !== null ? "notice error" : "notice"}>
                     {pnlError !== null
-                      ? `the ledger could not be read: ${pnlError}`
+                      ? pnlRateLimited
+                        ? "the ledger could not be read right now · hover for the precise reason"
+                        : `the ledger could not be read: ${pnlError}`
                       : pnl === null
                         ? "loading the ledger…"
                         : "daily rows appear here once settlements land."}

@@ -9,13 +9,33 @@
  *   error   — the first read failed and there is NO value to show
  *   loading — initial, before the first read settles
  *
- * Failure polling backs off: 2s → 4s → 8s → … capped at 30s. `refresh()`
- * triggers an immediate read (the console's status chips reuse it).
+ * Failure polling backs off: 2s → 4s → 8s → … capped at 30s; a rate limit
+ * (429 / "rate limit" reason) backs off 30s → 60s → 120s → … capped at 5 min
+ * with jitter, per `cacheKey`/`gateKey` source, instead of hammering every
+ * poll. `refresh()` triggers an immediate read (the console's status chips
+ * reuse it).
+ *
+ * Persistence (demo resilience): pass `cacheKey` and the last successful
+ * payload is stored in localStorage; on a failed refresh (or a reload during
+ * an upstream wall) the cached payload is served with state `stale`,
+ * `source: "cache"` and an explicit `as of HH:MM:SS · cached` reason — a
+ * degraded read is never presented as live. Pass `gateKey` to pause all
+ * surfaces polling the same upstream together while it is walled.
+ *
  * A value is never invented: an error with no prior value is `error`, never
  * a fake `live`.
  */
 import { useEffect, useRef, useState } from "react";
 import type { Live, LiveState } from "../data/types";
+import {
+  cachedAsOfLabel,
+  gateRemainingMs,
+  isRateLimit,
+  markRateLimit,
+  readLastGood,
+  rateLimitBackoffMs,
+  writeLastGood,
+} from "../data/cache";
 
 export type LiveEvent = "loading" | "ok" | "err" | "stale";
 
@@ -61,6 +81,10 @@ export const DEFAULT_STALE_AFTER_MS = 45_000;
 export interface UseLiveValueOptions {
   pollMs?: number;
   staleAfterMs?: number;
+  /** versioned localStorage last-good key; served labeled on failed reads */
+  cacheKey?: string;
+  /** shared upstream cooldown gate: a rate limit pauses every surface on it */
+  gateKey?: string;
 }
 
 /**
@@ -74,10 +98,18 @@ export function useLiveValue<T>(
 ): Live<T> & { refresh(): void } {
   const pollMs = opts.pollMs ?? DEFAULT_POLL_MS;
   const staleAfterMs = opts.staleAfterMs ?? DEFAULT_STALE_AFTER_MS;
-  const [snap, setSnap] = useState<Live<T>>({
-    value: null,
-    state: INITIAL_LIVE_STATE,
-    at: 0,
+  const cacheKey = opts.cacheKey;
+  const gateKey = opts.gateKey;
+  const [snap, setSnap] = useState<Live<T>>(() => {
+    if (cacheKey !== undefined) {
+      const cached = readLastGood<T>(cacheKey);
+      if (cached !== null) {
+        // reload during an upstream wall: seed from the last good payload,
+        // honestly labeled — never as live
+        return { value: cached.value, state: "stale", at: cached.at, source: "cache", reason: cachedAsOfLabel(cached.at) };
+      }
+    }
+    return { value: null, state: INITIAL_LIVE_STATE, at: 0 };
   });
   const [nonce, setNonce] = useState(0);
   const readRef = useRef(read);
@@ -105,6 +137,15 @@ export function useLiveValue<T>(
     };
 
     const run = async (): Promise<void> => {
+      if (cancelled) return;
+      if (gateKey !== undefined) {
+        const remaining = gateRemainingMs(gateKey);
+        if (remaining > 0) {
+          // the shared upstream is cooling down — do not fire; preserve state
+          delay = setTimeout(run, remaining + 250);
+          return;
+        }
+      }
       setSnap((prev) => ({
         ...prev,
         state: nextLiveState(prev.state, "loading", prev.value !== null),
@@ -113,19 +154,37 @@ export function useLiveValue<T>(
         const value = await readRef.current();
         if (cancelled) return;
         failuresRef.current = 0;
-        setSnap({ value, state: "live", at: Date.now() });
+        if (cacheKey !== undefined) writeLastGood(cacheKey, value);
+        setSnap({ value, state: "live", at: Date.now(), source: "live" });
         armStale();
         delay = setTimeout(run, pollMs);
       } catch (error) {
         if (cancelled) return;
         failuresRef.current += 1;
+        const limited = isRateLimit(error);
+        if (limited && gateKey !== undefined) markRateLimit(gateKey);
         const reason = error instanceof Error ? error.message : String(error);
-        setSnap((prev) => ({
-          ...prev,
-          state: nextLiveState(prev.state, "err", prev.value !== null),
-          reason,
-        }));
-        delay = setTimeout(run, backoffMs(failuresRef.current));
+        setSnap((prev) => {
+          const cached = cacheKey !== undefined ? readLastGood<T>(cacheKey) : null;
+          if (cached !== null) {
+            return {
+              value: cached.value,
+              state: "stale",
+              at: cached.at,
+              source: "cache",
+              reason: cachedAsOfLabel(cached.at),
+            };
+          }
+          return {
+            ...prev,
+            state: nextLiveState(prev.state, "err", prev.value !== null),
+            reason,
+          };
+        });
+        delay = setTimeout(
+          run,
+          limited ? rateLimitBackoffMs(failuresRef.current) : backoffMs(failuresRef.current),
+        );
       }
     };
 
@@ -136,7 +195,7 @@ export function useLiveValue<T>(
       clearTimeout(delay);
       clearTimeout(staleTimer);
     };
-  }, [nonce, pollMs, staleAfterMs]);
+  }, [nonce, pollMs, staleAfterMs, cacheKey, gateKey]);
 
   return {
     ...snap,
