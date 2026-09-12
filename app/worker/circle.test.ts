@@ -21,9 +21,11 @@ describe("circle env", () => {
 
 describe("request parsing", () => {
   test("job request bounds the amount to 1 USDC and needs a 32-byte schema hash", () => {
-    expect(parseCircleJobRequest({ minBlock: 1, schemaHash: `0x${"ab".repeat(32)}`, maxLatencyMs: 2000, amount: "150000" })).toMatchObject({ amount: "150000" });
-    expect(parseCircleJobRequest({ minBlock: 1, schemaHash: `0x${"ab".repeat(32)}`, maxLatencyMs: 2000, amount: "5000000" })).toContain("amount");
-    expect(parseCircleJobRequest({ minBlock: -1, schemaHash: "0x", maxLatencyMs: 2000, amount: "1" })).toContain("minBlock");
+    const ok = { datasetId: "aave-v3-arbitrum-lending", minBlock: 1, schemaHash: `0x${"ab".repeat(32)}`, maxLatencyMs: 2000, amount: "150000" };
+    expect(parseCircleJobRequest(ok)).toMatchObject({ amount: "150000", datasetId: "aave-v3-arbitrum-lending" });
+    expect(parseCircleJobRequest({ ...ok, amount: "5000000" })).toContain("amount");
+    expect(parseCircleJobRequest({ ...ok, minBlock: -1 })).toContain("minBlock");
+    expect(parseCircleJobRequest({ ...ok, datasetId: "not-sold" })).toContain("datasetId");
   });
   test("submit request needs the attester's 65-byte signature", () => {
     expect(parseCircleSubmitRequest({ jobId: "84", deliverable: `0x${"cd".repeat(32)}`, metaBlock: 5, proof: "deadbeef" })).toContain("proof");

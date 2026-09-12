@@ -1,7 +1,7 @@
 /**
  * sla-subgraph-mcp — the OpenBook prize-entry MCP server (Task 5).
  *
- * Five tools over StdioServerTransport:
+ * Seven tools over StdioServerTransport:
  *   list_datasets   — catalog (config + ENS svc.menu)
  *   get_quote       — ENSv2-resolved price/SLA/payee (hard-fails without records)
  *   query_dataset   — Gateway query with _meta freshness gate (never charges stale)
@@ -16,6 +16,7 @@
  */
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { isAddress } from "viem";
 import {
   createPublicClient,
   createWalletClient,
@@ -48,7 +49,7 @@ import {
   type EnsTextReader,
 } from "./ens";
 import { verifyDelivery as verifyDeliveryCore } from "./escrow";
-import { listSellers as listSellersLive, sellersForSchema, type SellerRef } from "./directory";
+import { listSellers as listSellersLive, parseMenu, sellersForSchema, type SellerRef } from "./directory";
 import { createSubgraphSearch, type SubgraphCandidate, type SubgraphSearch } from "./subgraph-mcp";
 import { setEscrowAddress } from "../../agent/escrow";
 import { ARC_MS_PER_BLOCK, ARC_RPC_URL } from "./constants";
@@ -494,7 +495,42 @@ export function createApp(config: OpenBookConfig, deps: AppDeps = {}): OpenBookA
     const maxPriceUsdc = typeof input.maxPriceUsdc === "number" && input.maxPriceUsdc > 0 ? input.maxPriceUsdc : null;
     const rationale: string[] = [];
 
-    const sellers = sellersForSchema(await listSellersDep(config.ens), dataset.schema);
+    const listed = await listSellersDep(config.ens);
+    // the parent name is a seller too (its svc.menu lists the datasets it sells); the
+    // directory walk only enumerates subnames, so add it here, priced the way a quote
+    // would be: the dataset subname's record first, the parent's as the fallback
+    if (!listed.some((s) => s.name === config.ens)) {
+      const [menuRaw, parentPrice, parentSla, subPrice, subSla, payee, operator] = await Promise.all([
+        readEnsText(config.ens, "svc.menu").catch(() => null),
+        readEnsText(config.ens, "svc.price").catch(() => null),
+        readEnsText(config.ens, "svc.sla").catch(() => null),
+        readEnsText(`${dataset.id}.${config.ens}`, "svc.price").catch(() => null),
+        readEnsText(`${dataset.id}.${config.ens}`, "svc.sla").catch(() => null),
+        readEnsText(config.ens, "svc.payee").catch(() => null),
+        readEnsText(config.ens, "svc.operator").catch(() => null),
+      ]);
+      const menu = parseMenu(menuRaw);
+      if (menu !== null) {
+        let sla: SellerRef["sla"] = null;
+        const slaRaw = subSla ?? parentSla;
+        if (slaRaw !== null) {
+          try {
+            sla = parseSlaRecord(slaRaw);
+          } catch {
+            sla = null;
+          }
+        }
+        listed.push({
+          name: config.ens,
+          menu,
+          price: subPrice ?? parentPrice,
+          sla,
+          payee: payee !== null && isAddress(payee) ? (payee as `0x${string}`) : null,
+          operator: operator !== null && isAddress(operator) ? (operator as `0x${string}`) : null,
+        });
+      }
+    }
+    const sellers = sellersForSchema(listed, dataset.schema);
     rationale.push(`${sellers.length} seller(s) list ${dataset.schema} under ${config.ens} (read from ENSv2 just now)`);
 
     let signal: ChooseSellerResult["signal"] = null;
@@ -546,7 +582,8 @@ export function createApp(config: OpenBookConfig, deps: AppDeps = {}): OpenBookA
     );
     const choice = eligible[0] ?? null;
     if (choice) {
-      rationale.push(prefer === "cheap" ? `chose ${choice.name}: the cheapest seller that can deliver (${choice.priceUsdc} USDC)` : `chose ${choice.name}: the tightest freshness promise that can deliver (≤${choice.maxBlockLag} blocks at ${choice.priceUsdc} USDC)`);
+      const verified = signal !== null ? "that can deliver" : "on ENS terms (deliverability unverified: no index lag reading)";
+      rationale.push(prefer === "cheap" ? `chose ${choice.name}: the cheapest seller ${verified} (${choice.priceUsdc} USDC)` : `chose ${choice.name}: the tightest freshness promise ${verified} (≤${choice.maxBlockLag} blocks at ${choice.priceUsdc} USDC)`);
     } else {
       rationale.push("no seller is eligible right now: do not buy");
     }

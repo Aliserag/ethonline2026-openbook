@@ -4,7 +4,7 @@
 import type { MarketView } from "../components/Market";
 import { demoAddress } from "./chain";
 
-export const DEMO_SELLER_LABEL = "our demo wallet (buyer and seller)";
+export const DEMO_SELLER_LABEL = "our demo wallet (buyer and seller, runs before Sep 13)";
 
 export function sellerNameMap(view: MarketView | null): Record<string, string> {
   const map: Record<string, string> = {};

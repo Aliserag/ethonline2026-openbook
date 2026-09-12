@@ -108,9 +108,10 @@ are organs, not stickers:
   payment/refund/policy event, the agent's audited books.
 - **ENS (storefront + business license):** `openbook.eth` on ENSv2 Sepolia publishes menu,
   pricing, SLA, and payee as text records; buyers hard-fail without resolution
-  ("No ENS, no payment"). The `svc.payee` record names the PolicyWallet as the
-  only payee, the storefront can never route money anywhere but the
-  policy-gated treasury. The agent also runs its **own ENSv2 subname registry**
+  ("No ENS, no payment"). The `svc.payee` record names the seller wallet the
+  page settles to (a Circle wallet; the server re-resolves it and the price from ENS
+  before every job and refuses mismatches), and the venue fee goes to the policy-gated
+  treasury through the escrow's fee split. The agent also runs its **own ENSv2 subname registry**
   (UserRegistry via the VerifiableFactory): a dataset can be its own subname,
   `aave-v3-arbitrum-lending.openbook.eth` prices itself at 0.15 while the parent
   quotes 0.10, and the quote reads the most specific records through the
@@ -271,7 +272,7 @@ of `openbook.eth` (`"source": "ENS"`), and `get_pnl` returns the P&L rows the
 `open-book` subgraph indexed from the escrow + policy contracts on Arc testnet.
 
 ```bash
-bun test          # 371 unit tests across agent, mcp, app and scripts; mock-injected, no keys needed
+bun test          # 384 unit tests across agent, mcp, app and scripts; mock-injected, no keys needed
 cd app && bun run dev   # the product page on localhost:5173 (reads Studio directly; the
                         # deployed lanes read it through the cached /api/subgraph proxy)
 ```
@@ -316,7 +317,7 @@ fresh clone, not inferred from the code.
 | The judge path works with **no keys** | fresh clone → the stdio command above returns a quote (`"source": "ENS"`) and the indexed P&L in under a second |
 | A stale delivery **refunded the buyer onchain, automatically** | the [Refunded tx](https://testnet.arcscan.app/tx/0x25e7805ae79fd8320ccbc74d90dead9d87b082fd299ecfe5a5949a968e16063f) and the `refunds` row in the live P&L |
 | Treasury policy is enforced **onchain** | `PolicyWallet` verified on ArcScan; `PolicyBlocked` rows indexed by the subgraph |
-| Contracts and tests are real | 20 forge tests · 371 unit tests · 3-job CI (badge above) · 20-check browser audit (`scripts/app-audit.mjs`) |
+| Contracts and tests are real | 20 forge tests · 384 unit tests · 3-job CI (badge above) · 20-check browser audit (`scripts/app-audit.mjs`) |
 
 **Not proven, stated plainly:**
 

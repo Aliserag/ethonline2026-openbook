@@ -12,6 +12,8 @@
  */
 import { createPublicClient, http, keccak256, parseAbi, recoverMessageAddress, toBytes, type Hex } from "viem";
 import { ARC_RPC, ESCROW, HOOK, USDC, arcTestnet, proofMessage } from "./shared";
+import { createEnsTextReader, parsePriceToAmount6dec } from "../../mcp/src/ens";
+import openbook from "../../mcp/config/openbook.json";
 
 export interface CircleEnv {
   apiKey: string;
@@ -20,6 +22,8 @@ export interface CircleEnv {
   sellerWalletId: string;
   buyerAddress: Hex;
   sellerAddress: Hex;
+  /** keyed Sepolia RPC for the ENS reads (falls back to public RPCs) */
+  sepoliaRpc?: string;
 }
 
 const API = "https://api.circle.com/v1/w3s";
@@ -43,6 +47,7 @@ export function circleEnvFrom(get: (key: string) => string | undefined): CircleE
     sellerWalletId: get("CIRCLE_SELLER_WALLET_ID") ?? "",
     buyerAddress: (get("CIRCLE_BUYER_WALLET_ADDRESS") ?? "") as Hex,
     sellerAddress: (get("CIRCLE_SELLER_WALLET_ADDRESS") ?? "") as Hex,
+    sepoliaRpc: get("SEPOLIA_RPC") || undefined,
   };
   if (!env.apiKey || !/^[0-9a-f]{64}$/i.test(env.entitySecret) || !env.buyerWalletId || !env.sellerWalletId) return null;
   if (!ADDRESS_RE.test(env.buyerAddress) || !ADDRESS_RE.test(env.sellerAddress)) return null;
@@ -130,6 +135,8 @@ export async function contractExecution(
 // ---- the escrow flow -------------------------------------------------------------
 
 export interface CircleJobRequest {
+  /** which dataset is being bought: the server re-resolves its price and payee from ENS */
+  datasetId: string;
   minBlock: number;
   schemaHash: Hex;
   maxLatencyMs: number;
@@ -141,27 +148,70 @@ export interface CircleJobRequest {
 export function parseCircleJobRequest(raw: unknown): CircleJobRequest | string {
   if (typeof raw !== "object" || raw === null) return "body must be a JSON object";
   const r = raw as Record<string, unknown>;
+  if (typeof r.datasetId !== "string" || !DATASETS.some((d) => d.id === r.datasetId)) return "datasetId is not one of the datasets this deployment sells";
   if (typeof r.minBlock !== "number" || !Number.isInteger(r.minBlock) || r.minBlock < 0) return "minBlock must be a non-negative integer";
   if (typeof r.schemaHash !== "string" || !/^0x[0-9a-fA-F]{64}$/.test(r.schemaHash)) return "schemaHash must be a 32-byte hex hash";
   if (typeof r.maxLatencyMs !== "number" || !Number.isInteger(r.maxLatencyMs) || r.maxLatencyMs <= 0) return "maxLatencyMs must be a positive integer";
   if (typeof r.amount !== "string" || !/^\d{1,12}$/.test(r.amount) || BigInt(r.amount) === 0n || BigInt(r.amount) > 1_000_000n) return "amount must be a 6-decimal USDC string up to 1.000000";
-  return { minBlock: r.minBlock, schemaHash: r.schemaHash as Hex, maxLatencyMs: r.maxLatencyMs, amount: r.amount, expirySeconds: 3600 };
+  return { datasetId: r.datasetId, minBlock: r.minBlock, schemaHash: r.schemaHash as Hex, maxLatencyMs: r.maxLatencyMs, amount: r.amount, expirySeconds: 3600 };
 }
 
 export interface CircleJobResult {
   jobId: string;
   buyer: Hex;
   seller: Hex;
+  /** the ENS name whose svc.price and svc.payee the server enforced */
+  pricedBy: string;
   evaluator: Hex;
   txs: { createJob: Hex; setBudget: Hex; approve?: Hex; fund: Hex };
 }
 
+const DATASETS = (openbook as { ens: string; datasets: { id: string }[] }).datasets;
+const STOREFRONT = (openbook as { ens: string }).ens;
+
+export interface SellerTerms {
+  /** the name whose records priced the job: the dataset subname, else the parent */
+  name: string;
+  amount6dec: number;
+  payee: Hex;
+}
+
 /**
- * The buyer wallet opens and funds a job whose provider is the seller wallet and
- * whose evaluator is the hook's attester; the seller wallet sets the budget.
- * Four sponsored transactions, all from Circle-managed keys.
+ * The seller's terms straight from ENSv2, the same resolution a quote uses:
+ * the dataset subname's record first, the parent storefront's as the fallback.
+ * Nothing the browser sent is trusted for price or payee.
+ */
+export async function resolveSellerTerms(datasetId: string, sepoliaRpc?: string): Promise<SellerTerms> {
+  const read = createEnsTextReader({ rpcUrl: sepoliaRpc });
+  const sub = `${datasetId}.${STOREFRONT}`;
+  const [subPrice, subPayee, parentPrice, parentPayee] = await Promise.all([
+    read(sub, "svc.price").catch(() => null),
+    read(sub, "svc.payee").catch(() => null),
+    read(STOREFRONT, "svc.price").catch(() => null),
+    read(STOREFRONT, "svc.payee").catch(() => null),
+  ]);
+  const price = subPrice ?? parentPrice;
+  const payee = subPayee ?? parentPayee;
+  if (price === null) throw new Error(`svc.price is unset on ${sub} and ${STOREFRONT}: refusing to sell at a hard-coded price`);
+  if (payee === null || !ADDRESS_RE.test(payee)) throw new Error(`svc.payee is unset on ${sub} and ${STOREFRONT}: nowhere to pay the seller`);
+  return { name: subPrice !== null ? sub : STOREFRONT, amount6dec: parsePriceToAmount6dec(price), payee: payee as Hex };
+}
+
+/**
+ * The buyer wallet opens and funds a job whose provider is the seller named by
+ * ENS (svc.payee) and whose evaluator is the hook's attester; the seller wallet
+ * sets the budget. Four sponsored transactions, all from Circle-managed keys.
+ * The job is refused when ENS names a payee this deployment cannot sign for, or
+ * when the amount the browser quoted is not the live ENS price.
  */
 export async function circleCreateJob(env: CircleEnv, req: CircleJobRequest): Promise<CircleJobResult> {
+  const terms = await resolveSellerTerms(req.datasetId, env.sepoliaRpc);
+  if (terms.payee.toLowerCase() !== env.sellerAddress.toLowerCase()) {
+    throw new Error(`${terms.name} names ${terms.payee} as svc.payee, which this deployment cannot sign for (its seller wallet is ${env.sellerAddress})`);
+  }
+  if (BigInt(req.amount) !== BigInt(terms.amount6dec)) {
+    throw new Error(`the quoted amount ${req.amount} is not the live ENS price of ${terms.name} (${terms.amount6dec})`);
+  }
   const pub = createPublicClient({ chain: arcTestnet, transport: http(ARC_RPC) });
   const evaluator = await pub.readContract({ address: HOOK, abi: HOOK_ABI, functionName: "attester" });
   const block = await pub.getBlock();
@@ -171,7 +221,7 @@ export async function circleCreateJob(env: CircleEnv, req: CircleJobRequest): Pr
   const create = await contractExecution(env, env.buyerWalletId, {
     contractAddress: ESCROW,
     abiFunctionSignature: "createJob(address,address,uint256,string,address)",
-    abiParameters: [env.sellerAddress, evaluator, expiredAt.toString(), description, HOOK],
+    abiParameters: [terms.payee, evaluator, expiredAt.toString(), description, HOOK],
   });
   const receipt = await pub.getTransactionReceipt({ hash: create.txHash });
   const log = receipt.logs.find((l) => l.address.toLowerCase() === ESCROW.toLowerCase() && l.topics[0] === JOB_CREATED_TOPIC);
@@ -201,7 +251,8 @@ export async function circleCreateJob(env: CircleEnv, req: CircleJobRequest): Pr
   return {
     jobId: jobId.toString(),
     buyer: env.buyerAddress,
-    seller: env.sellerAddress,
+    seller: terms.payee,
+    pricedBy: terms.name,
     evaluator: evaluator as Hex,
     txs: { createJob: create.txHash, setBudget: setBudget.txHash, ...(approve ? { approve: approve.txHash } : {}), fund: fund.txHash },
   };

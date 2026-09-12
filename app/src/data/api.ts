@@ -76,7 +76,8 @@ export interface Settlement {
 export async function deliverViaApi(opts: { subgraphId: string; query: string }): Promise<Delivery> {
   const base = apiBase();
   if (base !== null) {
-    const { status, json, text } = await postJson(`${base}/api/deliver`, opts);
+    let { status, json, text } = await postJson(`${base}/api/deliver`, opts);
+    if (status >= 500) ({ status, json, text } = await postJson(`${base}/api/deliver`, opts)); // one retry: the edge occasionally answers 502
     const root = (typeof json === "object" && json !== null ? json : {}) as Partial<Delivery> & { error?: string };
     if (status >= 400 || typeof root.payloadHash !== "string" || typeof root.metaBlock !== "number") {
       if (status === 429) throw new GatewayHttpError(429, root.error ?? text.slice(0, 160));
@@ -163,7 +164,7 @@ export interface CircleJob {
 }
 
 /** The Circle buyer wallet opens and funds a job for the Circle seller wallet (four sponsored txs). */
-export async function circleCreateJob(input: { minBlock: number; schemaHash: `0x${string}`; maxLatencyMs: number; amount: string }): Promise<CircleJob> {
+export async function circleCreateJob(input: { datasetId: string; minBlock: number; schemaHash: `0x${string}`; maxLatencyMs: number; amount: string }): Promise<CircleJob> {
   const base = apiBase();
   if (base === null) throw new Error("Circle wallets run on the server; local runs use the demo key");
   const { status, json, text } = await postJson(`${base}/api/circle/job`, input);

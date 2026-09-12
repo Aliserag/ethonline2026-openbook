@@ -63,7 +63,7 @@ export interface PurchaseDeps {
   balance(address: `0x${string}`): Promise<bigint>;
   chainHead(chain: DatasetConfig["chain"]): Promise<number>;
   createJob(
-    params: { minBlock: number; schemaHash: `0x${string}`; maxLatencyMs: number; amount: bigint },
+    params: { datasetId: string; minBlock: number; schemaHash: `0x${string}`; maxLatencyMs: number; amount: bigint },
     trace: string[],
   ): Promise<bigint>;
   query(dataset: DatasetConfig): Promise<{ payloadHash: `0x${string}`; metaBlock: number; preview?: string; proof: string }>;
@@ -197,7 +197,7 @@ function circleDeps(publicClient: PublicClient, buyer: `0x${string}`, seller: `0
       publicClient.readContract({ address: ADDR.usdc, abi: BALANCE_ABI, functionName: "balanceOf", args: [address] }) as Promise<bigint>,
     chainHead: (chain) => defaultChainHeadResolver(undefined)(chain),
     createJob: async (p, trace) => {
-      const job = await circleCreateJob({ minBlock: p.minBlock, schemaHash: p.schemaHash, maxLatencyMs: p.maxLatencyMs, amount: p.amount.toString() });
+      const job = await circleCreateJob({ datasetId: p.datasetId, minBlock: p.minBlock, schemaHash: p.schemaHash, maxLatencyMs: p.maxLatencyMs, amount: p.amount.toString() });
       for (const tx of [job.txs.createJob, job.txs.setBudget, job.txs.approve, job.txs.fund]) if (tx) trace.push(tx);
       return BigInt(job.jobId);
     },
@@ -303,6 +303,7 @@ export async function runPurchase(
 
   let signedBy = "";
   let observedBy: `0x${string}` | null = null;
+  let paid = false;
   const deliver = async (): Promise<PurchaseResult | null> => {
     emit({ step: "deliver", status: "running" });
     if (!d.hasGatewayKey) {
@@ -311,7 +312,7 @@ export async function runPurchase(
     try {
       delivered = await d.query(dataset);
     } catch (error) {
-      return fail("deliver", `The data query failed: ${plainReason(error)}`);
+      return fail("deliver", `The data query failed: ${plainReason(error)}${paid ? " · the money is still in escrow and comes back to the buyer after the deadline (about an hour), the venue's sweeper reclaims it" : ""}`);
     }
     // who observed the block: recover the signer from the proof and compare with the hook's attester
     const observer = await d.proofSigner(delivered.payloadHash, delivered.metaBlock, delivered.proof);
@@ -339,6 +340,7 @@ export async function runPurchase(
   }
 
   emit({ step: "pay", status: "running" });
+  paid = true;
   if (!signer) return fail("pay", "No demo wallet is configured on this deployment, and no browser wallet is connected.");
   let balance: bigint;
   try {
@@ -363,7 +365,7 @@ export async function runPurchase(
   const trace: string[] = [];
   let jobId: bigint;
   try {
-    jobId = await d.createJob({ minBlock, schemaHash, maxLatencyMs: quote.maxLatencyMs, amount: BigInt(quote.amountUsdc) }, trace);
+    jobId = await d.createJob({ datasetId: dataset.id, minBlock, schemaHash, maxLatencyMs: quote.maxLatencyMs, amount: BigInt(quote.amountUsdc) }, trace);
   } catch (error) {
     return fail("pay", plainReason(error));
   }

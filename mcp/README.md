@@ -83,7 +83,7 @@ Unit tests are mock-injected (never mocks in production). Live tests are
 **key-guarded** — they hit the real Gateway only when the key is present:
 
 ```bash
-bun test mcp                                  # 54 pass, 2 skip (live, no key)
+bun test mcp                                  # 62 pass, 2 skip (live, no key)
 GRAPH_GATEWAY_KEY=<key> bun test mcp          # + live Aave query & get_pnl
 ```
 

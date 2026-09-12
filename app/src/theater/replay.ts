@@ -59,6 +59,10 @@ function deadlineLabel(deadline: bigint): string {
  */
 function deliveryVerdict(job: JobView): Verdict | null {
   if (job.metaBlock === undefined || job.state === "open") return null;
+  // before subgraph v0.0.8 the only indexed block was the Arc block of the settlement, which
+  // is not comparable with a dataset-chain floor: no verdict rather than a wrong one
+  const ratio = job.metaBlock / Math.max(1, Number(job.minBlock));
+  if (ratio > 3 || ratio < 1 / 3) return null;
   return decideDelivery({
     metaBlock: job.metaBlock,
     minBlock: Number(job.minBlock),

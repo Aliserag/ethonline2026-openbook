@@ -1,7 +1,7 @@
 # OpenBook — ENSv2 Storefront (`openbook.eth`)
 
 The OpenBook storefront is an **ENSv2 name on Sepolia** that any buyer, MCP server, or
-frontend resolves live before paying. `openbook.eth` → its Owner's `OwnedResolver`
+frontend resolves live before paying. `openbook.eth` → its Owner's `PermissionedResolver`
 (deployed via the ENSv2 `VerifiableFactory`) → `svc.*` + ENSIP-25/26 text records. The
 records are the *contract* of the storefront: Task 5 `get_quote` **hard-fails**
 (`ENS_RESOLUTION_FAILED`) when `svc.price`/`svc.sla`/`svc.payee` are missing — there is
@@ -15,7 +15,7 @@ Buyer / MCP (get_quote) ──getEnsText(fresh, key)──▶ UniversalResolverV
                                              openbook.eth (ETHRegistry, ENSv2)
                                                         │  registered resolver
                                                         ▼
-                                        OwnedResolver (owner = TREASURY_EOA, full
+                                        PermissionedResolver (owner = TREASURY_EOA, full
                                         role bitmap incl. ROLE_SET_TEXT)  ◀── records
                                                         │
               svc.menu · svc.price · svc.sla · svc.payee · svc.operator · svc.pnl · svc.attester
@@ -47,7 +47,7 @@ on the parent's `svc.price` (node not granted). The resolver is `PermissionedRes
 
 - **Owner / deployer:** `TREASURY_EOA` (`SEPOLIA_PK`). Registration grants the owner the
   v2 registry roles (`ROLE_SET_SUBREGISTRY`, `ROLE_SET_RESOLVER`, `ROLE_CAN_TRANSFER_ADMIN`).
-- **Resolver:** `ens resolver deploy <TREASURY_EOA> …` creates an `OwnedResolver` via the
+- **Resolver:** `ens resolver deploy <TREASURY_EOA> …` creates a `PermissionedResolver` via the
   Verifiable Factory. The CREATE2 address is **predictable before deployment**
   `(factory, proxyLogic, deployer, salt)` — it can be committed into the registration
   before the deploy tx lands. The deployer (admin) receives the **full role bitmap**
