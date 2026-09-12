@@ -8,12 +8,29 @@
  * price — live/stale/error with reasons, never a stale value presented as
  * fresh; spec S9).
  *
+ * Ask mode (chat-first, the LLM PROPOSES and the registry EXECUTES): the
+ * mode chip above the input toggles command/ask (click or Tab when the
+ * command lane resolves nothing, which also prints the "did you mean to
+ * ask?" nudge). Ask submits an OpenAI-compatible chat request (env VITE_LLM_*,
+ * see env.ts/.env.example) whose system prompt carries the registry schema,
+ * the exact dataset ids, and a compact live context; the model returns only
+ * `{"command", "argv", "rationale"}` or a refusal, validated against the
+ * registry (exact name, arg arity, enumerated dataset ids) with one
+ * temperature-0 retry. Proposals print as `proposed · <command argv>` tape
+ * blocks; act/sandbox need the Run button or Enter (nothing auto-executes),
+ * inspect/replay run on Enter like a typed line, and execution goes through
+ * dispatch() unchanged so receipts are identical to typed usage. No key ->
+ * the chip reads "ask: set VITE_LLM_API_KEY" and the chips (static mappings)
+ * keep every command keyless. The asking state shows "asking <model>…" with
+ * a cancel and a 45s budget; the dock never blocks on the model.
+ *
  * Keyboard grammar (spec §5.3d): ⌘K opens the fuzzy palette over the
- * registry + dataset ids, ↑/↓ walk history, Tab cycles the completion
- * popover (commands then dataset ids), Esc closes (popover first, then the
- * dock), ⌘L clears the tape. Hashes/addresses copy on click with a printed
- * ack; `sandbox claim` prints a live countdown-bar block. Motion is ≤120ms
- * on value change only and zero under prefers-reduced-motion.
+ * registry + dataset ids, ↑/↓ walk history, Tab completes (command mode) or
+ * toggles the mode (ask mode / unresolvable input), Esc cancels the ask,
+ * clears the pending proposal, then the popover, then the dock, ⌘L clears
+ * the tape. Hashes/addresses copy on click with a printed ack; `sandbox
+ * claim` prints a live countdown-bar block. Motion is ≤120ms on value change
+ * only and zero under prefers-reduced-motion.
  *
  * The command files are imported for their registration side effects —
  * adding a command elsewhere requires no change here (registry contract).
@@ -22,10 +39,24 @@ import { useEffect, useMemo, useRef, useState, type JSX, type KeyboardEvent as R
 import { CONFIG } from "../config";
 import { env } from "../env";
 import { demoAddress, getPublicClient, pickSigner } from "../data/chain";
-import { fetchLag } from "../data/subgraph";
+import { fetchLagShared } from "../data/subgraph";
 import { useLiveValue } from "../ui/useLiveValue";
 import { createEnsTextReader } from "../../../mcp/src/ens";
-import { commands, dispatch, type CommandContext, type CommandResult } from "./registry";
+import { commands, dispatch, find, type CommandContext, type CommandResult } from "./registry";
+import {
+  ASK_TIMEOUT_MS,
+  askLlm,
+  buildLiveAskContext,
+  buildSystemPrompt,
+  proposalLine,
+  registrySchema,
+  requiresRun,
+  SUGGESTED_ASKS,
+  type AskMode,
+  type AskOutcome,
+  type AskProposal,
+} from "./ask";
+import { hasLlmKey } from "../env";
 import { renderResult } from "./renderers";
 import { CountdownBlock } from "./blocks/CountdownBlock";
 import { LogBlock } from "./blocks/LogBlock";
@@ -45,23 +76,16 @@ interface Entry {
   error?: string;
   /** unix seconds when a live claim countdown should render under the block */
   countdownUntil?: number;
+  /** ask-mode receipt: the model's proposal or refusal (never auto-executed) */
+  ask?: AskOutcome;
+  /** ask-mode in-flight: the model being asked (renders "asking <model>…") */
+  asking?: string;
 }
 
 interface TabPopover {
   candidates: CompletionItem[];
   index: number;
 }
-
-const SUGGESTIONS = [
-  "status",
-  "help",
-  "lag",
-  "books",
-  "jobs",
-  "ens show",
-  "quote aave-v3-arbitrum-lending",
-  "policy show",
-];
 
 function LiveChip({
   label,
@@ -97,6 +121,7 @@ function LiveChip({
 function entryBadge(entry: Entry): { label: string; stateClass: string } {
   if (entry.error !== undefined) return { label: "ERROR", stateClass: " tape__kind--error" };
   if (entry.countdownUntil !== undefined) return { label: "COUNTDOWN", stateClass: " tape__kind--countdown" };
+  if (entry.ask !== undefined || entry.asking !== undefined) return { label: "ASK", stateClass: "" };
   if (entry.results === null) return { label: "FEED", stateClass: "" };
   const labels: Record<string, string> = {
     text: "LOG",
@@ -138,8 +163,52 @@ function countdownUntilFor(line: string, result: CommandResult): number | undefi
   return until > Math.floor(Date.now() / 1000) ? until : undefined;
 }
 
+/**
+ * Proposal receipt block in the tape: `proposed · <command argv>` with the
+ * rationale and the proposing model, plus the confirmation gate — act and
+ * sandbox proposals show a Run button (nothing auto-executes); inspect and
+ * replay note they run on Enter like a typed line. Refusals print as an
+ * error-styled log line (model refusal, no key, or invalid twice).
+ */
+function AskReceiptBlock({
+  outcome,
+  onRun,
+}: {
+  outcome: AskOutcome;
+  onRun: (proposal: AskProposal) => void;
+}): JSX.Element {
+  if (outcome.status === "refusal") {
+    return (
+      <div className="console__block tape__block tape__block--ask tape__block--refusal">
+        <LogBlock text={`refused · ${outcome.refusal} (by ${outcome.model})`} error />
+      </div>
+    );
+  }
+  const { proposal, model } = outcome;
+  const gated = requiresRun(find(proposal.command)?.kind ?? "inspect");
+  return (
+    <div className="console__block tape__block tape__block--ask">
+      <div className="console__ask-line">
+        <span className="console__ask-tag">proposed</span>
+        <code>{proposalLine(proposal)}</code>
+      </div>
+      <p className="console__ask-why">
+        {proposal.rationale} · by {model}
+      </p>
+      {gated ? (
+        <button type="button" className="console__ask-run" onClick={() => onRun(proposal)}>
+          Run ↵ <span className="console__ask-run-note">nothing auto-executes</span>
+        </button>
+      ) : (
+        <p className="console__ask-note">read-only · Enter runs it like a typed command</p>
+      )}
+    </div>
+  );
+}
+
 export function Console(): JSX.Element {
   const [open, setOpen] = useState(false);
+  const [mode, setMode] = useState<AskMode>("command");
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [entries, setEntries] = useState<Entry[]>([]);
   const [input, setInput] = useState("");
@@ -147,9 +216,11 @@ export function Console(): JSX.Element {
   const [historyIndex, setHistoryIndex] = useState(-1);
   const [popover, setPopover] = useState<TabPopover | null>(null);
   const [copyAck, setCopyAck] = useState<CopyAck | null>(null);
+  const [pendingAsk, setPendingAsk] = useState<{ proposal: AskProposal } | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const bodyRef = useRef<HTMLDivElement | null>(null);
   const seqRef = useRef(0);
+  const askAbortRef = useRef<AbortController | null>(null);
 
   const readEnsText = useMemo(() => createEnsTextReader({ rpcUrl: env.sepoliaRpc }), []);
 
@@ -168,7 +239,12 @@ export function Console(): JSX.Element {
     [],
   );
 
-  const paletteItemsMemo = useMemo(() => paletteItems(commands(), CONFIG.datasets), []);
+  /** Registry snapshot (side-effect imports in commands/* populate it once). */
+  const allCommands = useMemo(() => commands(), []);
+  const paletteItemsMemo = useMemo(() => paletteItems(allCommands, CONFIG.datasets), [allCommands]);
+
+  // release the in-flight ask when the dock unmounts
+  useEffect(() => () => askAbortRef.current?.abort(), []);
 
   // ⌘K (or Ctrl+K) opens the fuzzy palette; ⌘L clears the tape.
   useEffect(() => {
@@ -224,6 +300,8 @@ export function Console(): JSX.Element {
 
   const runLine = async (line: string): Promise<void> => {
     if (line.length === 0) return;
+    // a typed line supersedes any pending proposal (the explicit keyboard way)
+    setPendingAsk(null);
     setHistory((h) => [...h, line]);
     setHistoryIndex(-1);
     setPopover(null);
@@ -245,6 +323,50 @@ export function Console(): JSX.Element {
     }
   };
 
+  /** Execute a confirmed proposal through the SAME dispatch path as a typed
+   * line — receipts are identical to typed usage (the LLM never executed). */
+  const runProposal = (proposal: AskProposal): void => {
+    setPendingAsk(null);
+    void runLine(proposalLine(proposal));
+  };
+
+  /** Ask lane: build the live-context system prompt, call the LLM (propose
+   * only), print a proposal or refusal receipt. Never blocks the dock: the
+   * in-flight entry shows "asking <model>…" with a cancel. */
+  const runAsk = async (question: string): Promise<void> => {
+    const text = question.trim();
+    if (text.length === 0) return;
+    const controller = new AbortController();
+    askAbortRef.current?.abort();
+    askAbortRef.current = controller;
+    setPendingAsk(null);
+    setPopover(null);
+    setInput("");
+    const id = seqRef.current++;
+    setEntries((es) => [...es, { id, line: `ask · ${text}`, at: Date.now(), results: null, asking: env.llmModel }]);
+    try {
+      const systemPrompt = buildSystemPrompt(registrySchema(allCommands), await buildLiveAskContext());
+      const outcome = await askLlm(
+        text,
+        { baseUrl: env.llmBaseUrl, apiKey: env.llmApiKey, model: env.llmModel, signal: controller.signal },
+        systemPrompt,
+        allCommands,
+      );
+      setEntries((es) => es.map((en) => (en.id === id ? { ...en, asking: undefined, ask: outcome } : en)));
+      if (outcome.status === "proposal") setPendingAsk({ proposal: outcome.proposal });
+    } catch (error) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      const message = err.name === "AbortError" ? "ask cancelled" : err.message;
+      setEntries((es) => es.map((en) => (en.id === id ? { ...en, asking: undefined, error: message } : en)));
+    } finally {
+      if (askAbortRef.current === controller) askAbortRef.current = null;
+    }
+  };
+
+  const cancelAsk = (): void => {
+    askAbortRef.current?.abort();
+  };
+
   const navHistory = (delta: number): void => {
     if (history.length === 0) return;
     const next = Math.min(history.length - 1, Math.max(-1, historyIndex + delta));
@@ -260,7 +382,7 @@ export function Console(): JSX.Element {
       setPopover({ ...popover, index: next });
       return;
     }
-    const candidates = completionCandidates(input, commands(), CONFIG.datasets);
+    const candidates = completionCandidates(input, allCommands, CONFIG.datasets);
     if (candidates.length === 0) return;
     setInput(candidates[0].value);
     setPopover({ candidates, index: 0 });
@@ -275,6 +397,17 @@ export function Console(): JSX.Element {
   const onKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>): void => {
     if (event.key === "Tab") {
       event.preventDefault();
+      // ask mode: Tab returns to the command lane (the nudge's invitation)
+      if (mode === "ask") {
+        setMode("command");
+        return;
+      }
+      // command mode: Tab completes when something matches; when the input
+      // resolves to nothing the nudge offers ask mode, and Tab takes it.
+      if (popover === null && input.trim().length > 0 && completionCandidates(input, allCommands, CONFIG.datasets).length === 0) {
+        setMode("ask");
+        return;
+      }
       complete();
       return;
     }
@@ -290,12 +423,30 @@ export function Console(): JSX.Element {
     }
     if (event.key === "Enter") {
       event.preventDefault();
-      void runLine(input.trim());
+      const text = input.trim();
+      if (mode === "ask" && text.length > 0) {
+        void runAsk(text);
+        return;
+      }
+      // an empty input with a pending proposal runs it (explicit second Enter)
+      if (pendingAsk !== null && text.length === 0) {
+        runProposal(pendingAsk.proposal);
+        return;
+      }
+      void runLine(text);
       return;
     }
     if (event.key === "Escape") {
+      if (askAbortRef.current !== null) {
+        cancelAsk();
+        return;
+      }
       if (popover !== null) {
         setPopover(null);
+        return;
+      }
+      if (pendingAsk !== null) {
+        setPendingAsk(null);
         return;
       }
       setOpen(false);
@@ -321,10 +472,10 @@ export function Console(): JSX.Element {
         <span className="console__title">console</span>
         <span className="console__chips">
           <LiveChip label="arc" read={() => getPublicClient().getBlockNumber().then((n) => n.toLocaleString("en-US"))} />
-          <LiveChip label="subgraph" read={() => fetchLag().then((l) => `idx ${l.indexed.toLocaleString("en-US")} · ${l.rows} rows`)} />
+          <LiveChip label="subgraph" read={() => fetchLagShared().then((l) => `idx ${l.indexed.toLocaleString("en-US")} · ${l.rows} rows`)} />
           <LiveChip label="ens" read={() => readEnsText(CONFIG.ens, "svc.price").then((p) => (p === null ? "no price" : p))} />
         </span>
-        <span className="console__hints">⌘K palette · ↑↓ history · Tab complete · Esc close</span>
+        <span className="console__hints">⌘K palette · Tab complete · mode chip · ↵ runs · Esc close</span>
         <button
           type="button"
           className="console__close"
@@ -340,17 +491,11 @@ export function Console(): JSX.Element {
           {entries.length === 0 ? (
             <div className="console__empty">
               <p className="console__empty-line">
-                the receipt printer · every command prints a block. try:
+                the receipt printer · every command prints a block · ask below, or run one of the
+                mapped chips
               </p>
-              <div className="console__suggest">
-                {SUGGESTIONS.map((s) => (
-                  <button type="button" key={s} className="console__suggest-chip" onClick={() => void runLine(s)}>
-                    {s}
-                  </button>
-                ))}
-              </div>
               <p className="tape__hints">
-                <kbd>⌘K</kbd> palette · <kbd>Tab</kbd> complete · <kbd>↑↓</kbd> history ·{" "}
+                <kbd>⌘K</kbd> palette · <kbd>Tab</kbd> complete or ask · <kbd>↑↓</kbd> history ·{" "}
                 <kbd>⌘L</kbd> clears · <kbd>Esc</kbd> close
               </p>
             </div>
@@ -378,6 +523,15 @@ export function Console(): JSX.Element {
                       <div className="console__block tape__block tape__block--error">
                         <LogBlock text={`${entry.line} failed: ${entry.error}`} error />
                       </div>
+                    ) : entry.asking !== undefined ? (
+                      <div className="console__block tape__block tape__block--ask">
+                        <LogBlock text={`asking ${entry.asking}… (budget ${ASK_TIMEOUT_MS / 1000}s)`} />
+                        <button type="button" className="console__ask-cancel" onClick={cancelAsk}>
+                          cancel
+                        </button>
+                      </div>
+                    ) : entry.ask !== undefined ? (
+                      <AskReceiptBlock outcome={entry.ask} onRun={runProposal} />
                     ) : entry.results === null ? (
                       <div className="console__block tape__block tape__block--log">
                         <LogBlock text="printing…" />
@@ -444,7 +598,43 @@ export function Console(): JSX.Element {
         </div>
       )}
 
+      <div className="console__asks">
+        <span className="console__asks-cap">try asking</span>
+        {SUGGESTED_ASKS.map((ask) => (
+          <button
+            type="button"
+            key={ask.line}
+            className="console__ask-chip"
+            title={`runs: ${ask.line} (static mapping, no key needed)`}
+            onClick={() => void runLine(ask.line)}
+          >
+            {ask.label}
+          </button>
+        ))}
+      </div>
+
+      {mode === "command" && input.trim().length > 0 && find(input.trim()) === undefined && (
+        <div className="console__nudge">
+          <span>
+            did you mean to ask? press <kbd>Tab</kbd> to switch to ask mode
+          </span>
+          <button type="button" className="console__nudge-ask" onClick={() => setMode("ask")}>
+            ask
+          </button>
+        </div>
+      )}
+
       <div className="console__inputrow">
+        <button
+          type="button"
+          className={`console__mode console__mode--${mode}`}
+          onClick={() => setMode((m) => (m === "command" ? "ask" : "command"))}
+          title="click or Tab to toggle mode"
+          aria-label={`input mode: ${mode}`}
+          aria-pressed={mode === "ask"}
+        >
+          {mode === "command" ? "command ▸ ask" : hasLlmKey ? "ask ◂ command" : "ask: set VITE_LLM_API_KEY"}
+        </button>
         <span className="console__prompt" aria-hidden="true">
           ›
         </span>
@@ -457,14 +647,19 @@ export function Console(): JSX.Element {
             setPopover(null);
           }}
           onKeyDown={onKeyDown}
-          placeholder="type a command · help"
-          aria-label="console command input"
+          placeholder={mode === "command" ? "type a command · help" : "ask a question · the LLM proposes, the registry executes"}
+          aria-label={`console ${mode} input`}
           autoComplete="off"
           autoCapitalize="off"
           spellCheck={false}
         />
         <span className="tape__rowhint">
-          <kbd>⌘L</kbd> clears
+          {pendingAsk !== null ? (
+            <kbd>↵</kbd>
+          ) : (
+            <kbd>⌘L</kbd>
+          )}
+          {pendingAsk !== null ? " runs proposal" : " clears"}
         </span>
       </div>
 

@@ -481,6 +481,181 @@
   color: var(--ink);
 }
 
+/* ===== ask mode: chips row, mode chip, nudge, proposal receipts ========= */
+
+.console .console__asks {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px 4px;
+}
+
+.console .console__asks-cap {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-right: 4px;
+}
+
+.console .console__ask-chip {
+  font-family: var(--sans);
+  font-size: 12px;
+  color: var(--ink-2);
+  background: var(--sheet);
+  border: 1px solid var(--rule-strong);
+  border-radius: 999px;
+  padding: 3px 10px;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+
+.console .console__ask-chip:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--ink);
+}
+
+/* the "did you mean to ask?" nudge under the chips row */
+.console .console__nudge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 14px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--accent);
+}
+
+.console .console__nudge kbd {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--ink-2);
+  border: 1px solid var(--rule-strong);
+  border-radius: 2px;
+  padding: 0 4px;
+  background: var(--sheet);
+}
+
+.console .console__nudge-ask {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  padding: 1px 10px;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.console .console__nudge-ask:hover { background: var(--accent); color: var(--sheet); }
+
+/* the input-mode chip (command | ask). No key -> the chip says how to enable. */
+.console .console__mode {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--ink-2);
+  background: var(--sheet);
+  border: 1px solid var(--rule-strong);
+  border-radius: 999px;
+  padding: 2px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+
+.console .console__mode:hover { border-color: var(--accent); }
+
+.console .console__mode--ask {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+/* ask receipts in the tape */
+.console .tape__block--ask {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.console .console__ask-line {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--ink);
+}
+
+.console .console__ask-tag {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 2px;
+  padding: 0 5px;
+}
+
+.console .console__ask-why {
+  margin: 0;
+  font-family: var(--sans);
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
+.console .console__ask-note {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.console .console__ask-run {
+  align-self: flex-start;
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--sheet);
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 3px;
+  padding: 4px 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+
+.console .console__ask-run:hover { background: var(--ink); border-color: var(--ink); }
+
+.console .console__ask-run-note {
+  font-weight: 400;
+  font-size: 11px;
+  opacity: 0.75;
+}
+
+.console .console__ask-cancel {
+  align-self: flex-start;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+  background: var(--sheet);
+  border: 1px solid var(--rule-strong);
+  border-radius: 2px;
+  padding: 1px 8px;
+  cursor: pointer;
+  transition: color 120ms ease, border-color 120ms ease;
+}
+
+.console .console__ask-cancel:hover { color: var(--refunded); border-color: var(--refunded); }
+
 .tape__hints {
   margin-top: 12px;
   font-family: var(--mono);

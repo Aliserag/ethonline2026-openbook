@@ -20,7 +20,15 @@ export const env = {
   /** Alchemy key: the freshness head reference (Gateway _meta has no
    * chainHeadBlock field — the head comes from the dataset's own chain) */
   alchemyKey: (import.meta.env.VITE_ALCHEMY_API_KEY as string | undefined) ?? "",
+  /** Console ask mode: OpenAI-compatible chat-completions endpoint. The LLM
+   * only PROPOSES a registry command + argv — it never emits data — and the
+   * registry executes. No key -> the ask lane prints how to enable it and
+   * every command keeps working (the chip row is static, keyless). */
+  llmBaseUrl: (import.meta.env.VITE_LLM_BASE_URL as string | undefined) ?? "https://openrouter.ai/api/v1",
+  llmApiKey: (import.meta.env.VITE_LLM_API_KEY as string | undefined) ?? "",
+  llmModel: (import.meta.env.VITE_LLM_MODEL as string | undefined) ?? "deepseek/deepseek-chat",
 };
 
 export const hasGraphKey = env.graphKey.length > 0;
 export const hasAlchemyKey = env.alchemyKey.length > 0;
+export const hasLlmKey = env.llmApiKey.length > 0;
