@@ -1,7 +1,8 @@
-# OpenBook: Chargebacks for the Agentic Economy
+# OpenBook: The Data Marketplace for Agents
 
 [![ci](https://github.com/Aliserag/OpenBook/actions/workflows/ci.yml/badge.svg)](https://github.com/Aliserag/OpenBook/actions/workflows/ci.yml)
 
+> The data marketplace for agents, with automatic refunds for every stale delivery.
 > An autonomous agent that sells freshness-guaranteed onchain data queries, pays its own
 > costs, and publishes its P&L onchain. Built for ETHOnline 2026 (Sep 4–16).
 
@@ -12,9 +13,13 @@
 
 ## The pitch
 
+**The data marketplace for agents, with automatic refunds for every stale delivery.**
 Payment is the last mile of agent autonomy. Agents can hold keys and sign transactions, but
 counterparties can't trust them: no service guarantees, no refunds, no recourse when the data
-is stale. Everyone is building payment rails; nobody is building the control layer.
+is stale. Everyone is building payment rails; nobody is building the control layer — a marketplace
+fixes that: **anyone can list** (a seller is an ENS subname with four text records), **agents
+compare**, **the escrow enforces** the SLA committed at payment time, and **the venue takes
+2%** — of everyone's settlements.
 
 **Why now:** 54% of organizations are already deploying AI agents
 ([KPMG U.S. AI Pulse, Q1 2026](https://kpmg.com/us/en/media/blogs/2026/q1-ai-pulse-3.html)) and
@@ -35,6 +40,12 @@ the refund executes onchain, automatically.** Money flows both ways.
 [Refunded tx 0x25e7805a…6063f on ArcScan](https://testnet.arcscan.app/tx/0x25e7805ae79fd8320ccbc74d90dead9d87b082fd299ecfe5a5949a968e16063f),
 indexed in the agent's books ([live P&L panel](https://openbook.litai.ca), 
 refunds column, no keys needed; [raw subgraph](https://api.studio.thegraph.com/query/1760032/open-book/version/latest)).
+On the marketplace escrow the same mechanic refunded two stale deliveries in full:
+[job 42 (0.15)](https://testnet.arcscan.app/tx/0xcef2e16b6028c650d6a33f9e3838d57f3d99e62963d6c6e3194e71ed19c40ca1)
+and [job 46 (0.12)](https://testnet.arcscan.app/tx/0x85ef3525ea9e57818a6c99f8e858ed36a2994be1d30b8ce02b3d78a76964b9aa) —
+refund == funded amount for both, and the hook refuses stale payments first
+(`MissingAttestation` revert, settle at
+[0xd93aa95e…3ec4b6](https://testnet.arcscan.app/tx/0xd93aa95ee6552568653a8acfda21998a3173a87f537ebca79cf2d35ffd3ec4b6)).
 
 ![The agent's books, live P&L with the refund row](docs/images/pnl-refund-panel.png)
 
@@ -157,7 +168,11 @@ the ENSv2 storefront and priced by their own text records: `openbook.eth`
 market escrow `0x967e005154D0F62C33Eac8E2F44b44d4C4C07Dd5`, whose 2 percent
 venue fee (`platformFeeBP`, rendered live in the app's venue row) routes every
 settlement's cut to the policy-gated treasury. The market panel labels this
-honestly: "two reference sellers we operate", not third-party liquidity.
+honestly: "two reference sellers we operate", not third-party liquidity. A
+chosen-seller settlement is onchain: job 45 was picked by price
+(`--prefer cheap`), and the receipt split
+[0.1176 USDC to alpha and 0.0024 USDC to the PolicyWallet (2%/98% of the 0.12 job, tx 0xd122ade9…6466f0d)](https://testnet.arcscan.app/tx/0xd122ade9f2b057ea55a9d9e5163f57cf9e440f0bf8ac35401737832fa6646f0d).
+The venue earns from anyone, not just our demo.
 
 **The ENS-edit story.** The storefront is text records, so running the
 marketplace is editing records: repricing `alpha.openbook.eth` is one
