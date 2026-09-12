@@ -251,6 +251,7 @@ export default function App() {
   const [pnlNonce, setPnlNonce] = useState(0);
   const [payError, setPayError] = useState<string | null>(null);
   const [usdcBalance, setUsdcBalance] = useState<bigint | null>(null);
+  const [releasedJob, setReleasedJob] = useState<string | null>(null);
   const [balanceError, setBalanceError] = useState<string | null>(null);
   const [queryError, setQueryError] = useState<string | null>(null);
   const [settleError, setSettleError] = useState<string | null>(null);
@@ -319,7 +320,7 @@ export default function App() {
   // The brand is a printer, not a screenshot: the ledger refreshes itself every
   // 15s (and immediately when the tab comes back), so rows, block deltas and the
   // "updated" stamp move without a click. Every 2026 winner's live surface does
-  // this . tlas polls 41 requests, AgentGate shows "updated HH:MM:SS" + ↺.
+  // this: Atlas polls 41 requests, AgentGate shows "updated HH:MM:SS" + ↺.
   useEffect(() => {
     const id = setInterval(() => {
       if (document.visibilityState === "visible") setPnlNonce((n) => n + 1);
@@ -335,18 +336,18 @@ export default function App() {
   }, []);
 
   const flowBusy = paying || querying || settling;
-  // A funded, unsettled job pins the dataset: its SLA floor was packed from
-  // THIS dataset's chain/config, so switching mid-job would judge a delivery
-  // against the wrong floor. The lock lifts as soon as step 4 settles (or
-  // refunds) the job.
-  const switchLocked = flowBusy || (job !== null && settle === null);
 
-  // Switching datasets invalidates the previous quote/delivery/verdict , he pay
+  // Switching datasets invalidates the previous quote/delivery/verdict; the pay
   // button must never fund the previous dataset's price. Refused while a flow is in
   // flight (paying/querying/settling): a funded job or a half-signed tx must never be
   // orphaned by a stray click.
   const handleDatasetChange = (nextId: string): void => {
-    if (switchLocked) return;
+    if (flowBusy) return;
+    // A funded, unsettled job's SLA floor belongs to the PREVIOUS dataset, so
+    // it is released from this view rather than judged against the wrong
+    // chain/config. It stays onchain and auto-refunds after its deadline.
+    if (job !== null && settle === null) setReleasedJob(job.jobId);
+    setJob(null);
     setDatasetId(nextId);
     setQuote(null);
     setDelivery(null);
@@ -407,7 +408,7 @@ export default function App() {
       const trace: string[] = [];
       const wallet = arcWalletClient(address, trace);
       // The SLA floor is a block on the DATASET's chain (the data lives on
-      // Arbitrum/Ethereum), never on Arc , he delivery's metaBlock and this
+      // Arbitrum/Ethereum), never on Arc; the delivery's metaBlock and this
       // floor must share a chain or the freshness gate is vacuous.
       let head = 0;
       if (hasAlchemyKey) {
@@ -422,6 +423,7 @@ export default function App() {
         schemaHash: keccak256(toBytes(dataset.schema)),
         maxLatencyMs: quote.maxLatencyMs,
       };
+      setReleasedJob(null);
       const jobId = await createJobWithSla(publicClient, {
         buyer: wallet,
         provider: wallet,
@@ -565,7 +567,7 @@ export default function App() {
   }
 
   // chain-derived lines: refunds the subgraph indexed, so the tape prints events
-  // that happened outside this tab too , nd moves on its own once polled.
+  // that happened outside this tab too, and moves on its own once polled.
   for (const ev of refundEvents.slice(0, 3)) {
     tapeEvents.push({
       text: `REFUNDED job ${ev.jobId} · ${ev.reason} · indexed onchain`,
@@ -629,6 +631,13 @@ export default function App() {
             </Tip>
           </span>
         </p>
+
+        {releasedJob !== null && (
+          <p className="notice" role="status">
+            Job {releasedJob} was cleared from this view when you switched datasets. It stays
+            onchain and auto-refunds to the buyer after its deadline.
+          </p>
+        )}
 
         <div className="book">
           <div className="journal">
@@ -718,7 +727,7 @@ export default function App() {
                 <select
                   id="dataset"
                   value={datasetId}
-                  disabled={switchLocked}
+                  disabled={flowBusy}
                   aria-describedby="dataset-lock"
                   onChange={(event) => handleDatasetChange(event.target.value)}
                 >
@@ -728,11 +737,9 @@ export default function App() {
                     </option>
                   ))}
                 </select>
-                {switchLocked && (
+                {flowBusy && (
                   <p className="caption" id="dataset-lock">
-                    {flowBusy
-                      ? "locked while a payment is in flight, so the funded job stays in view"
-                      : "locked until the funded job settles or refunds (step 4) — its SLA floor belongs to this dataset"}
+                    locked while a payment is in flight, so the funded job stays in view
                   </p>
                 )}
               </div>
@@ -896,7 +903,7 @@ export default function App() {
               )}
               {hasGraphKey && quote === null && (
                 <p className="caption" id="query-caption">
-                  Quote first (step 2), the delivery answers your order.
+                  Needs a quote (step 2). The delivery runs against it.
                 </p>
               )}
               {queryError !== null && (
