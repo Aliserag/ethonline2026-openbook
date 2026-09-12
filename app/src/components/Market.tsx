@@ -390,7 +390,7 @@ export function Market(): JSX.Element {
           <p className="market__muted">reading the storefront…</p>
         )}
         {sellers.state !== "live" && sellers.value !== null && sellers.reason !== undefined && (
-          <p className="market__muted">
+          <p className="market__muted" title={sellers.detail}>
             {sellers.state} · {sellers.reason}
           </p>
         )}

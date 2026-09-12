@@ -12,6 +12,9 @@ export interface Live<T> {
   value: T | null;
   state: LiveState;
   reason?: string; // human-readable, shown in degraded states
+  /** the raw upstream reason behind a degraded serve (e.g. the 429 message),
+   *  kept for hover/detail surfaces while `reason` stays the calm label */
+  detail?: string;
   at: number;      // epoch ms of the value's read (0 = never); for cache/snapshot
                    // serves this is the time the payload was taken, not now
   source?: LiveSource;

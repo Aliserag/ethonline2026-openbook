@@ -89,7 +89,9 @@ export function Drawer({
       )}
 
       {live.state !== "live" && live.reason !== undefined && live.value !== null && (
-        <p className="map__drawer-error">{live.state === "stale" ? "stale" : "degraded"} · {live.reason}</p>
+        <p className="map__drawer-error" title={live.detail}>
+          {live.state === "stale" ? "stale" : "degraded"} · {live.reason}
+        </p>
       )}
 
       <div className="map__drawer-meta">

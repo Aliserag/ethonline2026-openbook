@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { EDGES, NODES } from "./nodes";
+import { mapNodeLiveOpts } from "./MapCanvas";
 import { find } from "../console/registry";
 // Side-effect: registers the inspect commands the primary actions resolve to
 // (same import the Console does).
@@ -58,5 +59,20 @@ describe("system map nodes", () => {
       expect(ids[from], `edge from ${from}`).toBe(true);
       expect(to === "operator" || ids[to] === true, `edge to ${to}`).toBe(true);
     }
+  });
+});
+
+describe("map live cache keys — keyed by node id, never by NODES array index", () => {
+  it("every node resolves to exactly `map.<nodeId>` with a distinct key", () => {
+    const keys = NODES.map((n, i) => mapNodeLiveOpts(n.id, i).cacheKey);
+    expect(keys).toEqual(NODES.map((n) => `map.${n.id}`));
+    expect(new Set(keys).size).toBe(NODES.length);
+  });
+
+  it("shares the Studio 429 gate with exactly gateway/subgraph/escrow", () => {
+    const gated = NODES.filter((n, i) => mapNodeLiveOpts(n.id, i).gateKey !== undefined)
+      .map((n) => n.id)
+      .sort();
+    expect(gated).toEqual(["escrow", "gateway", "subgraph"]);
   });
 });

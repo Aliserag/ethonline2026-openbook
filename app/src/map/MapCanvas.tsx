@@ -49,6 +49,26 @@ function nodeOpts(index: number): { pollMs: number; staleAfterMs: number } {
   };
 }
 
+/**
+ * Live options for one map node, keyed by the NODE ID the reader serves.
+ * `id` is the cache/gate identity; `index` only staggers the schedule — NODES
+ * array order (ens, agent, mcp, gateway, …) differs from the reader order, so
+ * keys must NEVER derive from `NODES[index]`. The Studio-backed nodes share
+ * the 429 cooldown gate.
+ */
+export function mapNodeLiveOpts(id: string, index: number): {
+  pollMs: number;
+  staleAfterMs: number;
+  cacheKey: string;
+  gateKey?: string;
+} {
+  return {
+    ...nodeOpts(index),
+    cacheKey: `map.${id}`,
+    gateKey: id === "gateway" || id === "subgraph" || id === "escrow" ? STUDIO_GATE : undefined,
+  };
+}
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -325,7 +345,7 @@ function NodeShape({
         }
       }}
     >
-      <title>{live.reason ?? node.title}</title>
+      <title>{live.detail ?? live.reason ?? node.title}</title>
       <circle r={30} className="map__node-ring" />
       <text className="map__node-name" y={-44} textAnchor="middle">
         {node.title}
@@ -343,24 +363,21 @@ export function SystemMap(): JSX.Element {
   // Reads and poll cadences are staggered (nodeOpts) so the public Arc RPC never
   // sees all 8 nodes burst at once (it rate-limits broad bursts with 429s).
   //
-  // Every node keeps its last-good payload in localStorage (`map.<id>`), so a
-  // walled gateway degrades to a labeled cached chip instead of a raw upstream
-  // error. The Studio-backed nodes (gateway/subgraph/escrow) additionally
-  // share STUDIO_GATE: one 429 pauses them all through the cooldown instead of
-  // each re-hammering the wall on its own tick.
-  const nodeOptsWith = (index: number): Record<string, unknown> => ({
-    ...nodeOpts(index),
-    cacheKey: `map.${NODES[index].id}`,
-    gateKey: index >= 4 && index <= 6 ? STUDIO_GATE : undefined,
-  });
-  const ensLive = useLiveValue(() => sleep(0).then(() => READERS.ens()), nodeOptsWith(0));
-  const agentLive = useLiveValue(() => sleep(700).then(() => READERS.agent()), nodeOptsWith(1));
-  const policyLive = useLiveValue(() => sleep(1_400).then(() => READERS.policy()), nodeOptsWith(2));
-  const mcpLive = useLiveValue(() => sleep(2_100).then(() => READERS.mcp()), nodeOptsWith(3));
-  const gatewayLive = useLiveValue(() => sleep(2_800).then(() => READERS.gateway()), nodeOptsWith(4));
-  const subgraphLive = useLiveValue(() => sleep(3_500).then(() => READERS.subgraph()), nodeOptsWith(5));
-  const escrowLive = useLiveValue(() => sleep(4_200).then(() => READERS.escrow()), nodeOptsWith(6));
-  const hookLive = useLiveValue(() => sleep(4_900).then(() => READERS.hook()), nodeOptsWith(7));
+  // Every node keeps its last-good payload in localStorage under `map.<id>`
+  // (the node id the reader serves — NEVER the NODES array index, whose order
+  // differs from the readers), so a walled gateway degrades to a labeled
+  // cached chip instead of a raw upstream error. The Studio-backed nodes
+  // (gateway/subgraph/escrow) additionally share STUDIO_GATE: one 429 pauses
+  // them all through the cooldown instead of each re-hammering the wall on its
+  // own tick.
+  const ensLive = useLiveValue(() => sleep(0).then(() => READERS.ens()), mapNodeLiveOpts("ens", 0));
+  const agentLive = useLiveValue(() => sleep(700).then(() => READERS.agent()), mapNodeLiveOpts("agent", 1));
+  const policyLive = useLiveValue(() => sleep(1_400).then(() => READERS.policy()), mapNodeLiveOpts("policy", 2));
+  const mcpLive = useLiveValue(() => sleep(2_100).then(() => READERS.mcp()), mapNodeLiveOpts("mcp", 3));
+  const gatewayLive = useLiveValue(() => sleep(2_800).then(() => READERS.gateway()), mapNodeLiveOpts("gateway", 4));
+  const subgraphLive = useLiveValue(() => sleep(3_500).then(() => READERS.subgraph()), mapNodeLiveOpts("subgraph", 5));
+  const escrowLive = useLiveValue(() => sleep(4_200).then(() => READERS.escrow()), mapNodeLiveOpts("escrow", 6));
+  const hookLive = useLiveValue(() => sleep(4_900).then(() => READERS.hook()), mapNodeLiveOpts("hook", 7));
   const lives: Record<string, NodeLive> = {
     ens: ensLive,
     agent: agentLive,

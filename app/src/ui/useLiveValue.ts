@@ -69,6 +69,30 @@ export function nextLiveState(
   }
 }
 
+/**
+ * The snapshot a failed read lands on: the last-good cache is served with
+ * state `stale`, source `cache` and the `as of HH:MM:SS · cached` label (the
+ * raw upstream reason survives in `detail` for hover); with no cache the
+ * prior-value rule decides between stale and a hard `error`.
+ */
+export function degradedSnap<T>(
+  prev: Live<T>,
+  cached: { value: T; at: number } | null,
+  reason: string,
+): Live<T> {
+  if (cached !== null) {
+    return {
+      value: cached.value,
+      state: "stale",
+      at: cached.at,
+      source: "cache",
+      reason: cachedAsOfLabel(cached.at),
+      detail: reason,
+    };
+  }
+  return { ...prev, state: nextLiveState(prev.state, "err", prev.value !== null), reason, detail: reason };
+}
+
 /** Failure backoff schedule: 2s → 4s → 8s → … capped at 30s. */
 export function backoffMs(failureCount: number): number {
   const base = 2_000 * 2 ** Math.max(0, failureCount - 1);
@@ -166,20 +190,7 @@ export function useLiveValue<T>(
         const reason = error instanceof Error ? error.message : String(error);
         setSnap((prev) => {
           const cached = cacheKey !== undefined ? readLastGood<T>(cacheKey) : null;
-          if (cached !== null) {
-            return {
-              value: cached.value,
-              state: "stale",
-              at: cached.at,
-              source: "cache",
-              reason: cachedAsOfLabel(cached.at),
-            };
-          }
-          return {
-            ...prev,
-            state: nextLiveState(prev.state, "err", prev.value !== null),
-            reason,
-          };
+          return degradedSnap(prev, cached, reason);
         });
         delay = setTimeout(
           run,

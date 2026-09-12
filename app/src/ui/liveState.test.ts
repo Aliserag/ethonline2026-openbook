@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import { backoffMs, INITIAL_LIVE_STATE, nextLiveState } from "./useLiveValue";
-import type { LiveState } from "../data/types";
+import { backoffMs, degradedSnap, INITIAL_LIVE_STATE, nextLiveState } from "./useLiveValue";
+import type { Live, LiveState } from "../data/types";
 
 describe("nextLiveState — the live/stale/error reducer (spec §3)", () => {
   it("starts loading (initial state, nothing read yet)", () => {
@@ -70,5 +70,28 @@ describe("live/stale/error lifecycle — success after failure is live again", (
     expect(state).toBe("stale");
     state = nextLiveState(state, "ok", true); // recovered
     expect(state).toBe("live");
+  });
+});
+
+describe("degradedSnap — a failed read serves the cache labeled, reason kept", () => {
+  const snap: Live<number> = { value: null, state: INITIAL_LIVE_STATE, at: 0 };
+
+  it("cache serve: stale + `as of … · cached` label, raw upstream reason in detail", () => {
+    const out = degradedSnap(snap, { value: 42, at: 1_700_000_000_000 }, "gateway HTTP 429: Too many requests");
+    expect(out.state).toBe("stale");
+    expect(out.source).toBe("cache");
+    expect(out.value).toBe(42);
+    expect(out.at).toBe(1_700_000_000_000);
+    expect(out.reason).toMatch(/as of .* · cached/);
+    expect(out.reason).not.toContain("429");
+    expect(out.detail).toBe("gateway HTTP 429: Too many requests");
+  });
+
+  it("no cache: hard error keeps the raw reason as both reason and detail", () => {
+    const out = degradedSnap(snap, null, "gateway HTTP 429: Too many requests");
+    expect(out.state).toBe("error");
+    expect(out.source).toBeUndefined();
+    expect(out.reason).toBe("gateway HTTP 429: Too many requests");
+    expect(out.detail).toBe("gateway HTTP 429: Too many requests");
   });
 });

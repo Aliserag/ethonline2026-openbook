@@ -159,24 +159,35 @@ export function gateRemainingMs(gateKey: string, now: number = Date.now()): numb
 
 /**
  * Short-TTL shared read with in-flight coalescing: concurrent callers within
- * one window share a single upstream request; a failure evicts itself so the
- * next poll genuinely retries. This is what keeps the map's 8 node polls
+ * one window share a single upstream request (a still-pending read is shared
+ * past the TTL window too, so a slow upstream never duplicates fire); a
+ * failure evicts itself so the next poll genuinely retries, but ONLY when it
+ * is still the stored promise — a newer read's slot is never clobbered by a
+ * late rejection from an older one. This is what keeps the map's 8 node polls
  * (and the console chips, and the theater heads) from re-firing the same
- * Studio query on every node tick. One `shared` instance per upstream read:
- * keep them at module scope so every caller shares the same window.
+ * Studio query on every node tick under a 429 wall. One `shared` instance per
+ * upstream read: keep them at module scope so every caller shares the window.
  */
 export function shared<T>(read: () => Promise<T>, ttlMs: number): () => Promise<T> {
   let at = 0;
   let value: Promise<T> | null = null;
+  let inFlight = false;
   return (): Promise<T> => {
-    const now = Date.now();
-    if (value !== null && now - at < ttlMs) return value;
-    at = now;
-    value = read().catch((error) => {
-      value = null;
-      throw error;
-    });
-    return value;
+    if (value !== null && (inFlight || Date.now() - at < ttlMs)) return value;
+    at = Date.now();
+    const pending = read();
+    value = pending;
+    inFlight = true;
+    void pending.then(
+      () => {
+        inFlight = false;
+      },
+      () => {
+        inFlight = false;
+        if (value === pending) value = null; // never evict a newer read
+      },
+    );
+    return pending;
   };
 }
 

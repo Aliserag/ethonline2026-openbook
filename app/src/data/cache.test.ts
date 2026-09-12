@@ -139,4 +139,54 @@ describe("shared — in-flight coalescing with a short TTL", () => {
     fail = false;
     expect(await read()).toBe("recovered");
   });
+
+  it("a slow failure never clobbers a newer read and fires at most one retry", async () => {
+    vi.useFakeTimers();
+    try {
+      const first = Promise.withResolvers<string>();
+      let calls = 0;
+      const read = shared(async () => {
+        calls += 1;
+        if (calls === 1) return first.promise; // slow read A, rejects later
+        return "fresh"; // read B resolves fast
+      }, 1); // TTL expires while A is still in flight
+      const a = read();
+      vi.advanceTimersByTime(10); // TTL passes, A still pending
+      const sharedWhilePending = read();
+      expect(sharedWhilePending).toBe(a); // in-flight coalescing: no duplicate fire
+      expect(calls).toBe(1);
+      first.reject(new Error("slow boom")); // A rejects AFTER the window passed
+      await expect(a).rejects.toThrow("slow boom");
+      const b = read(); // must fire exactly one new upstream read
+      expect(calls).toBe(2);
+      expect(await b).toBe("fresh");
+      expect(await read()).toBe("fresh"); // TTL-fresh, no third call
+      expect(calls).toBe(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("a slow success is shared past the TTL window, not duplicated", async () => {
+    vi.useFakeTimers();
+    try {
+      const gate = Promise.withResolvers<string>();
+      let calls = 0;
+      const read = shared(async () => {
+        calls += 1;
+        return gate.promise;
+      }, 1);
+      const first = read();
+      vi.advanceTimersByTime(10); // TTL expired while pending
+      const second = read();
+      expect(second).toBe(first);
+      expect(calls).toBe(1);
+      gate.resolve("slow-ok");
+      expect(await first).toBe("slow-ok");
+      expect(await second).toBe("slow-ok");
+      expect(calls).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
