@@ -277,7 +277,8 @@ const ensCanEditCommand: Command = {
   help: "ENSv2 access control, live: simulate setText from an address (EAC delegation check, no tx)",
   kind: "inspect",
   run: async (_ctx, argv) => {
-    const [, name, key, address] = argv;
+    // argv carries the two command words first: ["ens", "can-edit", name, key, address]
+    const [name, key, address] = argv.slice(2);
     if (!name || !key || !address || !/^0x[0-9a-fA-F]{40}$/.test(address)) {
       return { render: "text", data: "usage: ens can-edit <name> <key> <0xaddress> · e.g. ens can-edit alpha.openbook.eth svc.price 0xe09C8F90931E97d0aEE998885b306DDF08CE08Cc" };
     }
