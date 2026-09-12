@@ -591,3 +591,14 @@
     display: none;
   }
 }
+
+/* grid children default to min-width:auto, so a wide <pre> or a long mono string
+   would widen its track past the viewport on phones */
+.hero__grid > *,
+.counters > *,
+.try > *,
+.market__grid > *,
+.books__figures > *,
+.builders__grid > * {
+  min-width: 0;
+}
