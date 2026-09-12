@@ -8,15 +8,19 @@
  * URL shape, _meta fragment, deterministic payload hash, --stale routing).
  */
 import { describe, expect, it } from "bun:test";
-import { keccak256, toBytes } from "viem";
+import { keccak256, toBytes, type PublicClient, type WalletClient } from "viem";
 import { loadConfigFile, type OpenBookConfig } from "../mcp/src/datasets";
 import {
   deliverQuery,
   isOurProvider,
+  jobProviderArg,
   resolveAttesterPk,
   runBuyerFlow,
   servingAddressOf,
   slaFloorBlocks,
+  submittedDeliverableOf,
+  submittedMatches,
+  waitForSellerSubmission,
 } from "./buyer-cli";
 import { defaultQueryFor } from "./src/queries";
 import * as path from "node:path";
@@ -233,6 +237,105 @@ describe("SLA freshness floor (slaFloorBlocks)", () => {
   it("refuses junk heads (NaN/zero) as unresolvable", async () => {
     await expect(slaFloorBlocks("arbitrum", 50, async () => NaN)).rejects.toThrow(/unresolvable SLA floor/);
     await expect(slaFloorBlocks("arbitrum", 50, async () => 0)).rejects.toThrow(/unresolvable SLA floor/);
+  });
+});
+
+// --- handoff submission inspection + waiter + provider arg (fix round 2) --------
+
+const ALPHA_PROVIDER = "0xe09C8F90931E97d0aEE998885b306DDF08CE08Cc";
+const CLIENT = "0x3600000000000000000000000000000000000000";
+
+/** Scripted fake: getJob reads a status sequence off `readContract` (index 7). */
+function fakeJobClient(statuses: number[], keepLast = false): PublicClient {
+  let i = 0;
+  return {
+    readContract: async ({ args }: { args?: unknown[] }) => {
+      const status = keepLast ? statuses[Math.min(i, statuses.length - 1)]! : statuses[Math.min(i++, statuses.length - 1)]!;
+      return [
+        args?.[0],
+        CLIENT,
+        ALPHA_PROVIDER,
+        CLIENT,
+        "{}",
+        0n,
+        0n,
+        status,
+        "0x0000000000000000000000000000000000000000",
+      ];
+    },
+  } as unknown as PublicClient;
+}
+
+describe("waitForSellerSubmission", () => {
+  it("returns true when the seller's loop submits", async () => {
+    const served = await waitForSellerSubmission(fakeJobClient([1, 1, 2]), 1n, () => {}, 500, 20);
+    expect(served).toBe(true);
+  });
+
+  it("returns false when the job goes Expired — never reports Expired as served (ordering)", async () => {
+    const served = await waitForSellerSubmission(fakeJobClient([1, 5]), 1n, () => {}, 500, 20);
+    expect(served).toBe(false);
+  });
+
+  it("returns false when the window expires without a submission", async () => {
+    const served = await waitForSellerSubmission(fakeJobClient([1], true), 1n, () => {}, 60, 20);
+    expect(served).toBe(false);
+  });
+});
+
+describe("handoff submission inspection (P1)", () => {
+  const HASH_A = ("0x" + "ab".repeat(32)) as `0x${string}`;
+  const HASH_B = ("0x" + "cd".repeat(32)) as `0x${string}`;
+
+  it("submittedMatches: exact match only — divergent or unreadable submissions refuse", () => {
+    expect(submittedMatches(HASH_A, HASH_A)).toBe(true);
+    expect(submittedMatches(HASH_A.toUpperCase() as `0x${string}`, HASH_A)).toBe(true);
+    expect(submittedMatches(HASH_B, HASH_A)).toBe(false);
+    expect(submittedMatches(null, HASH_A)).toBe(false);
+  });
+
+  it("reads the submitted hash from the SlaHook mapping when a hook is on the job", async () => {
+    const client = {
+      readContract: async () => HASH_A,
+    } as unknown as PublicClient;
+    const hook = "0x606075F3Cf9b5B66E7e4DD2ea369894374Ff0846";
+    await expect(submittedDeliverableOf(client, 1n, hook, 1n)).resolves.toBe(HASH_A);
+  });
+
+  it("treats a zero mapping value as 'nothing submitted'", async () => {
+    const client = {
+      readContract: async () => `0x${"00".repeat(32)}`,
+    } as unknown as PublicClient;
+    await expect(submittedDeliverableOf(client, 1n, "0x606075F3Cf9b5B66E7e4DD2ea369894374Ff0846", 1n)).resolves.toBeNull();
+  });
+
+  it("reads the deliverable from the escrow's JobSubmitted event when hookless", async () => {
+    const client = {
+      getLogs: async () => [{ args: { deliverable: HASH_A } }],
+    } as unknown as PublicClient;
+    await expect(submittedDeliverableOf(client, 1n, undefined, 1n)).resolves.toBe(HASH_A);
+  });
+
+  it("returns null when no JobSubmitted event exists for the job", async () => {
+    const client = { getLogs: async () => [] } as unknown as PublicClient;
+    await expect(submittedDeliverableOf(client, 1n, undefined, 1n)).resolves.toBeNull();
+  });
+});
+
+describe("jobProviderArg (P2: budget signed for the full amount on self-picks)", () => {
+  const OWN = "0x64A78b6d5e99274d01D1d0A70B180A73AAEb8d21";
+  const wallet = { account: { address: OWN }, name: "ours" } as unknown as WalletClient;
+
+  it("uses our wallet when no override is given (single-seller path unchanged)", () => {
+    expect(jobProviderArg(undefined, OWN, wallet)).toBe(wallet);
+  });
+
+  it("uses our wallet when the override IS our own address — setBudget signed for the amount", () => {
+    expect(jobProviderArg(OWN, OWN, wallet)).toBe(wallet);
+  });
+
+  it("passes the bare address only for a genuinely foreign seller (their loop quotes)", () => {
+    expect(jobProviderArg(ALPHA_PROVIDER, OWN, wallet)).toBe(ALPHA_PROVIDER);
   });
 });
 

@@ -139,6 +139,9 @@ export interface BuyerFlowResult {
   /** true when the job's provider is another seller and the CLI handed it to
    * their loop instead of serving — verify/settle only ran if they served */
   waitingOnSeller?: boolean;
+  /** set when the chosen seller's onchain submission was read and refused
+   * (unreadable or diverging deliverable) — nothing was attested or settled */
+  sellerSubmitRefused?: string;
 }
 
 export interface BuyerFlowOptions {
@@ -302,6 +305,85 @@ export function isOurProvider(providerAddress: Address, ourAddresses: readonly A
 }
 
 /**
+ * Which provider to hand `createJobWithSla`: OUR wallet (so setBudget is
+ * signed for the full amount — the escrow only moves money when a budget is
+ * quoted) whenever the job's provider is our own address, including a
+ * marketplace self-pick; the bare serving address ONLY for a genuinely
+ * foreign seller, whose own loop quotes the budget.
+ */
+export function jobProviderArg(
+  providerOverride: Address | undefined,
+  ourProviderAddress: Address,
+  ourProviderWallet: WalletClient,
+): Address | WalletClient {
+  if (providerOverride === undefined) return ourProviderWallet;
+  return isOurProvider(providerOverride, [ourProviderAddress]) ? ourProviderWallet : providerOverride;
+}
+
+const ZERO_BYTES32 = `0x${"00".repeat(32)}` as const;
+
+/** SlaHook public view: the deliverable hash captured from the escrow's submit call. */
+const HOOK_SUBMITTED_ABI = [
+  {
+    name: "submitted",
+    type: "function",
+    stateMutability: "view",
+    inputs: [{ name: "jobId", type: "uint256" }],
+    outputs: [{ name: "", type: "bytes32" }],
+  },
+] as const;
+
+const JOB_SUBMITTED_EVENT = parseAbiItem(
+  "event JobSubmitted(uint256 indexed jobId, address indexed provider, bytes32 deliverable)",
+);
+
+/**
+ * The deliverable hash the seller's loop ACTUALLY submitted onchain. Source
+ * (stated for the record): with a hook on the job, the SlaHook
+ * `submitted(jobId)` mapping — the hook captures the hash from the escrow's
+ * submit call (`contracts/src/SlaHook.sol` afterAction, DeliverableCaptured);
+ * hookless, the escrow's `JobSubmitted` event filtered by jobId (the
+ * reference impl does not persist the deliverable — event only). Returns
+ * null when nothing submitted is readable.
+ */
+export async function submittedDeliverableOf(
+  publicClient: PublicClient,
+  jobId: bigint,
+  hook: Address | undefined,
+  fromBlock: bigint,
+): Promise<`0x${string}` | null> {
+  if (hook !== undefined) {
+    const raw = (await publicClient.readContract({
+      address: hook,
+      abi: HOOK_SUBMITTED_ABI,
+      functionName: "submitted",
+      args: [jobId],
+    })) as `0x${string}`;
+    return raw === ZERO_BYTES32 ? null : raw;
+  }
+  const logs = await publicClient.getLogs({
+    address: escrowAddress(),
+    event: JOB_SUBMITTED_EVENT,
+    args: { jobId },
+    fromBlock,
+    toBlock: "latest",
+  });
+  const last = logs[logs.length - 1];
+  const deliverable = last?.args.deliverable as `0x${string}` | undefined;
+  return deliverable === undefined || deliverable === ZERO_BYTES32 ? null : deliverable;
+}
+
+/**
+ * Whether the seller's onchain-submitted deliverable is an exact, readable
+ * match for the CLI's recomputed hash — nothing is attested or settled
+ * unless it is (a divergent submission would either revert at the hook's
+ * HashMismatch or pay for an unverified deliverable).
+ */
+export function submittedMatches(submitted: `0x${string}` | null, recomputed: `0x${string}`): boolean {
+  return submitted !== null && submitted.toLowerCase() === recomputed.toLowerCase();
+}
+
+/**
  * The SLA freshness floor: the DATASET chain's head minus the seller's
  * maxBlockLag. The deliverable's `_meta.block` lives on the dataset chain
  * (Arbitrum/Ethereum mainnets), so the floor MUST come from that chain's
@@ -408,6 +490,7 @@ export async function waitForSellerSubmission(
   jobId: bigint,
   log: (line: string) => void,
   timeoutMs: number = SELLER_SERVE_TIMEOUT_MS,
+  pollMs: number = SELLER_SERVE_POLL_MS,
 ): Promise<boolean> {
   const deadline = Date.now() + timeoutMs;
   let lastStatus = -1;
@@ -417,9 +500,9 @@ export async function waitForSellerSubmission(
       log(`poll job=${String(jobId)} status=${JOB_STATUS[job.status] ?? job.status} provider=${job.provider}`);
       lastStatus = job.status;
     }
-    if (job.status >= 2) return true; // Submitted / further: the seller served it
     if (job.status >= 5) return false; // Expired — window closed onchain
-    const waitMs = Math.min(SELLER_SERVE_POLL_MS, Math.max(0, deadline - Date.now()));
+    if (job.status >= 2) return true; // Submitted / further: the seller served it
+    const waitMs = Math.min(pollMs, Math.max(0, deadline - Date.now()));
     if (waitMs <= 0) break;
     const { promise, resolve } = Promise.withResolvers<void>();
     setTimeout(resolve, waitMs);
@@ -519,7 +602,7 @@ export async function runBuyerFlow(
   const servingOurselves = isOurProvider(jobProvider, [providerAddress]);
   const jobId = await createJobWithSla(publicClient, {
     buyer: buyerWallet,
-    provider: options.providerOverride ?? providerWallet,
+    provider: jobProviderArg(options.providerOverride, providerAddress, providerWallet),
     evaluator: buyerAddress,
     sla,
     amount6dec: BigInt(amount),
@@ -576,6 +659,22 @@ export async function runBuyerFlow(
       );
       return { quote, jobId: String(jobId), fundHash, delivery, waitingOnSeller: true };
     }
+    // Handoff truthfulness: read the deliverable the seller ACTUALLY submitted
+    // onchain (SlaHook `submitted(jobId)` when the job carries a hook; the
+    // escrow's JobSubmitted event otherwise) and attest/settle THAT hash —
+    // never our recompute alone. Unreadable or diverging → refuse.
+    const submitted = await submittedDeliverableOf(publicClient, jobId, hookAddress, head);
+    if (!submittedMatches(submitted, delivery.payloadHash)) {
+      const why =
+        submitted === null
+          ? "cannot read the seller's submitted deliverable onchain"
+          : `the seller submitted a different deliverable (${submitted} vs our recompute ${delivery.payloadHash})`;
+      log(
+        `RESULT: handoff refused — ${why}; nothing attested or settled; the funds stay in escrow until the deadline`,
+      );
+      return { quote, jobId: String(jobId), fundHash, delivery, sellerSubmitRefused: why };
+    }
+    log(`handoff verified: the seller's onchain submission matches our recompute (${submitted})`);
   }
 
   // Onchain SLA adjudication (optional): when a hook is configured, the
