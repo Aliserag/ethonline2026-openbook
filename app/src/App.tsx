@@ -13,7 +13,7 @@
  * Logic preserved verbatim from the prior revision; only presentation and
  * copy changed (plus aria + status semantics).
  */
-import { useEffect, useMemo, useState, type JSX } from "react";
+import { useEffect, useMemo, useState, type JSX, type ReactNode } from "react";
 import { useAccount, useConnect } from "wagmi";
 import { createPublicClient, http, keccak256, toBytes, type PublicClient } from "viem";
 import { arcChain } from "./wagmi";
@@ -123,7 +123,7 @@ function resolveStorefront(readEnsText: EnsTextReader): Promise<StorefrontState>
       records,
       hardFail:
         missing.length > 0
-          ? `ENS_RESOLUTION_FAILED: ${missing.join(", ")} not set on ${CONFIG.ens} (sepolia ENSv2) — refusing to quote a hard-coded value`
+          ? `ENS_RESOLUTION_FAILED: ${missing.join(", ")} not set on ${CONFIG.ens} (sepolia ENSv2); refusing to quote a hard-coded value`
           : null,
     };
   });
@@ -172,10 +172,14 @@ async function quoteWithNamespace(
 }
 
 /** Tooltip — the page's vocabulary for judges with zero context. */
-function Tip({ text }: { text: string }): JSX.Element {
+/**
+ * Tooltip — wrap the KEYWORD (`<Tip text="…">SLA</Tip>`): it renders with a
+ * dashed underline and reveals the note on hover/focus. No "?" badges.
+ */
+function Tip({ text, children }: { text: string; children?: ReactNode }): JSX.Element {
   return (
     <span className="tip" data-tip={text} role="note" aria-label={text} tabIndex={0}>
-      ?
+      {children ?? "?"}
     </span>
   );
 }
@@ -425,10 +429,10 @@ export default function App() {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       setPayError(
-        /reject|denied|denied/i.test(message)
-          ? "Signature rejected — approve the transactions in your wallet to fund the job, or try again."
+        /reject|denied/i.test(message)
+          ? "Signature rejected. Approve the transactions in your wallet to fund the job, or try again."
           : /insufficient|gas|fund/i.test(message)
-            ? "Your wallet needs testnet USDC — USDC pays gas on Arc. Free at faucet.circle.com (pick Arc Testnet, paste your address)."
+            ? "Your wallet needs testnet USDC. USDC pays gas on Arc. Free at faucet.circle.com (pick Arc Testnet, paste your address)."
             : `Payment failed: ${message.slice(0, 140)}`,
       );
     } finally {
@@ -474,7 +478,7 @@ export default function App() {
       const message = error instanceof Error ? error.message : String(error);
       setQueryError(
         /auth|key|401|403|not found/i.test(message)
-          ? "The Graph gateway rejected the key — check VITE_GRAPH_GATEWAY_KEY (fresh Studio key, the setup notes §4)."
+          ? "The Graph gateway rejected the key. Check VITE_GRAPH_GATEWAY_KEY (a fresh Studio key, setup notes §4)."
           : `Query failed: ${message.slice(0, 140)}`,
       );
     } finally {
@@ -509,7 +513,7 @@ export default function App() {
       const message = error instanceof Error ? error.message : String(error);
       setSettleError(
         /reject|denied/i.test(message)
-          ? "Signature rejected — approve in your wallet to settle, or retry."
+          ? "Signature rejected. Approve in your wallet to settle, or retry."
           : `Settlement failed: ${message.slice(0, 140)}`,
       );
     } finally {
@@ -536,30 +540,30 @@ export default function App() {
   if (settle !== null) {
     tapeEvents.push(
       settle.verdict === "APPROVE"
-        ? { text: `SETTLED job ${job?.jobId ?? ""} — seller paid${settle.txHash ? ` · ${truncateHash(settle.txHash)}` : ""}`, kind: "settled" as const }
-        : { text: `REFUNDED — ${settle.reason ?? "SLA miss"}${settle.txHash ? ` · ${truncateHash(settle.txHash)}` : ""}`, kind: "refunded" as const },
+        ? { text: `SETTLED job ${job?.jobId ?? ""} · seller paid${settle.txHash ? ` · ${truncateHash(settle.txHash)}` : ""}`, kind: "settled" as const }
+        : { text: `REFUNDED · ${settle.reason ?? "SLA miss"}${settle.txHash ? ` · ${truncateHash(settle.txHash)}` : ""}`, kind: "refunded" as const },
     );
   } else if (delivery !== null) {
     tapeEvents.push(
       delivery.freshness === "fresh"
         ? { text: `DELIVERED block ${delivery.metaBlock} · fresh`, kind: "settled" as const }
         : delivery.freshness === "stale"
-          ? { text: `DELIVERED block ${delivery.metaBlock} · STALE — gate refuses charge, refund armed`, kind: "stale" as const }
-          : { text: "DELIVERED · NO META — cannot attest freshness", kind: "idle" as const },
+          ? { text: `DELIVERED block ${delivery.metaBlock} · STALE · gate refuses to charge, refund armed`, kind: "stale" as const }
+          : { text: "DELIVERED · NO META · freshness cannot be attested", kind: "idle" as const },
     );
   } else if (job !== null) {
     tapeEvents.push({ text: `FUNDED job ${job.jobId} · SLA minBlock ${job.minBlock}`, kind: "idle" as const });
   } else if (quote !== null) {
     tapeEvents.push({ text: `QUOTED ${quote.amountUsdc} USDC/query · SLA lag ${quote.minBlockLag} · latency ${quote.maxLatencyMs}ms`, kind: "idle" as const });
   } else {
-    tapeEvents.push({ text: "tape idle — awaiting settlement activity", kind: "idle" as const });
+    tapeEvents.push({ text: "tape idle · awaiting settlement activity", kind: "idle" as const });
   }
 
   // chain-derived lines: refunds the subgraph indexed, so the tape prints events
   // that happened outside this tab too — and moves on its own once polled.
   for (const ev of refundEvents.slice(0, 3)) {
     tapeEvents.push({
-      text: `REFUNDED job ${ev.jobId} — ${ev.reason} · indexed onchain`,
+      text: `REFUNDED job ${ev.jobId} · ${ev.reason} · indexed onchain`,
       kind: "refunded" as const,
     });
   }
@@ -587,10 +591,9 @@ export default function App() {
               OpenBook<span className="ledger-no">the agent's settlement ledger</span>
             </h1>
             <p className="tagline">
-              an autonomous agent selling freshness-guaranteed onchain data — every payment
+              an autonomous agent selling freshness-guaranteed onchain data. Every payment
               carries an{" "}
-              SLA
-              <Tip text="Service-level agreement: a freshness promise attached to the payment itself. Miss the freshness window and the payment refunds itself onchain — nobody has to ask." />
+              <Tip text="Service-level agreement: a freshness promise attached to the payment itself. Miss the freshness window and the payment refunds itself onchain, with nobody asked to approve it.">SLA</Tip>
               , and <span className="accent">every miss refunds itself onchain</span>
             </p>
           </div>
@@ -605,7 +608,7 @@ export default function App() {
 
       <main>
         <p className="intro">
-          <strong>First time here? Start with steps 1 and 2</strong> — the menu, the live quote and
+          <strong>First time here? Start with steps 1 and 2.</strong> The menu, the live quote and
           the agent's books all read from ENS and the public subgraph with <em>no wallet and no
           keys</em>. Step 3 (paying) needs an EVM wallet and free testnet USDC from{" "}
           <a href="https://faucet.circle.com" target="_blank" rel="noreferrer">
@@ -616,17 +619,9 @@ export default function App() {
         <p className="envline" aria-label="environment status">
           <span>
             <span className={hasGraphKey ? "dot yes" : "dot no"} aria-hidden="true" />
-            {hasGraphKey ? "live delivery: on" : "live delivery: needs a key"}
-            <Tip text="query_dataset runs through The Graph Gateway, which needs a free API key. The quote and the books work without it. Devs: set VITE_GRAPH_GATEWAY_KEY." />
-          </span>
-          <span>
-            <span className="dot yes" aria-hidden="true" />
-            onchain reads: public rpc
-            <Tip text="ENS reads default to public Sepolia; the ledger reads public Arc RPC. Devs: override with SEPOLIA_RPC / ARC_TESTNET_RPC." />
-          </span>
-          <span>
-            <span className={isConnected ? "dot yes" : "dot no"} aria-hidden="true" />
-            {isConnected ? `wallet: ${truncateHash(address ?? "")}` : "wallet disconnected"}
+            <Tip text="query_dataset runs through The Graph Gateway, which needs a free API key. The quote and the books work without it. Devs: set VITE_GRAPH_GATEWAY_KEY.">
+              {hasGraphKey ? "live delivery: on" : "live delivery: needs a key"}
+            </Tip>
           </span>
         </p>
 
@@ -646,19 +641,18 @@ export default function App() {
               stateLabel={ensLoading ? "resolving…" : undefined}
               title="See what's for sale"
               what="The storefront lives on ENSv2 (Sepolia): menu, price, SLA, payee."
-              why="The storefront is a name, not a file. OpenBook.eth publishes its menu, price and service-level promise as live ENSv2 records — if any record is missing, nothing gets priced. No hard-coded values, ever."
+              why="The storefront is a name, not a file. openbook.eth publishes its menu, price and service-level promise as live ENSv2 records. If a record is missing, nothing gets priced: the agent will not quote a hard-coded value."
             >
               {ensLoading && (
                 <p className="notice" role="status">
-                  Resolving {CONFIG.ens} on Sepolia — reading its live records…
+                  Reading the live records of {CONFIG.ens} on Sepolia…
                 </p>
               )}
               {ens !== null && ens.hardFail !== null && (
                 <>
                   <div className="notice hardfail">
-                    <strong>Storefront isn't set up yet.</strong> The agent won't guess a price — it
-                    refuses to trade until its ENSv2 records exist. That's the point: no name, no
-                    commerce.
+                    <strong>Storefront isn't set up yet.</strong> The agent won't guess a price. It
+                    refuses to trade until its ENSv2 records exist. No name, no commerce.
                     <div className="mono">{ens.hardFail}</div>
                   </div>
                   <div className="setupcard">
@@ -666,28 +660,28 @@ export default function App() {
                     <strong>To watch OpenBook sell:</strong>
                     <ol>
                       <li>
-                        Register the name and records with <code>scripts/ens/setup.sh</code> (writes
-                        menu, price, SLA, payee).
-                        <Tip text="The setup script needs a Sepolia key with test ETH + free MockUSDC. Details in the setup notes." />
+                        Register the name and records with{" "}
+                        <Tip text="The setup script needs a Sepolia key with test ETH + free MockUSDC. Details in the setup notes."><code>scripts/ens/setup.sh</code></Tip>{" "}
+                        (writes menu, price, SLA, payee).
                       </li>
-                      <li>Reload this page — the table below fills with live records.</li>
-                      <li>Step 2 unlocks: prices are read from the name, not hard-coded.</li>
+                      <li>Reload this page and the table below fills with live records.</li>
+                      <li>Step 2 unlocks: prices come from the name, not from this app.</li>
                     </ol>
                   </div>
                 </>
               )}
               {ens !== null && ens.hardFail === null && (
                 <div className="notice ok">
-                  <strong>Storefront live.</strong> Price, SLA and payee resolved from ENSv2 records
-                  on {CONFIG.ens} — the exact values the agent is bound by, read off the chain.
+                  <strong>Storefront live.</strong> Price, SLA and payee resolved from the ENSv2
+                  records on {CONFIG.ens}. These are the values the agent is bound by, read off the
+                  chain.
                 </div>
               )}
               <table className="ledger" aria-label="ENS storefront records">
                 <thead>
                   <tr>
                     <th scope="col">
-                      ENSv2 record
-                      <Tip text="ENSv2 (Sepolia) lets the agent publish a structured menu: what it sells, at what price, under what SLA, and who gets paid." />
+                      <Tip text="ENSv2 (Sepolia) lets the agent publish a structured menu: what it sells, at what price, under what SLA, and who gets paid.">ENSv2 record</Tip>
                     </th>
                     <th scope="col">live value</th>
                   </tr>
@@ -697,7 +691,7 @@ export default function App() {
                     <tr key={record.key}>
                       <td className="key">{record.key}</td>
                       <td className={record.value === null ? "val missing" : "val"}>
-                        {record.value ?? "— not set —"}
+                        {record.value ?? "not set"}
                       </td>
                     </tr>
                   ))}
@@ -709,13 +703,12 @@ export default function App() {
               n={2}
               state={stepState(step.quote) === "idle" && stepState(step.resolve) === "done" ? "active" : stepState(step.quote)}
               title="Get the price"
-              what="Quote the chosen dataset — priced straight from the ENSv2 records."
-              why="Ask first, pay later. The agent quotes from its own ENSv2 records (price + SLA), so you always know exactly what you're buying before a payment moves."
+              what="Quote the chosen dataset. The price comes straight from the ENSv2 records."
+              why="Ask first, pay later. The agent quotes from its own ENSv2 records (price and SLA), so you know what you're buying before a payment moves."
             >
               <div className="field">
                 <label htmlFor="dataset">
-                  dataset
-                  <Tip text="Two standardized Messari subgraphs — the same query shape runs on both. That's The Graph's schema leverage." />
+                  <Tip text="Two standardized Messari subgraphs — the same query shape runs on both. That's The Graph's schema leverage.">dataset</Tip>
                 </label>
                 <select
                   id="dataset"
@@ -726,13 +719,13 @@ export default function App() {
                 >
                   {CONFIG.datasets.map((d) => (
                     <option key={d.id} value={d.id}>
-                      {d.id} — {d.description}
+                      {d.id} · {d.description}
                     </option>
                   ))}
                 </select>
                 {flowBusy && (
                   <p className="caption" id="dataset-lock">
-                    locked while a payment is in flight — a funded job must stay in view
+                    locked while a payment is in flight, so the funded job stays in view
                   </p>
                 )}
               </div>
@@ -748,13 +741,13 @@ export default function App() {
                   </button>
                   {!ensDone && (
                     <p className="caption" id="quote-caption">
-                      Needs the storefront (step 1) — see the card above.
+                      Needs the storefront (step 1). See the card above.
                     </p>
                   )}
                 </>
               ) : (
                 <div className="notice ok" role="status">
-                  <strong>{quote.amountUsdc} USDC/query</strong> — quoted from ENS, guaranteed fresh
+                  <strong>{quote.amountUsdc} USDC/query</strong>, quoted live from the ENS records
                   <button
                     type="button"
                     className="ob-refresh"
@@ -782,7 +775,7 @@ export default function App() {
                   </button>
                 ) : (
                   <p className="caption">
-                    Paying needs a wallet —{" "}
+                    Paying needs a wallet.{" "}
                     {connectors.map((connector) => (
                       <button key={connector.uid} className="ghost" onClick={() => connect({ connector })}>
                         Connect {connector.name}
@@ -793,24 +786,24 @@ export default function App() {
                 )}
                 {quote === null && isConnected && (
                   <p className="caption" id="pay-caption">
-                    Quote first — the price comes from the agent's ENS records.
+                    Quote first. The price comes from the agent's ENS records.
                   </p>
                 )}
                 {isConnected && quote !== null && usdcBalance !== null && usdcBalance < BigInt(quote.amount) && (
                   <div className="notice" role="status" style={{ marginTop: 10 }}>
-                    <strong>Your wallet needs testnet USDC to pay</strong> — USDC is also the gas token on Arc.
+                    <strong>Your wallet needs testnet USDC to pay.</strong> USDC is also the gas token on Arc.
                     Free faucet:{" "}
                     <a href="https://faucet.circle.com" target="_blank" rel="noreferrer">
                       faucet.circle.com ↗
                     </a>{" "}
-                    (pick <em>Arc Testnet</em>, paste your address). Everything above — the quote and the books —
-                    works without it.
+                    (pick <em>Arc Testnet</em>, paste your address). The quote and the books above
+                    work without it.
                   </div>
                 )}
                 {isConnected && balanceError !== null && (
                   <p className="caption" role="status" style={{ marginTop: 8 }}>
-                    could not read your Arc USDC balance ({balanceError}) — the pay button still works; if it
-                    fails on funds, use{" "}
+                    could not read your Arc USDC balance ({balanceError}). The pay button still works; if
+                    payment fails on funds, use{" "}
                     <a href="https://faucet.circle.com" target="_blank" rel="noreferrer">
                       faucet.circle.com ↗
                     </a>
@@ -824,11 +817,10 @@ export default function App() {
               </div>
               {job !== null && (
                 <div className="notice ok" role="status">
-                  <strong>Funded — the SLA is now onchain.</strong> job {job.jobId} on ERC-8183 (
-                  {truncateHash(ERC8183)}
-                  <Tip text="Escrow (ERC-8183): USDC sits in a neutral contract, released to the agent only when the delivery passes the SLA check — or refunded to you automatically if it doesn't or the deadline lapses." />
-                  ). The agent has committed to deliver data no older than
-                  block {job.minBlock} — or refund you automatically.
+                  <strong>Funded. The SLA is now onchain.</strong> job {job.jobId} on{" "}
+                  <Tip text="Escrow (ERC-8183): USDC sits in a neutral contract, released to the agent only when the delivery passes the SLA check, or refunded to you automatically if it fails or the deadline lapses.">ERC-8183</Tip>{" "}
+                  ({truncateHash(ERC8183)}). The agent has committed to deliver data no older than
+                  block {job.minBlock}, or refund you automatically.
                   <div className="mono">
                     {job.hashes.map((hash, index) => (
                       <span key={hash}>
@@ -856,8 +848,8 @@ export default function App() {
                       : "idle"
               }
               title="Watch data arrive"
-              what="One live query through The Graph's Gateway — with its freshness timestamp."
-              why="Every answer carries a proof of freshness (the _meta block). If the data is older than the SLA allows, the agent refuses to charge for it — before you pay, not after."
+              what="One live query through The Graph gateway, with its freshness timestamp."
+              why="Every answer carries a proof of freshness, the _meta block. If the data is older than the SLA allows, the agent refuses to charge for it."
             >
               {!hasGraphKey && (
                 <div className="setupcard">
@@ -865,21 +857,20 @@ export default function App() {
                   <strong>To watch live data:</strong>
                   <ol>
                     <li>
-                      Get a free key at <a href="https://thegraph.com/studio" target="_blank" rel="noreferrer">thegraph.com/studio</a>{" "}
+                      Get a free key at{" "}
+                      <Tip text="The Studio key gates Gateway queries and the hosted Subgraph MCP — one key, both."><a href="https://thegraph.com/studio" target="_blank" rel="noreferrer">thegraph.com/studio</a></Tip>{" "}
                       (account → API keys).
-                      <Tip text="The Studio key gates Gateway queries and the hosted Subgraph MCP — one key, both." />
                     </li>
                     <li>
                       Add it to <code>app/.env.local</code> as <code>VITE_GRAPH_GATEWAY_KEY</code>.
                     </li>
-                    <li>Reload — this panel runs the live query.</li>
+                    <li>Reload and this panel runs the live query.</li>
                   </ol>
                 </div>
               )}
               <div className="field">
                 <label htmlFor="query">
-                  graphql
-                  <Tip text="The exact query the agent runs against the pinned Messari subgraph — you can edit it live." />
+                  <Tip text="The exact query the agent runs against the pinned Messari subgraph — you can edit it live.">graphql</Tip>
                 </label>
                 <textarea id="query" value={queryText} onChange={(event) => setQueryText(event.target.value)} />
               </div>
@@ -893,7 +884,7 @@ export default function App() {
               </button>
               {!hasGraphKey && (
                 <p className="caption" id="query-caption">
-                  Needs the Graph key — see the setup card above.
+                  Needs a Graph key. See the setup card above.
                 </p>
               )}
               {queryError !== null && (
@@ -909,9 +900,9 @@ export default function App() {
             <StepCard
               n={4}
               state={stepState(step.settle)}
-              title="Settle — or refund"
+              title="Settle or refund"
               what="The verdict is deterministic open code: fresh data settles, stale data refunds."
-              why="This is the whole idea: the payment itself checks the SLA. The agent never gets paid for stale data, and the buyer never has to ask for a refund — it just happens onchain."
+              why="The payment itself checks the SLA. The agent is never paid for stale data, and the buyer never has to ask for a refund: it happens onchain."
             >
               <p style={{ marginTop: 0 }}>
                 <button
@@ -953,7 +944,7 @@ export default function App() {
                   </span>{" "}
                   <strong>
                     {settle.verdict === "APPROVE"
-                      ? "seller paid — SLA met"
+                      ? "seller paid, SLA met"
                       : `refund issued (${settle.reason ?? "SLA miss"})`}
                   </strong>
                   {settle.txHash !== undefined && (
@@ -982,7 +973,7 @@ export default function App() {
                 <div className="steptitle">
                   <h2 id="pnl-title">The agent's books</h2>
                   <p className="what">
-                    Running P&amp;L, onchain and queryable — every settlement lands here.
+                    Running P&amp;L, onchain and queryable. Every settlement lands here.
                   </p>
                 </div>
                 <span className="stepstate">
@@ -992,7 +983,7 @@ export default function App() {
               <div className="body">
                 {pnlError !== null && <p className="notice error">{pnlError}</p>}
                 {pnl !== null && pnl.length === 0 && (
-                  <p className="notice">no settlement rows yet — the ledger fills as jobs complete.</p>
+                  <p className="notice">no settlement rows yet. The ledger fills as jobs complete.</p>
                 )}
                 {pnl !== null && pnl.length > 0 && (
                   <ul className="running">
@@ -1016,7 +1007,7 @@ export default function App() {
                 )}
                 {refundEvents.length > 0 && (
                   <div className="refunds-live">
-                    <p className="cap">money moved backwards — watch one (no wallet needed)</p>
+                    <p className="cap">money moved backwards. Watch one (no wallet needed).</p>
                     <ul className="running">
                       {refundEvents.map((ev) => (
                         <li key={ev.id}>
@@ -1036,11 +1027,11 @@ export default function App() {
                 )}
                 <p className="statline">
                   <span className={pnlError !== null ? "ob-live off" : "ob-live"} aria-hidden="true" />
-                  live · _meta block {pnlMeta ?? "—"} · chain head {pnlHead ?? "—"}
+                  live · _meta block {pnlMeta ?? "…"} · chain head {pnlHead ?? "…"}
                   {pnlMeta !== null && pnlHead !== null
                     ? ` (Δ ${Math.max(0, pnlHead - pnlMeta)} blocks behind head)`
                     : ""}{" "}
-                  · daily rows {pnl !== null ? String(pnl.length) : "—"}
+                  · daily rows {pnl !== null ? String(pnl.length) : "…"}
                   {pnlUpdatedAt !== null && (
                     <>
                       {" · "}
@@ -1107,7 +1098,7 @@ export default function App() {
 
         <div className="tape" aria-label="settlement tape: freshness scale and printed events">
           <div className="tape__head">
-            <span className="tape__title">The Tape — settlement printer</span>
+            <span className="tape__title">The tape: settlement printer</span>
             <span className="tape__status">
               <span
                 className={
@@ -1154,8 +1145,8 @@ export default function App() {
       <footer className="foot">
         <span>
           SLA committed onchain at payment · verdict is deterministic open code · timeout defaults
-          to the buyer (claimRefund
-          <Tip text="claimRefund: if the agent's deadline lapses with no delivery, anyone can trigger the refund — the buyer never has to chase the agent." />
+          to the buyer (
+          <Tip text="claimRefund: if the agent's deadline lapses with no delivery, anyone can trigger the refund — the buyer never has to chase the agent.">claimRefund</Tip>
           )
         </span>
         <a
@@ -1220,16 +1211,16 @@ function DeliveryResult({ delivery }: { delivery: DeliveryState }): JSX.Element 
       : null;
   const status =
     delivery.freshness === "fresh"
-      ? `${delta} block${delta === 1 ? "" : "s"} behind chain head — within SLA maxAge ${delivery.dataset.freshness.maxAge}`
+      ? `${delta} block${delta === 1 ? "" : "s"} behind chain head, within SLA maxAge ${delivery.dataset.freshness.maxAge}`
       : delivery.freshness === "stale"
-        ? `${delta} block${delta === 1 ? "" : "s"} behind chain head — beyond SLA maxAge ${delivery.dataset.freshness.maxAge}; the gate refuses to charge, verify refunds`
-        : "no _meta in the response — cannot attest freshness";
+        ? `${delta} block${delta === 1 ? "" : "s"} behind chain head, beyond SLA maxAge ${delivery.dataset.freshness.maxAge}. The gate refuses to charge; verify refunds`
+        : "no _meta in the response, so freshness cannot be attested";
   return (
     <div className={delivery.freshness === "fresh" ? "notice ok" : "notice error"} role="status">
       <span className={delivery.freshness === "fresh" ? "stamp settled" : delivery.freshness === "stale" ? "stamp stale" : "stamp"}>
         {delivery.freshness === "fresh" ? "FRESH" : delivery.freshness === "stale" ? "STALE" : "NO META"}
       </span>{" "}
-      — {status}
+      {status}
       <div className="mono">
         payloadHash {truncateHash(delivery.payloadHash, 10, 10)} ·{" "}
         {JSON.stringify(delivery.result).slice(0, 96)}

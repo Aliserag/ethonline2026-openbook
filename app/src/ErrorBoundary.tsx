@@ -24,7 +24,7 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, { error: E
             </span>
             <div className="steptitle">
               <h2>The ledger hit a render error</h2>
-              <p className="what">The chain state is untouched — this is the viewer only.</p>
+              <p className="what">The chain state is untouched. This is the viewer only.</p>
             </div>
             <span className="stepstate">error</span>
           </div>
