@@ -14,8 +14,16 @@
 // CRITICAL: we never index raw USDC Transfer events (EIP-7708 double-count trap).
 // Amounts arrive as raw 6-dec BigInt units via the semantic events. Net =
 // revenue - refunds - costs, all BigInt, day-bucket = block.number / 21600.
+//
+// W4 market aggregates (marketplace plan, spec §3): alongside the seller-scoped
+// ledger above, the same handlers ALSO book GLOBAL per-provider stats (Provider)
+// and per-day market buckets (MarketDay) for EVERY provider on every indexed
+// escrow (shared reference contract + the OpenBook instance). The seller-scoped
+// logic below is untouched — same rows, same bookkeeping. Refunds and lag need
+// a jobId -> provider registry (JobMeta), because Refunded carries no provider
+// and fulfillment lag needs the job creation block.
 
-import { Address, BigInt, Bytes } from "@graphprotocol/graph-ts";
+import { Address, BigDecimal, BigInt, Bytes } from "@graphprotocol/graph-ts";
 
 import {
   JobCreated as JobCreatedEvent,
@@ -38,6 +46,9 @@ import {
   PolicyBlocked,
   PolicyConfig,
   DailyPnL,
+  Provider,
+  MarketDay,
+  JobMeta,
 } from "../generated/schema";
 
 // Arc testnet produces ~1 block/2s (6-dec USDC gas token); 21600 blocks ≈ one
@@ -100,10 +111,69 @@ function addCost(day: DailyPnL, amount: BigInt): void {
   day.net = day.revenue.minus(day.refunds).minus(day.costs);
 }
 
+// ---- W4 market aggregates (global, every provider) ----
+
+// JobMeta ids are contract-scoped: the shared reference escrow and the OpenBook
+// instance each own a uint256 jobId counter, so "jm-" + jobId alone could
+// collide across the two dataSources. Prefix with the emitting contract.
+function jobMetaId(contract: Address, jobId: BigInt): Bytes {
+  return Bytes.fromUTF8("jm-" + contract.toHexString() + "-" + jobId.toString());
+}
+
+function loadOrCreateProvider(provider: Address): Provider {
+  let p = Provider.load(provider);
+  if (p == null) {
+    p = new Provider(provider);
+    p.jobs = 0;
+    p.settled = BigInt.zero();
+    p.refunded = BigInt.zero();
+    p.delivered = 0;
+    p.avgLagBlocks = BigDecimal.zero();
+    p.lastJobAt = BigInt.zero();
+    p._lastActiveDay = "";
+  }
+  return p;
+}
+
+function loadOrCreateMarketDay(blockNumber: BigInt): MarketDay {
+  let id = "day-" + blockNumber.div(DAY_BLOCKS).toString();
+  let day = MarketDay.load(id);
+  if (day == null) {
+    day = new MarketDay(id);
+    day.jobs = 0;
+    day.volume = BigInt.zero();
+    day.refunds = BigInt.zero();
+    day.providers = 0;
+  }
+  return day;
+}
+
 // JobCreated(jobId, client, provider, evaluator, expiredAt, hook) — provider
 // (seller) and expiredAt (deadline) exist ONLY here, so we create the QueryPaid
 // row at creation time with real values; jobId is its stable id.
 export function handleJobCreated(event: JobCreatedEvent): void {
+  // W4 market (GLOBAL — every provider on every indexed escrow):
+  // register the job for later refund/lag attribution, count the provider's
+  // jobs + the day's jobs, and mark the provider active this day exactly once.
+  let meta = new JobMeta(jobMetaId(event.address, event.params.jobId));
+  meta.provider = event.params.provider;
+  meta.createdAt = event.block.number;
+  meta.save();
+
+  let day = loadOrCreateMarketDay(event.block.number);
+  day.jobs += 1;
+
+  let provider = loadOrCreateProvider(event.params.provider);
+  provider.jobs += 1;
+  provider.lastJobAt = event.block.timestamp;
+  if (provider._lastActiveDay != dayId(event.block.number)) {
+    day.providers += 1;
+    provider._lastActiveDay = dayId(event.block.number);
+  }
+  provider.save();
+  day.save();
+
+  // Seller-scoped ledger below is unchanged (foreign jobs skipped as before).
   // Shared reference contract — skip foreign jobs (their provider isn't SELLER).
   if (!isSeller(event.params.provider)) {
     return;
@@ -145,6 +215,24 @@ export function handleQueryPaid(event: JobFundedEvent): void {
 
 // JobSubmitted(jobId, provider, deliverable) — provider fulfills the job.
 export function handleFulfilled(event: JobSubmittedEvent): void {
+  // W4 market (GLOBAL): count the delivery + running mean lag in blocks
+  // (fulfillment block - job creation block) for every provider. Jobs whose
+  // JobCreated predates this dataSource's startBlock have no JobMeta row —
+  // they still count as delivered but contribute nothing to the mean.
+  let provider = loadOrCreateProvider(event.params.provider);
+  provider.delivered += 1;
+  let meta = JobMeta.load(jobMetaId(event.address, event.params.jobId));
+  if (meta != null) {
+    let n = provider.delivered;
+    let lag = event.block.number.minus(meta.createdAt);
+    provider.avgLagBlocks = provider.avgLagBlocks
+      .times(BigDecimal.fromString((n - 1).toString()))
+      .plus(BigDecimal.fromString(lag.toString()))
+      .div(BigDecimal.fromString(n.toString()));
+  }
+  provider.save();
+
+  // Seller-scoped ledger below is unchanged (foreign deliveries skipped).
   if (!isSeller(event.params.provider)) {
     return;
   }
@@ -159,6 +247,14 @@ export function handleFulfilled(event: JobSubmittedEvent): void {
 // PaymentReleased(jobId, provider, amount) — escrow settlement to seller. This
 // is the sole revenue event: a funded+settled job books its amount exactly once.
 export function handleSettled(event: PaymentReleasedEvent): void {
+  // W4 market (GLOBAL): per-provider settled volume + per-day market volume.
+  let provider = loadOrCreateProvider(event.params.provider);
+  provider.settled = provider.settled.plus(event.params.amount);
+  provider.save();
+  let marketDay = loadOrCreateMarketDay(event.block.number);
+  marketDay.volume = marketDay.volume.plus(event.params.amount);
+  marketDay.save();
+
   // THE revenue line — must be SELLER-scoped or foreign settlements inflate
   // OpenBook's DailyPnL on the shared reference contract.
   if (!isSeller(event.params.provider)) {
@@ -178,6 +274,20 @@ export function handleSettled(event: PaymentReleasedEvent): void {
 
 // Refunded(jobId, client, amount) — money returned to the client.
 export function handleRefund(event: RefundedEvent): void {
+  // W4 market (GLOBAL): day refund volume always; per-provider attribution via
+  // the JobMeta registry (Refunded carries no provider). Refunds for jobs that
+  // predate this dataSource's startBlock have no JobMeta — they book into the
+  // day bucket but cannot be attributed to a provider row.
+  let meta = JobMeta.load(jobMetaId(event.address, event.params.jobId));
+  if (meta != null) {
+    let provider = loadOrCreateProvider(Address.fromBytes(meta.provider));
+    provider.refunded = provider.refunded.plus(event.params.amount);
+    provider.save();
+  }
+  let marketDay = loadOrCreateMarketDay(event.block.number);
+  marketDay.refunds = marketDay.refunds.plus(event.params.amount);
+  marketDay.save();
+
   // Refunded(jobId, client, amount) carries no provider — resolve the job row
   // (created only by scoped handleJobCreated) so foreign refunds are skipped.
   let queryPaid = QueryPaid.load(Bytes.fromUTF8("qp-" + event.params.jobId.toString()));

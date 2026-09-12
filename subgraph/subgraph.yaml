@@ -34,6 +34,51 @@ dataSources:
         - Settled
         - RefundIssued
         - DailyPnL
+        - Provider
+        - MarketDay
+        - JobMeta
+      abis:
+        - name: ERC8183
+          file: ./abis/erc8183.json
+      eventHandlers:
+        - event: JobCreated(indexed uint256,indexed address,indexed address,address,uint256,address)
+          handler: handleJobCreated
+        - event: JobFunded(indexed uint256,indexed address,uint256)
+          handler: handleQueryPaid
+        - event: JobSubmitted(indexed uint256,indexed address,bytes32)
+          handler: handleFulfilled
+        - event: PaymentReleased(indexed uint256,indexed address,uint256)
+          handler: handleSettled
+        - event: Refunded(indexed uint256,indexed address,uint256)
+          handler: handleRefund
+      file: ./src/mapping.ts
+  # ---- OpenBook escrow instance (living-protocol T14) — same ERC-8183
+  # events, same mapping; the market aggregates (Provider/MarketDay) and the
+  # seller-scoped ledger both span the two dataSources. Instance proxy
+  # deployed block 61,613,513 (admin role grants); first job = jobId 1 at
+  # 61,613,629 (client 0xac54…54De, provider = operator). startBlock = first
+  # job block − 500 per the T14 rule, covering the whole lifecycle (created /
+  # funded / submitted / released / refunded).
+  - kind: ethereum/contract
+    name: ERC8183OpenBook
+    network: arc-testnet
+    source:
+      address: "0x967e005154D0F62C33Eac8E2F44b44d4C4C07Dd5"
+      abi: ERC8183
+      startBlock: 61613129
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - QueryPaid
+        - Fulfilled
+        - Settled
+        - RefundIssued
+        - DailyPnL
+        - Provider
+        - MarketDay
+        - JobMeta
       abis:
         - name: ERC8183
           file: ./abis/erc8183.json

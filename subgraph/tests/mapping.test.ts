@@ -1,10 +1,11 @@
 import { describe, test, assert, clearStore, newMockEvent } from "matchstick-as/assembly/index";
 import { Address, BigInt, Bytes, ethereum } from "@graphprotocol/graph-ts";
-import { JobCreated, JobFunded, PaymentReleased, Refunded } from "../generated/ERC8183/ERC8183";
+import { JobCreated, JobFunded, JobSubmitted, PaymentReleased, Refunded } from "../generated/ERC8183/ERC8183";
 import { WithdrawalExecuted, PolicySet } from "../generated/PolicyWallet/PolicyWallet";
 import {
   handleJobCreated,
   handleQueryPaid,
+  handleFulfilled,
   handleSettled,
   handleRefund,
   handleCostPaid,
@@ -64,6 +65,25 @@ function createJobFundedEvent(
   event.block.timestamp = BigInt.fromI32(1_700_000_000);
   event.transaction.hash = Bytes.fromHexString(
     "0xbbbb00000000000000000000000000000000000000000000000000000000000002",
+  );
+  return event;
+}
+
+function createJobSubmittedEvent(
+  jobId: BigInt,
+  provider: Address,
+  deliverable: string,
+  blockNumber: BigInt,
+): JobSubmitted {
+  let event = changetype<JobSubmitted>(newMockEvent());
+  event.parameters = new Array();
+  event.parameters.push(new ethereum.EventParam("jobId", ethereum.Value.fromUnsignedBigInt(jobId)));
+  event.parameters.push(new ethereum.EventParam("provider", ethereum.Value.fromAddress(provider)));
+  event.parameters.push(new ethereum.EventParam("deliverable", ethereum.Value.fromFixedBytes(Bytes.fromHexString(deliverable))));
+  event.block.number = blockNumber;
+  event.block.timestamp = BigInt.fromI32(1_700_000_000);
+  event.transaction.hash = Bytes.fromHexString(
+    "0xbbb0000000000000000000000000000000000000000000000000000000000000ff",
   );
   return event;
 }
@@ -280,5 +300,142 @@ describe("handleCostPaid + handlePolicySet", () => {
     assert.entityCount("PolicyConfig", 1);
     assert.fieldEquals("PolicyConfig", "current", "perTxCap", "2000000");
     assert.fieldEquals("PolicyConfig", "current", "dailyCap", "20000000");
+  });
+});
+
+describe("W4 market aggregates (Provider + MarketDay, every provider)", () => {
+  test("foreign provider gets global Provider row; seller-scoped ledger stays empty", () => {
+    clearStore();
+    let client = Address.fromString(CLIENT);
+    let foreign = Address.fromString(FOREIGN);
+
+    handleJobCreated(
+      createJobCreatedEvent(BigInt.fromI32(9), client, foreign, BigInt.fromI32(999_999), BigInt.fromI32(21_500)),
+    );
+    handleQueryPaid(
+      createJobFundedEvent(BigInt.fromI32(9), client, BigInt.fromString("1000000"), BigInt.fromI32(23_000)),
+    );
+    handleFulfilled(
+      createJobSubmittedEvent(
+        BigInt.fromI32(9),
+        foreign,
+        "0x0000000000000000000000000000000000000000000000000000000000a1b2c3",
+        BigInt.fromI32(23_100),
+      ),
+    );
+    handleSettled(
+      createPaymentReleasedEvent(BigInt.fromI32(9), foreign, BigInt.fromString("1000000"), BigInt.fromI32(23_200)),
+    );
+
+    // global market row for the foreign provider: 1 job, 1 delivery, 1 settlement
+    assert.fieldEquals("Provider", FOREIGN.toLowerCase(), "jobs", "1");
+    assert.fieldEquals("Provider", FOREIGN.toLowerCase(), "delivered", "1");
+    assert.fieldEquals("Provider", FOREIGN.toLowerCase(), "settled", "1000000");
+    // lag = fulfillment(23,100) - creation(21,500) = 1,600 blocks
+    assert.fieldEquals("Provider", FOREIGN.toLowerCase(), "avgLagBlocks", "1600");
+    assert.fieldEquals("Provider", FOREIGN.toLowerCase(), "lastJobAt", "1700000000");
+    // MarketDay: whole-market jobs/volume for that day bucket
+    assert.fieldEquals("MarketDay", "day-0", "jobs", "1");
+    assert.fieldEquals("MarketDay", "day-1", "volume", "1000000");
+    assert.fieldEquals("MarketDay", "day-0", "providers", "1");
+    // the SELLER-scoped ledger must stay untouched for foreign activity
+    assert.entityCount("QueryPaid", 0);
+    assert.entityCount("DailyPnL", 0);
+    assert.entityCount("Settled", 0);
+  });
+
+  test("refund attributed to the right provider via registry; day refunds whole-market", () => {
+    clearStore();
+    let client = Address.fromString(CLIENT);
+    let provider = Address.fromString(PROVIDER);
+    let foreign = Address.fromString(FOREIGN);
+
+    // ours and a foreign provider both create jobs the same day (day-1)
+    handleJobCreated(
+      createJobCreatedEvent(BigInt.fromI32(5), client, provider, BigInt.fromI32(999_999), BigInt.fromI32(21_600)),
+    );
+    handleJobCreated(
+      createJobCreatedEvent(BigInt.fromI32(6), client, foreign, BigInt.fromI32(999_999), BigInt.fromI32(21_700)),
+    );
+
+    // refunds for BOTH jobs (foreign refund has no QueryPaid row - must still
+    // land in the foreign provider's aggregate via JobMeta, not the seller's)
+    handleRefund(
+      createRefundedEvent(BigInt.fromI32(5), client, BigInt.fromString("250000"), BigInt.fromI32(22_000)),
+    );
+    handleRefund(
+      createRefundedEvent(BigInt.fromI32(6), client, BigInt.fromString("500000"), BigInt.fromI32(22_100)),
+    );
+
+    assert.fieldEquals("Provider", PROVIDER.toLowerCase(), "refunded", "250000");
+    assert.fieldEquals("Provider", FOREIGN.toLowerCase(), "refunded", "500000");
+    assert.fieldEquals("MarketDay", "day-1", "refunds", "750000");
+    // seller-scoped: only OUR refund booked (RefundIssued + DailyPnL)
+    assert.entityCount("RefundIssued", 1);
+    assert.fieldEquals("DailyPnL", "day-1", "refunds", "250000");
+    // two distinct providers active day-1 (one job each)
+    assert.fieldEquals("MarketDay", "day-1", "providers", "2");
+  });
+
+  test("provider counted once per day; day buckets split jobs and volume", () => {
+    clearStore();
+    let client = Address.fromString(CLIENT);
+    let provider = Address.fromString(PROVIDER);
+
+    // two jobs by the SAME provider in day-1 + one settlement
+    handleJobCreated(
+      createJobCreatedEvent(BigInt.fromI32(7), client, provider, BigInt.fromI32(999_999), BigInt.fromI32(21_600)),
+    );
+    handleJobCreated(
+      createJobCreatedEvent(BigInt.fromI32(8), client, provider, BigInt.fromI32(999_999), BigInt.fromI32(21_700)),
+    );
+    handleSettled(
+      createPaymentReleasedEvent(BigInt.fromI32(7), provider, BigInt.fromString("500000"), BigInt.fromI32(21_800)),
+    );
+    handleSettled(
+      createPaymentReleasedEvent(BigInt.fromI32(8), provider, BigInt.fromString("600000"), BigInt.fromI32(43_200)), // day-2
+    );
+
+    assert.fieldEquals("MarketDay", "day-1", "jobs", "2");
+    assert.fieldEquals("MarketDay", "day-1", "providers", "1"); // dedupe: same provider, one count
+    assert.fieldEquals("MarketDay", "day-1", "volume", "500000");
+    assert.fieldEquals("MarketDay", "day-2", "volume", "600000");
+    // day-2 had settlements but no JobCreated: providers counts job-creating providers
+    assert.fieldEquals("MarketDay", "day-2", "providers", "0");
+    assert.fieldEquals("Provider", PROVIDER.toLowerCase(), "jobs", "2");
+    assert.fieldEquals("Provider", PROVIDER.toLowerCase(), "settled", "1100000");
+  });
+
+  test("avg lag is the running mean over deliveries", () => {
+    clearStore();
+    let client = Address.fromString(CLIENT);
+    let foreign = Address.fromString(FOREIGN);
+
+    handleJobCreated(
+      createJobCreatedEvent(BigInt.fromI32(11), client, foreign, BigInt.fromI32(999_999), BigInt.fromI32(21_500)),
+    );
+    handleJobCreated(
+      createJobCreatedEvent(BigInt.fromI32(12), client, foreign, BigInt.fromI32(999_999), BigInt.fromI32(21_700)),
+    );
+    handleFulfilled(
+      createJobSubmittedEvent(
+        BigInt.fromI32(11),
+        foreign,
+        "0x0000000000000000000000000000000000000000000000000000000000a1b2c3",
+        BigInt.fromI32(23_100),
+      ), // lag 1,600
+    );
+    handleFulfilled(
+      createJobSubmittedEvent(
+        BigInt.fromI32(12),
+        foreign,
+        "0x0000000000000000000000000000000000000000000000000000000000a1b2c3",
+        BigInt.fromI32(23_100),
+      ), // lag 1,400
+    );
+
+    // (1600 + 1400) / 2
+    assert.fieldEquals("Provider", FOREIGN.toLowerCase(), "delivered", "2");
+    assert.fieldEquals("Provider", FOREIGN.toLowerCase(), "avgLagBlocks", "1500");
   });
 });

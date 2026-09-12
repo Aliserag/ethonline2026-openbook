@@ -76,3 +76,41 @@ type DailyPnL @entity(immutable: false) {
   refunds: BigInt!
   net: BigInt!
 }
+
+# ---- W4 market aggregates (marketplace plan, spec §3) ----
+# GLOBAL per-provider commerce stats over every escrow this subgraph indexes
+# (the shared ERC-8183 reference contract AND the OpenBook escrow instance).
+# "Provider" = any seller address that created a job (provider of record in
+# JobCreated) on an indexed escrow — not just the OpenBook operator. Day
+# buckets reuse the DailyPnL convention: block.number / 21600 ≈ one day.
+
+type Provider @entity(immutable: false) {
+  id: Bytes!                  # provider address (provider of record in JobCreated)
+  jobs: Int!                  # JobCreated count for this provider
+  settled: BigInt!            # total PaymentReleased volume
+  refunded: BigInt!           # total Refunded volume attributable to this provider's jobs
+  delivered: Int!             # JobSubmitted (fulfillment) count
+  avgLagBlocks: BigDecimal!   # running mean of (fulfillment block - job creation block)
+  lastJobAt: BigInt!          # block timestamp of the provider's most recent JobCreated
+  _lastActiveDay: String      # internal: last day bucket counted into MarketDay.providers (dedupe)
+}
+
+type MarketDay @entity(immutable: false) {
+  id: ID!                     # "day-" + block.number / 21600 (same bucket as DailyPnL)
+  jobs: Int!                  # JobCreated count that day, every provider
+  volume: BigInt!             # PaymentReleased volume that day, every provider
+  refunds: BigInt!            # Refunded volume that day, every provider
+  providers: Int!             # distinct providers with a job created that day
+}
+
+# Internal per-job registry (jobId -> provider + creation block). Required by
+# the frozen public interface: Refunded carries no provider and fulfillment lag
+# needs the creation block, so every provider's job must be registered at
+# JobCreated time to attribute refunds and lag for ALL providers, not only the
+# OpenBook seller. Not part of the public market interface (app side maps only
+# Provider/MarketDay). Immutable: one JobCreated per job.
+type JobMeta @entity(immutable: true) {
+  id: Bytes!                  # "jm-" + emitting-conract + "-" + jobId (contract-scoped: two escrows share the uint256 jobId space)
+  provider: Bytes!
+  createdAt: BigInt!          # JobCreated block = earliest acceptable block for this job
+}
