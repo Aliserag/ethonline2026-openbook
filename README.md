@@ -38,6 +38,29 @@ refunds column, no keys needed; [raw subgraph](https://api.studio.thegraph.com/q
 
 ![The agent's books, live P&L with the refund row](docs/images/pnl-refund-panel.png)
 
+## FAQ — what exactly is being sold, and to whom
+
+**Onchain data only, or any data?** The reference deployment sells
+**subgraph-queried, onchain-indexed data** — any of The Graph's 15,000+
+subgraphs becomes a sellable dataset with one config entry (`mcp/config/`).
+The mechanism itself (SLA + freshness floor + committed hash + escrow refund)
+is data-source-agnostic: selling offchain research would need a trustworthy
+freshness attestation for that source, which is the buyer's call to accept —
+the shipped configs only claim what they can attest onchain.
+
+**How is this different from an oracle?** Oracles *push* a feed into a
+contract; you pay to publish. OpenBook is *pull*: a buyer pays per query and
+the seller owes a spec — freshness floor, deliverable hash, deadline — enforced
+by an escrow that refunds when the spec is missed. The product is not "better
+data access"; it is **recourse** for machine-to-machine purchases.
+
+**Why would anyone pay when they can query raw?** Raw queries give you data;
+they don't give you (1) a counterparty who owes you a verifiable promise,
+(2) a refund that executes without a support ticket, or (3) a payee whose books
+are public. The target buyer is autonomous software and the teams running it —
+trading/execution agents, risk monitors, settlement bots — where one stale
+answer costs more than the query, and where nobody can open a dispute at 3am.
+
 ## Architecture
 
 ![OpenBook architecture, buyers, the ENSv2 storefront, Arc rails, and The Graph data plane](docs/images/architecture.png)

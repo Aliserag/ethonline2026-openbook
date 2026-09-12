@@ -31,7 +31,17 @@ cd /tmp && npx --yes wrangler pages deploy "$APP_DIR/dist" \
 echo "== [4/4] verify both lanes serve the same bundle"
 cd /tmp
 V=$(curl -s -m 20 "https://ethonline2026-openbook.vercel.app/?cb=$(date +%s)" | grep -oE 'assets/index-[^"]+\.js' | head -1)
-L=$(curl -s -m 20 "https://openbook.litai.ca/?cb=$(date +%s)" | grep -oE 'assets/index-[^"]+\.js' | head -1)
 echo "   vercel: $V"
+# Cloudflare Pages promotes a direct-upload deployment to the domain within
+# ~15-60s — poll before warning.
+for i in $(seq 1 12); do
+  L=$(curl -s -m 20 "https://openbook.litai.ca/?cb=$(date +%s)" | grep -oE 'assets/index-[^"]+\.js' | head -1)
+  [ "$L" = "$V" ] && break
+  sleep 5
+done
 echo "   litai : $L"
-[ "$V" = "$L" ] && echo "PASS: both domains serve the same bundle" || echo "WARN: bundle names differ — check Pages deployment (cdn may lag a minute; re-run the check)"
+if [ "$V" = "$L" ]; then
+  echo "PASS: both domains serve the same bundle"
+else
+  echo "WARN: bundle names differ after 60s — check the Pages deployment in the dashboard"
+fi

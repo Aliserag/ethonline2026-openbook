@@ -252,6 +252,8 @@ export default function App() {
   const [payError, setPayError] = useState<string | null>(null);
   const [usdcBalance, setUsdcBalance] = useState<bigint | null>(null);
   const [releasedJob, setReleasedJob] = useState<string | null>(null);
+  const [pnlRefreshing, setPnlRefreshing] = useState(false);
+  const [pnlJustRefreshed, setPnlJustRefreshed] = useState(false);
   const [balanceError, setBalanceError] = useState<string | null>(null);
   const [queryError, setQueryError] = useState<string | null>(null);
   const [settleError, setSettleError] = useState<string | null>(null);
@@ -299,6 +301,8 @@ export default function App() {
   // P&L ledger: the open-book subgraph via Studio, public endpoint, no key.
   useEffect(() => {
     let cancelled = false;
+    let settleTimer: ReturnType<typeof setTimeout> | undefined;
+    setPnlRefreshing(true);
     Promise.all([fetchPnl(env.graphKey), publicClient.getBlockNumber()])
       .then(([result, head]) => {
         if (cancelled) return;
@@ -308,12 +312,18 @@ export default function App() {
         setPnlHead(Number(head));
         setPnlError(null);
         setPnlUpdatedAt(new Date());
+        setPnlJustRefreshed(true);
+        settleTimer = setTimeout(() => setPnlJustRefreshed(false), 2500);
       })
       .catch((error) => {
         if (!cancelled) setPnlError(error instanceof Error ? error.message : String(error));
+      })
+      .finally(() => {
+        if (!cancelled) setPnlRefreshing(false);
       });
     return () => {
       cancelled = true;
+      if (settleTimer !== undefined) clearTimeout(settleTimer);
     };
   }, [publicClient, pnlNonce]);
 
@@ -607,7 +617,11 @@ export default function App() {
         </div>
         <div className="chainbadges">
           <span>arc · {arcChain.id}</span>
-          <span>ensv2 · sepolia</span>
+          <span>
+            <Tip text="ENS is the agent's storefront: the name publishes the menu, the price, the SLA and the payee as onchain records. Buyers resolve it before paying — and the quote hard-fails if the records are missing. No ENS, no payment.">
+              ensv2 · sepolia
+            </Tip>
+          </span>
           <span>the graph · gateway</span>
           <span>{CONFIG.ens}</span>
         </div>
@@ -653,8 +667,8 @@ export default function App() {
               n={1}
               state={ensDone ? "done" : ensLoading ? "active" : "failed"}
               stateLabel={ensLoading ? "resolving…" : undefined}
-              title="See what's for sale"
-              what="The storefront lives on ENSv2 (Sepolia): menu, price, SLA, payee."
+              title="The storefront — what's for sale"
+              what="This table is the storefront: the datasets on offer, their prices and their SLA, read live from openbook.eth."
               why="The storefront is a name, not a file. openbook.eth publishes its menu, price and service-level promise as live ENSv2 records. If a record is missing, nothing gets priced: the agent will not quote a hard-coded value."
             >
               {ensLoading && (
@@ -951,6 +965,12 @@ export default function App() {
                     .join(" · ")}
                 </p>
               )}
+              {job !== null && delivery !== null && settle === null && (
+                <p className="caption" style={{ marginTop: 8 }}>
+                  The verdict is open code: a stale delivery triggers the refund in the same click —
+                  and even if nobody clicks, anyone can claim it onchain after the job deadline.
+                </p>
+              )}
               {settleError !== null && (
                 <div className="notice error" role="alert">
                   <strong>Settlement didn't complete.</strong> {settleError}
@@ -1046,11 +1066,17 @@ export default function App() {
                 )}
                 <p className="statline">
                   <span className={pnlError !== null ? "ob-live off" : "ob-live"} aria-hidden="true" />
-                  live · _meta block {pnlMeta ?? "…"} · chain head {pnlHead ?? "…"}
-                  {pnlMeta !== null && pnlHead !== null
-                    ? ` (Δ ${Math.max(0, pnlHead - pnlMeta)} blocks behind head)`
-                    : ""}{" "}
-                  · daily rows {pnl !== null ? String(pnl.length) : "…"}
+                  <Tip
+                    text={
+                      pnlMeta !== null && pnlHead !== null
+                        ? `The books are a subgraph indexed from Arc: it has read up to block ${pnlMeta}, the chain head is ${pnlHead} — ${Math.max(0, pnlHead - pnlMeta)} blocks behind, seconds of lag.`
+                        : "The books are a subgraph indexed from Arc — block freshness is being checked."
+                    }
+                  >
+                    live
+                  </Tip>
+                  {" · "}
+                  {pnl !== null ? pnl.length : "…"} daily row{pnl !== null && pnl.length === 1 ? "" : "s"}
                   {pnlUpdatedAt !== null && (
                     <>
                       {" · "}
@@ -1059,9 +1085,10 @@ export default function App() {
                         type="button"
                         className="ob-refresh"
                         onClick={() => setPnlNonce((n) => n + 1)}
+                        disabled={pnlRefreshing}
                         aria-label="refresh the agent's books"
                       >
-                        ↺ refresh
+                        {pnlRefreshing ? "↻ refreshing…" : pnlJustRefreshed ? "✓ up to date" : "↺ refresh"}
                       </button>
                     </>
                   )}
