@@ -13,6 +13,7 @@ import {
   clampDeadline,
   classifyRevert,
   getSandboxState,
+  staleFloor,
 } from "./commands/sandbox";
 // Side-effect: registers policy refusals / policy try-overspend /
 // sandbox stale / sandbox claim (same import the app will make).
@@ -40,6 +41,12 @@ describe("clampDeadline", () => {
   });
   it("keeps requested deadlines above the floor", () => {
     expect(clampDeadline(7200)).toBe(7200);
+  });
+});
+
+describe("staleFloor", () => {
+  it("floors one block past the DELIVERED block — this exact deliverable is below it", () => {
+    expect(staleFloor(504_304_249)).toBe(504_304_250);
   });
 });
 

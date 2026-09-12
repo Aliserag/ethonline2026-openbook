@@ -31,7 +31,6 @@ import { fetchPolicyRefusals } from "../../data/subgraph";
 import { truncateHash, usdc6 } from "../../format";
 import { createEnsTextReader } from "../../../../mcp/src/ens";
 import { gatewayQuery, stripMeta } from "../../../../mcp/src/gateway";
-import { defaultChainHeadResolver } from "../../../../mcp/src/chainhead";
 import {
   attestDelivery,
   claimTimeout,
@@ -216,6 +215,18 @@ export function clampDeadline(requested: number): number {
   return Math.max(requested, 360);
 }
 
+/**
+ * The staleness floor for the sandbox job, anchored to the DELIVERED block:
+ * floor = metaBlock + 1, so this exact deliverable can never clear it and the
+ * hook must refuse completion. Head-anchored floors fail deterministically on
+ * a caught-up indexer (live-observed 2026-09-12: a head+1 floor was overtaken
+ * by the delivered metaBlock within seconds — arbitrum advances ~4 blocks/s
+ * between the buy-time head read and the deliver-time gateway _meta).
+ */
+export function staleFloor(deliveredBlock: number): number {
+  return deliveredBlock + 1;
+}
+
 function parseDeadline(argv: string[]): { seconds: number } | { error: string } {
   const raw = flagValue(argv, "--deadline");
   if (raw === undefined) return { seconds: 120 };
@@ -230,7 +241,7 @@ const staleCommand: Command = {
   name: "sandbox stale",
   args: "[--deadline <secs>]",
   help:
-    "built-to-fail job at floor = chain head (any indexer lag is stale): attest the TRUE below-floor _meta as the hook ATTESTER (role-play, spec §5.3b), capture the SlaNotMet revert from a simulated complete() as evidence, then arm the refund claim",
+    "built-to-fail job whose SLA floor is the delivered _meta.block + 1 (this exact deliverable can never clear it): attest it as the hook ATTESTER (role-play, spec §5.3b), capture the SlaNotMet revert from a simulated complete() as evidence, then arm the refund claim",
   kind: "sandbox",
   run: async (ctx, argv) => {
     const parsed = parseDeadline(argv);
@@ -265,25 +276,48 @@ const staleCommand: Command = {
       return { render: "kv", data: { rows: [...rows, ["ens price", `✗ ${reason(error)}`]] } };
     }
 
-    // Floor = the dataset-chain head: any subgraph indexer lag delivers a
-    // _meta.block BELOW the floor, so the hook must refuse completion.
-    let head: number;
+    // Capture the deliverable FIRST: its TRUE _meta.block becomes the floor
+    // reference. The chain race is real and live-observed (2026-09-12): the
+    // studio indexer sits at the arbitrum head, and the head advances ~4
+    // blocks/s between buy and deliver — a head-anchored floor (even head+1)
+    // is overtaken by the delivered metaBlock within seconds. Anchoring the
+    // floor to the DELIVERED block (+1) makes the refusal deterministic: the
+    // SLA is written so this exact deliverable cannot clear it.
+    let payloadHash: `0x${string}`;
+    let metaBlock: number;
     try {
-      head = await defaultChainHeadResolver(undefined)(dataset.chain);
-      rows.push(["chain head", `${head.toLocaleString("en-US")} (${dataset.chain})`]);
+      const { data, meta } = await gatewayQuery({
+        key: env.graphKey,
+        subgraphId: dataset.subgraphId,
+        query: defaultQueryFor(dataset),
+      });
+      if (meta.block === null || meta.block === undefined) {
+        return {
+          render: "kv",
+          data: {
+            rows: [...rows, ["delivery", "✗ no _meta in the gateway payload — nothing to attest"]],
+          },
+        };
+      }
+      payloadHash = keccak256(toBytes(JSON.stringify(stripMeta(data))));
+      metaBlock = meta.block;
+      rows.push(["payloadHash", truncateHash(payloadHash, 12, 10)]);
+      rows.push(["metaBlock", metaBlock.toLocaleString("en-US")]);
     } catch (error) {
-      return { render: "kv", data: { rows: [...rows, ["chain head", `✗ ${reason(error)} — floor unknown, sandbox refused`]] } };
+      return { render: "kv", data: { rows: [...rows, ["delivery", `✗ query failed: ${reason(error)}`]] } };
     }
+
+    const floor = staleFloor(metaBlock);
     const sla: Sla = {
-      minBlock: head,
+      minBlock: floor,
       schemaHash: keccak256(toBytes(dataset.schema)),
       maxLatencyMs: quote.maxLatencyMs,
     };
-    rows.push(["sla floor", `${head.toLocaleString("en-US")} = head (maxBlockLag 0 — any lag is stale)`]);
+    rows.push(["sla floor", `${floor.toLocaleString("en-US")} = delivered metaBlock + 1 — this exact deliverable (${metaBlock.toLocaleString("en-US")}) can never clear it`]);
 
     const expirySeconds = clampDeadline(requested);
     if (requested !== expirySeconds) {
-      rows.push(["deadline", `${requested}s requested — clamped to ${expirySeconds}s (escrow floor 5 min, ExpiryTooShort)`]);
+      rows.push(["deadline clamp", `${requested}s requested — clamped to ${expirySeconds}s (escrow floor 5 min, ExpiryTooShort)`]);
     }
 
     let jobId: bigint;
@@ -305,32 +339,6 @@ const staleCommand: Command = {
       };
     }
     rows.push(["job", jobId.toString()]);
-
-    // deliver: capture the payload + TRUE _meta block, submit onchain
-    let payloadHash: `0x${string}`;
-    let metaBlock: number;
-    try {
-      const { data, meta } = await gatewayQuery({
-        key: env.graphKey,
-        subgraphId: dataset.subgraphId,
-        query: defaultQueryFor(dataset),
-      });
-      if (meta.block === null || meta.block === undefined) {
-        return {
-          render: "kv",
-          data: {
-            rows: [...rows, ["delivery", "✗ no _meta in the gateway payload — nothing to attest"]],
-          },
-        };
-      }
-      payloadHash = keccak256(toBytes(JSON.stringify(stripMeta(data))));
-      metaBlock = meta.block;
-      rows.push(["payloadHash", truncateHash(payloadHash, 12, 10)]);
-      rows.push(["metaBlock", metaBlock.toLocaleString("en-US")]);
-      rows.push(["stale", metaBlock < head ? `yes — metaBlock ${metaBlock} < floor ${head}` : `no — metaBlock ${metaBlock} ≥ floor ${head} (subgraph caught up)`]);
-    } catch (error) {
-      return { render: "kv", data: { rows: [...rows, ["delivery", `✗ query failed: ${reason(error)}`]] } };
-    }
     try {
       await submitDeliverable(ctx.publicClient, signer.wallet, jobId, payloadHash);
       rows.push(["submit", "onchain (job → Submitted)"]);
@@ -353,9 +361,10 @@ const staleCommand: Command = {
 
     let evidence: string | null = null;
     let evidenceData: `0x${string}` | undefined;
-    if (attested && metaBlock < head) {
-      // simulate the evaluator's complete() — expect the hook to REVERT
-      // SlaNotMet. No tx is sent; the revert data is the evidence.
+    if (attested) {
+      // simulate the evaluator's complete() — the hook MUST revert
+      // SlaNotMet (the floor is one block past the delivered metaBlock).
+      // No tx is sent; the revert data is the evidence.
       try {
         await ctx.publicClient.simulateContract({
           address: ADDR.escrow,
@@ -364,7 +373,7 @@ const staleCommand: Command = {
           args: [jobId, reasonHash("SLA_MET"), "0x"],
           account: signer.address,
         });
-        rows.push(["simulate complete", "no revert — the delivery cleared the floor (subgraph caught up); nothing to show as refusal"]);
+        rows.push(["simulate complete", "no revert — unexpected: the hook did not refuse a below-floor attestation"]);
       } catch (error) {
         // viem nests the raw revert hex on a cause-chain node
         // (ContractFunctionRevertedError.raw / RawContractError.data) — the
