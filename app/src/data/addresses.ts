@@ -18,4 +18,6 @@ export const OUR_ADDRESSES: `0x${string}`[] = [
   ADDR.operator, // operator (seller) key — provider side of every OpenBook job
   "0xAC548CFEfe70bb3199ee214F39bC9730a8A754De", // historical CLI buyer / treasury admin — keeps README-cited jobs (e.g. 185853) in the books
   ...((env.VITE_DEMO_BUYER_ADDRESS as string | undefined)?.split(",").filter(Boolean) as `0x${string}`[] ?? []), // demo buyer key's address (comma-separated ok)
+  // the page's Circle wallets (buyer pays, seller delivers): their jobs are the page's own runs
+  ...([env.VITE_CIRCLE_BUYER_ADDRESS, env.VITE_CIRCLE_SELLER_ADDRESS].filter((a): a is string => typeof a === "string" && /^0x[0-9a-fA-F]{40}$/.test(a)) as `0x${string}`[]),
 ];

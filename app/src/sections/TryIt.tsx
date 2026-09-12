@@ -167,7 +167,8 @@ export function TryIt({ armed, onArmedConsumed }: { armed: "fresh" | "fail" | nu
             arrives, so the contract has to refuse payment and the escrow refunds. The buyer is a Circle
             developer-controlled wallet on Arc that we fund with testnet USDC; the seller is a second Circle wallet,
             the one the dataset's ENS record names as payee. Every transaction is signed on the server through
-            Circle, with gas sponsored by Circle Gas Station.
+            Circle, with gas sponsored by Circle Gas Station. The venue's attester adjudicates each job: it signs
+            the block it observed, and the contract enforces that signed block against the floor.
           </p>
         </div>
         <div className="try__run">

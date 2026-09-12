@@ -43,7 +43,9 @@ const SERVICE_KEYS = ["svc.menu", "svc.price", "svc.sla", "svc.payee", "svc.oper
 /** The app's OWN Sepolia reader + enumeration client, shared across polls
  *  (never the directory module's default client). */
 const marketEnsReader = createEnsTextReader({ rpcUrl: env.sepoliaRpc });
-const directoryClient = createDirectoryClient(env.sepoliaRpc);
+// the seller directory scans LabelRegistered logs in 2000-block ranges: the public RPC serves them,
+// the keyed proxy caps eth_getLogs at 10 blocks, so this client does not start on the proxy
+const directoryClient = createDirectoryClient(undefined);
 
 /** One seller row: ENS identity + records + per-dataset prices + subgraph stats. */
 export interface MarketSellerRow {

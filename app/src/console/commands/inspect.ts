@@ -13,7 +13,7 @@
 import { marketJobs } from "../../data/feed";
 import { CONFIG, type DatasetConfig } from "../../config";
 import { env } from "../../env";
-import { hasGatewayAccess } from "../../data/api";
+import { circleStatus, hasGatewayAccess } from "../../data/api";
 import { ADDR } from "../../data/addresses";
 import { demoAddress } from "../../data/chain";
 import { readPolicy } from "../../data/policy";
@@ -214,8 +214,13 @@ const statusCommand: Command = {
       rows.push([row.key, row.value]);
     }
     const demo = demoAddress();
+    const circle = await circleStatus();
+    if (circle.enabled && circle.buyer) {
+      rows.push(["buyer wallet", `Circle developer-controlled SCA ${circle.buyer} · signed on the server · ${circle.gas}`]);
+      if (circle.seller) rows.push(["seller wallet", `Circle developer-controlled SCA ${circle.seller} (the dataset's svc.payee)`]);
+    }
     if (demo === null) {
-      rows.push(["demo wallet", "unset · set VITE_DEMO_BUYER_KEY (act commands then degrade to wallet-connect)"]);
+      if (!circle.enabled) rows.push(["demo wallet", "unset · set VITE_DEMO_BUYER_KEY (act commands then degrade to wallet-connect)"]);
     } else {
       try {
         const balance = await ctx.publicClient.readContract({
@@ -282,7 +287,7 @@ const ensCanEditCommand: Command = {
     if (!name || !key || !address || !/^0x[0-9a-fA-F]{40}$/.test(address)) {
       return { render: "text", data: "usage: ens can-edit <name> <key> <0xaddress> · e.g. ens can-edit alpha.openbook.eth svc.price 0xe09C8F90931E97d0aEE998885b306DDF08CE08Cc" };
     }
-    const client = createDirectoryClient(env.sepoliaRpc);
+    const client = createDirectoryClient(env.sepoliaRpc); // one eth_call: the proxy is fine here
     const node = namehash(name);
     let verdict: string;
     let detail: string;

@@ -95,7 +95,7 @@ are organs, not stickers:
   **Sustainable by construction:** a configurable platform fee (2% on our
   escrow instance) routes every settlement's cut to the policy-gated treasury —
   verified onchain: the settlement receipt splits 0.0020 USDC to the
-  PolicyWallet and 0.0980 to the seller (tx `0xb4fbc894…`).
+  PolicyWallet and 0.0980 to the seller ([tx `0xb4fbc894…`](https://testnet.arcscan.app/tx/0xb4fbc8949598c9d940a8152618d891c545ab3be2cca94db9886fca07810c5512)).
 - **The Graph (the product):** `sla-subgraph-mcp`, a generic MCP server with a
   packaged, node-runnable bin (npm publishing is the one-line post-freeze step)
   that turns any subgraph into a paid, freshness-gated product; OpenBook is the reference
@@ -217,7 +217,7 @@ Service, so no destination gas is needed:
 (`bun scripts/circle/fund-buyer.ts 2.00`). A Gateway Unified Balance
 [deposit](https://sepolia.arbiscan.io/tx/0x577395fb4f7e51afde9b69f034b2667034f3d40b1f5fff061f7c0282899ab701)
 from the same treasury was then [spent on Arc](https://testnet.arcscan.app/tx/0xa956aabeb35342b8c03d7e728a60511f24dcae1793f4885ba290ea54cf196156)
-to the buyer wallet (1 USDC, allocated from the Arbitrum Sepolia deposit, fees 0.011 USDC).
+to the buyer wallet (1 USDC, allocated from the Arbitrum Sepolia deposit). Bridge and Gateway are treasury operations that fund the buyer; the purchase itself runs on the escrow.
 Source-chain testnet USDC comes from Circle's faucet API. The full product-by-product map for all three bounties is
 [docs/bounty-tech-map.md](docs/bounty-tech-map.md).
 
@@ -331,7 +331,9 @@ fresh clone, not inferred from the code.
   the ENSv2 storefront.
 - **Circle Wallets and Gas Station, not the Agent Stack CLI or Nanopayments.** The page's
   buyer and seller are Circle developer-controlled wallets with sponsored gas (verified live:
-  the seller wallet holds no USDC for gas and still submits). Per-query spend goes through
+  the seller wallet held no USDC when it first submitted, and every buyer and seller
+  operation goes through the EntryPoint with Circle's SponsorPaymaster paying, e.g. job 86
+  [submit](https://testnet.arcscan.app/tx/0x66135a8c6ec289d165023a16bb86bd53d478aa3a6c95f888a939bea2b46b6638)). Per-query spend goes through
   the ERC-8183 escrow, not x402, because the product is the refund, which x402 cannot
   express. An x402 lane for agents that want no recourse, and a Circle Agent Wallet buyer
   through the Agent Stack CLI, are the next steps in RUNBOOK.md.

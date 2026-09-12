@@ -16,6 +16,8 @@ flowchart LR
         FE[Frontend app · openbook.litai.ca<br/>one page: the latest refund · keyless buy / make-it-fail<br/>market · public books · console<br/>signs nothing: no key in the bundle]
         CW["Circle Wallets (developer-controlled, SCA) on Arc<br/>buyer: createJob · approve · fund<br/>seller: setBudget · submit<br/>gas: Circle Gas Station · driven by /api/circle/*"]
         FE -->|"buy / submit"| CW
+        TR["Treasury ops (scripts/circle)<br/>App Kit Bridge, CCTP v2 + Forwarding Service<br/>Gateway Unified Balance deposit → spend on Arc<br/>fund the buyer wallet from another chain"]
+        TR -.->|"USDC"| CW
     end
 
     subgraph ENSv2["ENSv2 · Sepolia (hard-fail gateway)"]
