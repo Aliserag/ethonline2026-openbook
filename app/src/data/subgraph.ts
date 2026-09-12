@@ -51,66 +51,80 @@ export function fetchJobs(
   fetchImpl?: FetchLike,
 ): Promise<JobView[]> {
   const endpoint = CONFIG.pnl.endpoint.replace("{GRAPH_GATEWAY_KEY}", key ?? "");
-  const ours = OURS.size > 0 ? OURS : new Set([OUR_ADDRESSES[0]?.toLowerCase()]);
+  const ours = OUR_ADDRESSES.length > 0 ? OURS : new Set(["0x0"]);
   const oursList = [...ours].map((a) => JSON.stringify(a)).join(", ");
-  const query = `{
+  // Round 1: the scoped paid rows (the marquee heap — no global windows).
+  const paidQuery = `{
   queryPaids(first: 200, orderBy: timestamp, orderDirection: desc,
     where: { or: [{ seller_in: [${oursList}] }, { buyer_in: [${oursList}] }] }) {
     id jobId buyer seller amount minBlock deadline blockNumber timestamp
   }
-  fulfilleds(first: 200, orderBy: jobId, orderDirection: desc) { id jobId payloadHash metaBlock }
-  settleds(first: 200, orderBy: jobId, orderDirection: desc) { id jobId seller amount }
-  refundIssueds(first: 20, orderBy: id, orderDirection: desc) { id jobId reason }
   _meta { block { number } }
 }`;
-  return hostedQuery({ url: endpoint, query, fetchImpl }).then(({ data }) => {
-    const root = (typeof data === "object" && data !== null ? data : {}) as Record<string, unknown>;
-    const paidRows = (Array.isArray(root["queryPaids"]) ? root["queryPaids"] : []) as QueryPaidRaw[];
-    const fulfilledRows = (Array.isArray(root["fulfilleds"]) ? root["fulfilleds"] : []) as FulfilledRaw[];
-    const settledRows = (Array.isArray(root["settleds"]) ? root["settleds"] : []) as SettledRaw[];
-    const refundRows = (Array.isArray(root["refundIssueds"]) ? root["refundIssueds"] : []) as RefundRaw[];
+  return hostedQuery({ url: endpoint, query: paidQuery, fetchImpl }).then(
+    ({ data: paidData }) => {
+      const paidRoot = (typeof paidData === "object" && paidData !== null ? paidData : {}) as Record<string, unknown>;
+      const paidRows = (Array.isArray(paidRoot["queryPaids"]) ? paidRoot["queryPaids"] : []) as QueryPaidRaw[];
+      if (paidRows.length === 0) return [];
+      const jobIds = paidRows.map((row) => big(row["jobId"]).toString());
+      // Round 2: per-job event windows bound to the RETURNED jobIds — a refund
+      // for any of our jobs can never be evicted by a global first-N window.
+      const eventsQuery = `{
+  fulfilleds(where: { jobId_in: [${jobIds.join(", ")}] }) { id jobId payloadHash metaBlock }
+  settleds(where: { jobId_in: [${jobIds.join(", ")}] }) { id jobId seller amount }
+  refundIssueds(where: { jobId_in: [${jobIds.join(", ")}] }) { id jobId reason }
+}`;
+      return hostedQuery({ url: endpoint, query: eventsQuery, fetchImpl }).then(
+        ({ data: eventsData }) => {
+          const eventsRoot = (typeof eventsData === "object" && eventsData !== null ? eventsData : {}) as Record<string, unknown>;
+          const fulfilledRows = (Array.isArray(eventsRoot["fulfilleds"]) ? eventsRoot["fulfilleds"] : []) as FulfilledRaw[];
+          const settledRows = (Array.isArray(eventsRoot["settleds"]) ? eventsRoot["settleds"] : []) as SettledRaw[];
+          const refundRows = (Array.isArray(eventsRoot["refundIssueds"]) ? eventsRoot["refundIssueds"] : []) as RefundRaw[];
 
-    const fulfilledByJob = new Map<string, { payloadHash: `0x${string}`; metaBlock: number }>();
-    for (const f of fulfilledRows) {
-      fulfilledByJob.set(big(f["jobId"]).toString(), {
-        payloadHash: str(f["payloadHash"]).toLowerCase() as `0x${string}`,
-        metaBlock: Number(big(f["metaBlock"])),
-      });
-    }
-    const settled = new Set(settledRows.map((s) => big(s["jobId"]).toString()));
-    const refundReason = new Map<string, string>();
-    for (const r of refundRows) refundReason.set(big(r["jobId"]).toString(), str(r["reason"]));
+          const fulfilledByJob = new Map<string, { payloadHash: `0x${string}`; metaBlock: number }>();
+          for (const f of fulfilledRows) {
+            fulfilledByJob.set(big(f["jobId"]).toString(), {
+              payloadHash: str(f["payloadHash"]).toLowerCase() as `0x${string}`,
+              metaBlock: Number(big(f["metaBlock"])),
+            });
+          }
+          const settled = new Set(settledRows.map((s) => big(s["jobId"]).toString()));
+          const refundReason = new Map<string, string>();
+          for (const r of refundRows) refundReason.set(big(r["jobId"]).toString(), str(r["reason"]));
 
-    const jobs: JobView[] = [];
-    for (const row of paidRows) {
-      const jobId = big(row["jobId"]);
-      const key = jobId.toString();
-      const buyer = addr(row["buyer"]);
-      const seller = addr(row["seller"]);
-      if (!isOurs(buyer) && !isOurs(seller)) continue; // belt-and-suspenders scope
-      const fulfilled = fulfilledByJob.get(key);
-      const state: JobView["state"] = refundReason.has(key)
-        ? "refunded"
-        : settled.has(key)
-          ? "settled"
-          : "open";
-      jobs.push({
-        jobId,
-        buyer,
-        seller,
-        amount: big(row["amount"]),
-        minBlock: big(row["minBlock"]),
-        deadline: big(row["deadline"]),
-        blockNumber: big(row["blockNumber"]),
-        timestamp: Number(big(row["timestamp"])),
-        state,
-        payloadHash: fulfilled?.payloadHash,
-        metaBlock: fulfilled?.metaBlock,
-        refundReason: refundReason.get(key),
-      });
-    }
-    return jobs;
-  });
+          const jobs: JobView[] = [];
+          for (const row of paidRows) {
+            const jobId = big(row["jobId"]);
+            const key = jobId.toString();
+            const buyer = addr(row["buyer"]);
+            const seller = addr(row["seller"]);
+            if (!isOurs(buyer) && !isOurs(seller)) continue; // belt-and-suspenders scope
+            const fulfilled = fulfilledByJob.get(key);
+            const state: JobView["state"] = refundReason.has(key)
+              ? "refunded"
+              : settled.has(key)
+                ? "settled"
+                : "open";
+            jobs.push({
+              jobId,
+              buyer,
+              seller,
+              amount: big(row["amount"]),
+              minBlock: big(row["minBlock"]),
+              deadline: big(row["deadline"]),
+              blockNumber: big(row["blockNumber"]),
+              timestamp: Number(big(row["timestamp"])),
+              state,
+              payloadHash: fulfilled?.payloadHash,
+              metaBlock: fulfilled?.metaBlock,
+              refundReason: refundReason.get(key),
+            });
+          }
+          return jobs;
+        },
+      );
+    },
+  );
 }
 
 export interface JobEventView {

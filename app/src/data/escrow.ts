@@ -36,25 +36,36 @@ const USDC_TRANSFER_ABI = [
 
 /**
  * Split a settlement receipt by its actual USDC Transfer logs: transfers to
- * ADDR.policy are the platform cut, every other outgoing transfer is the
- * seller's. Throws when the logs do not match the fee rate exactly.
+ * ADDR.policy are the platform cut, transfers to the job's provider (seller)
+ * are theirs, and any other recipient is unexpected — the receipt is not the
+ * settlement we think it is. Throws when the logs do not match the fee rate
+ * exactly.
  */
-export function feeSplitFromReceipt(receipt: TransactionReceipt, feeBP: number): FeeSplit {
+export function feeSplitFromReceipt(
+  receipt: TransactionReceipt,
+  feeBP: number,
+  provider: `0x${string}`,
+): FeeSplit {
   const usdc = ADDR.usdc.toLowerCase();
   const treasuryAddr = ADDR.policy.toLowerCase();
+  const providerAddr = provider.toLowerCase();
   let treasury = 0n;
   let seller = 0n;
+  let haveTransfer = false;
   for (const log of receipt.logs) {
     if (!log.address || log.address.toLowerCase() !== usdc) continue;
     if (!log.topics || log.topics[0] !== USDC_TRANSFER_TOPIC) continue;
     const decoded = decodeEventLog({ abi: USDC_TRANSFER_ABI, data: log.data, topics: log.topics });
     if (decoded.eventName !== "Transfer") continue;
+    haveTransfer = true;
     const { to, value } = decoded.args;
-    if (to.toLowerCase() === treasuryAddr) treasury += value;
-    else seller += value;
+    const recipient = to.toLowerCase();
+    if (recipient === treasuryAddr) treasury += value;
+    else if (recipient === providerAddr) seller += value;
+    else throw new Error(`fee split: unexpected transfer recipient ${to}`);
   }
   const total = treasury + seller;
-  if (total === 0n) {
+  if (!haveTransfer) {
     throw new Error(`fee split: no USDC transfer logs in receipt`);
   }
   const expected = (total * BigInt(feeBP)) / 10_000n;

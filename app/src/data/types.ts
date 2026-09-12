@@ -1,5 +1,7 @@
 /** Shared vocabulary for every live surface. Live<T> is the one contract all
  *  readers (map nodes, drawers, console renderers) consume. */
+import type { DeliveryVerdict } from "../../../mcp/src/escrow";
+
 export type LiveState = "live" | "loading" | "stale" | "error";
 
 export interface Live<T> {
@@ -33,3 +35,6 @@ export interface FeeSplit {
 }
 
 export type SignerKind = "demo" | "injected" | "none";
+
+/** Delivery verdict — re-exported verbatim from mcp/src/escrow (decideDelivery's return). */
+export type Verdict = DeliveryVerdict;
