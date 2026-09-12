@@ -9,8 +9,10 @@
 import { keccak256, toBytes, type PublicClient, type WalletClient } from "viem";
 import { CONFIG, defaultQueryFor, type DatasetConfig } from "../config";
 import { env } from "../env";
-import { attestViaApi, deliverViaApi, hasGatewayAccess } from "../data/api";
+import { truncateHash } from "../format";
+import { attestViaApi, deliverViaApi, hasGatewayAccess, recoverProofSigner, type Settlement } from "../data/api";
 import { ADDR } from "../data/addresses";
+import { readHookAttester } from "../data/hook";
 import { getPublicClient } from "../data/chain";
 import { feeSplitFromReceipt, platformFee } from "../data/escrow";
 import type { FeeSplit } from "../data/types";
@@ -63,8 +65,13 @@ export interface PurchaseDeps {
     trace: string[],
   ): Promise<bigint>;
   query(dataset: DatasetConfig): Promise<{ payloadHash: `0x${string}`; metaBlock: number; preview?: string; proof: string }>;
+  /** who signed the delivery observation, recovered from the proof (null when unsigned) */
+  proofSigner(payloadHash: `0x${string}`, metaBlock: number, proof: string): Promise<`0x${string}` | null>;
+  /** the hook's attester onchain: the job's evaluator on every page purchase */
+  attester(): Promise<`0x${string}`>;
   submit(jobId: bigint, payloadHash: `0x${string}`): Promise<`0x${string}`>;
-  attest(jobId: bigint, payloadHash: `0x${string}`, metaBlock: number, minBlock: number, proof: string): Promise<`0x${string}`>;
+  /** posts the freshness proof; `settle` is present when the attester, as evaluator, completed or refunded in the same call */
+  attest(jobId: bigint, payloadHash: `0x${string}`, metaBlock: number, minBlock: number, proof: string): Promise<{ txHash: `0x${string}`; settle?: Settlement }>;
   simulateComplete(jobId: bigint): Promise<{ reverted: boolean; reason?: string }>;
   verify(input: { jobId: string; payloadHash: `0x${string}`; metaBlock: number; minBlock: number }): Promise<{
     verdict: "APPROVE" | "REJECT";
@@ -120,10 +127,12 @@ export async function liveDeps(publicClient: PublicClient = getPublicClient()): 
     chainHead: (chain) => defaultChainHeadResolver(undefined)(chain),
     createJob: async (p, trace) => {
       const w = tracedWallet(needWallet(), trace);
+      // the venue's attester adjudicates: it is the evaluator, so it can pay or refund
+      const evaluator = await readHookAttester(publicClient);
       return createJobWithSla(publicClient, {
         buyer: w,
         provider: w,
-        evaluator: (signer as Signer).address,
+        evaluator,
         sla: { minBlock: p.minBlock, schemaHash: p.schemaHash, maxLatencyMs: p.maxLatencyMs },
         amount6dec: p.amount,
         expirySeconds: 3600,
@@ -134,6 +143,8 @@ export async function liveDeps(publicClient: PublicClient = getPublicClient()): 
       const d = await deliverViaApi({ subgraphId: dataset.subgraphId, query: defaultQueryFor(dataset) });
       return { payloadHash: d.payloadHash, metaBlock: d.metaBlock, preview: previewOf(d.data), proof: d.proof };
     },
+    proofSigner: recoverProofSigner,
+    attester: () => readHookAttester(publicClient),
     submit: async (jobId, hash) => (await submitDeliverable(publicClient, needWallet(), jobId, hash)).transactionHash,
     // the attester key lives on the server; it verifies the job onchain first
     attest: (jobId, hash, metaBlock, minBlock, proof) =>
@@ -246,6 +257,8 @@ export async function runPurchase(
   const schemaHash = keccak256(toBytes(dataset.schema));
   let delivered: { payloadHash: `0x${string}`; metaBlock: number; preview?: string; proof: string } | null = null;
 
+  let signedBy = "";
+  let observedBy: `0x${string}` | null = null;
   const deliver = async (): Promise<PurchaseResult | null> => {
     emit({ step: "deliver", status: "running" });
     if (!d.hasGatewayKey) {
@@ -256,10 +269,20 @@ export async function runPurchase(
     } catch (error) {
       return fail("deliver", `The data query failed: ${plainReason(error)}`);
     }
+    // who observed the block: recover the signer from the proof and compare with the hook's attester
+    const observer = await d.proofSigner(delivered.payloadHash, delivered.metaBlock, delivered.proof);
+    if (observer !== null) {
+      const attester = await d.attester();
+      if (observer.toLowerCase() !== attester.toLowerCase()) {
+        return fail("deliver", `The delivery was signed by ${truncateHash(observer)}, not by the hook's attester ${truncateHash(attester)}.`);
+      }
+      signedBy = ` · observed and signed by the attester ${truncateHash(attester)} (signature verified here)`;
+      observedBy = observer;
+    }
     emit({
       step: "deliver",
       status: "done",
-      detail: `indexed at block ${delivered.metaBlock.toLocaleString("en-US")}${delivered.preview ? ` · ${delivered.preview}` : ""}`,
+      detail: `indexed at block ${delivered.metaBlock.toLocaleString("en-US")}${delivered.preview ? ` · ${delivered.preview}` : ""}${signedBy}`,
       data: { metaBlock: String(delivered.metaBlock), payloadHash: delivered.payloadHash, ...(delivered.preview ? { rows: delivered.preview } : {}) },
     });
     return null;
@@ -323,26 +346,32 @@ export async function runPurchase(
   } catch (error) {
     return fail("verdict", `The delivery could not be recorded onchain: ${plainReason(error)}`);
   }
+  const attesterRow: Record<string, string> = observedBy ? { attester: observedBy } : {};
   emit({
     step: "deliver",
     status: "done",
-    detail: `indexed at block ${dl.metaBlock.toLocaleString("en-US")}${dl.preview ? ` · ${dl.preview}` : ""} · recorded onchain`,
+    detail: `indexed at block ${dl.metaBlock.toLocaleString("en-US")}${dl.preview ? ` · ${dl.preview}` : ""} · recorded onchain${signedBy}`,
     txHash: submitTx,
-    data: { metaBlock: String(dl.metaBlock), payloadHash: dl.payloadHash, submitTx, ...(dl.preview ? { rows: dl.preview } : {}) },
+    data: { metaBlock: String(dl.metaBlock), payloadHash: dl.payloadHash, submitTx, ...(dl.preview ? { rows: dl.preview } : {}), ...(attesterRow) },
   });
-  let attestTx: `0x${string}`;
+  let attested: { txHash: `0x${string}`; settle?: Settlement };
   try {
-    attestTx = await d.attest(jobId, dl.payloadHash, dl.metaBlock, minBlock, dl.proof);
+    attested = await d.attest(jobId, dl.payloadHash, dl.metaBlock, minBlock, dl.proof);
   } catch (error) {
     return fail("verdict", `The freshness proof could not be posted: ${plainReason(error)}`);
   }
+  const attestTx = attested.txHash;
   const fresh = dl.metaBlock >= minBlock;
   let verdictDetail = fresh
     ? `block ${dl.metaBlock.toLocaleString("en-US")} clears the floor ${minBlock.toLocaleString("en-US")}`
     : `block ${dl.metaBlock.toLocaleString("en-US")} is below the floor ${minBlock.toLocaleString("en-US")}`;
   if (!fresh) {
-    const sim = await d.simulateComplete(jobId);
-    if (sim.reverted) verdictDetail += ` · the contract refuses to pay: complete() reverts ${sim.reason ?? ""} (checked by simulation, no transaction)`;
+    if (attested.settle?.refusal) {
+      verdictDetail += ` · the contract refuses to pay: complete() reverts ${attested.settle.refusal} (the adjudicator asked before refunding)`;
+    } else {
+      const sim = await d.simulateComplete(jobId);
+      if (sim.reverted) verdictDetail += ` · the contract refuses to pay: complete() reverts ${sim.reason ?? ""} (checked by simulation, no transaction)`;
+    }
   }
   emit({
     step: "verdict",
@@ -354,18 +383,27 @@ export async function runPurchase(
 
   emit({ step: "settle", status: "running" });
   let verdict: Awaited<ReturnType<PurchaseDeps["verify"]>>;
-  try {
-    verdict = await d.verify({ jobId: String(jobId), payloadHash: dl.payloadHash, metaBlock: dl.metaBlock, minBlock });
-  } catch (error) {
-    return fail("settle", plainReason(error));
+  if (attested.settle) {
+    // the attester is the evaluator: it already completed or refunded in the attest call
+    verdict = { verdict: attested.settle.verdict, reason: attested.settle.reason, minBlock, txHash: attested.settle.txHash };
+  } else {
+    try {
+      verdict = await d.verify({ jobId: String(jobId), payloadHash: dl.payloadHash, metaBlock: dl.metaBlock, minBlock });
+    } catch (error) {
+      return fail("settle", plainReason(error));
+    }
   }
   const outcome: "settled" | "refunded" = verdict.verdict === "APPROVE" ? "settled" : "refunded";
+  const byAdjudicator = attested.settle !== undefined;
   emit({
     step: "settle",
     status: "done",
-    detail: outcome === "settled" ? "the seller is paid" : "the buyer is refunded in full",
+    detail:
+      outcome === "settled"
+        ? byAdjudicator ? "the adjudicator's complete() paid the seller" : "the seller is paid"
+        : byAdjudicator ? "the adjudicator's reject() refunded the buyer in full, in the same step as the refusal" : "the buyer is refunded in full",
     txHash: verdict.txHash,
-    data: { verdict: verdict.verdict, reason: verdict.reason ?? "" },
+    data: { verdict: verdict.verdict, reason: verdict.reason ?? "", ...(byAdjudicator ? { settledBy: "the hook's attester, as the job's evaluator" } : {}) },
   });
   const result: PurchaseResult = {
     ok: true,

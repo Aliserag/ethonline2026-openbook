@@ -1,5 +1,5 @@
 import { useEffect, useRef, type JSX } from "react";
-import { boardRows, totals, useFeed, type BoardRow } from "../data/feed";
+import { boardRows, totalsWithRuns, useFeed, type BoardRow } from "../data/feed";
 import { useSessionRuns } from "../flow/session";
 import { useLiveValue } from "../ui/useLiveValue";
 import { getPublicClient } from "../data/chain";
@@ -66,7 +66,7 @@ export function Books(): JSX.Element {
   const sellers = useLiveValue(readSellers, { pollMs: 120_000, staleAfterMs: 360_000, cacheKey: "market.sellers" });
   const jobs = feed.value?.jobs ?? [];
   const rows = boardRows(jobs, runs, 12, sellerNameMap(sellers.value));
-  const t = totals(jobs, fee.value?.feeBP ?? 200);
+  const t = totalsWithRuns(jobs, runs, fee.value?.feeBP ?? 200);
   const seen = useRef<Set<string>>(new Set());
   const primed = useRef(false);
   const fresh = new Set(primed.current ? rows.filter((r) => !seen.current.has(r.jobId)).map((r) => r.jobId) : []);

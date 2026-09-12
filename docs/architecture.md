@@ -42,7 +42,7 @@ flowchart LR
     end
 
     SP[scripts/stale-proxy.ts<br/>replays cached old _meta<br/>deterministic money shot]
-    API["page server routes (app/worker)<br/>/api/subgraph cache · /api/query Gateway key<br/>/api/attest: the hook attester key, verifies the job onchain first"]
+    API["page server routes (app/worker)<br/>/api/subgraph cache · /api/deliver: Gateway key, signs the observed block (EIP-191)<br/>/api/attest: the hook attester, verifies the job onchain, then settles as the job's evaluator (complete or reject)"]
     FE -->|"query · attest"| API
     API --> GW
     API -->|"attest(jobId, hash, metaBlock, minBlock)"| HOOK

@@ -28,6 +28,7 @@ import { readPolicy } from "../data/policy";
 import { fetchJobsShared, fetchLagShared, scopedTotals } from "../data/subgraph";
 import { STUDIO_GATE } from "../data/cache";
 import { useLiveValue } from "../ui/useLiveValue";
+import { resolveDatasetQuote } from "../console/commands/act";
 import { createEnsTextReader, parseSlaRecord } from "../../../mcp/src/ens";
 import { defaultChainHeadResolver } from "../../../mcp/src/chainhead";
 import { truncateHash, usdc6 } from "../format";
@@ -126,6 +127,8 @@ interface StorefrontRecords {
   payee: string | null;
   menu: string | null;
   maxBlockLag: number | null;
+  /** each dataset's live price at its own name (subname first, parent as fallback) */
+  datasets: string;
 }
 
 /** One ENSv2 storefront probe set, shared by the ens, mcp (and theater-adjacent) nodes. */
@@ -145,7 +148,17 @@ const storefrontCached = ttl(async (): Promise<StorefrontRecords> => {
       // unreadable record — shown as "—", never an invented figure
     }
   }
-  return { price, sla, payee, menu, maxBlockLag };
+  const quotes = await Promise.all(
+    CONFIG.datasets.map(async (d) => {
+      try {
+        const q = await resolveDatasetQuote(d, reader);
+        return `${d.id} ${q.price.replace("/query", "")}`;
+      } catch {
+        return `${d.id} ✗`;
+      }
+    }),
+  );
+  return { price, sla, payee, menu, maxBlockLag, datasets: quotes.join(" · ") };
 }, 12_000);
 
 /** PolicyWallet caps/spend, shared by the agent + policy nodes (15s TTL). */
@@ -168,7 +181,8 @@ async function readEnsNode(): Promise<NodeLiveData> {
     summary: records.price ?? "✗ svc.price",
     rows: [
       ["name", CONFIG.ens],
-      ["svc.price", records.price ?? "✗ unset"],
+      ["svc.price (parent)", records.price ?? "✗ unset"],
+      ["dataset prices", records.datasets],
       ["svc.sla", records.sla ?? "✗ unset"],
       ["maxBlockLag", records.maxBlockLag !== null ? `${records.maxBlockLag} blocks` : "·"],
       ["svc.payee", records.payee ?? "✗ unset"],
@@ -228,7 +242,8 @@ async function readMcpNode(): Promise<NodeLiveData> {
     rows: [
       ["name", "sla-subgraph-mcp"],
       ["menu", menuCell],
-      ["ens price", records.price ?? "✗ unreadable"],
+      ["ens price (parent)", records.price ?? "✗ unreadable"],
+      ["dataset prices", records.datasets],
       ["sla", records.sla ?? "✗ unreadable"],
       ["arbitrum head", head !== null ? head.toLocaleString("en-US") : "✗ unreadable"],
     ],

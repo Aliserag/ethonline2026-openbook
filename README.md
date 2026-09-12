@@ -33,7 +33,7 @@ freshness guarantee they can charge for.
 OpenBook's mechanic: **SLA-bound payments.** Every query carries verifiable conditions
 committed at payment time (freshness block height, deliverable hash, deadline) through
 Arc's ERC-8183 escrow standard. Settlement checks them deterministically. **Miss the SLA and
-the refund executes onchain, automatically.** Money flows both ways.
+the hook blocks payment; the refund follows in the same step, onchain.** Money flows both ways.
 
 **Watch the money move backwards (one click, no wallet):** a delivery pinned to a stale
 `_meta` block got `REJECT (STALE_DATA)` and the escrow refunded the buyer on its own, 
@@ -182,9 +182,13 @@ buyer), **sandbox** (safe re-enactments on the same live contracts).
 commands, sign with the demo buyer key (`VITE_DEMO_BUYER_KEY` in `app/.env.local`):
 testnet USDC as play money, spent live against the real escrow. When the balance runs
 out, refill the demo buyer address at [faucet.circle.com](https://faucet.circle.com)
-(Arc Testnet). The SLA hook's attester is a separate key that never reaches the browser:
-the page asks `/api/attest`, which verifies the job, its floor and the submitted
-deliverable onchain before it posts the proof. The demo key is only ever the buyer.
+(Arc Testnet). The SLA hook's attester is a separate key that never reaches the browser, and it
+is the evaluator of every page purchase: `/api/deliver` signs what it observed (EIP-191,
+the page recovers the signer and checks it against the hook's `attester()`), and
+`/api/attest` verifies the job, its floor and the submitted deliverable onchain, posts the
+proof, asks the escrow whether `complete()` would pass, then sends `complete()` or
+`reject()` in the same request. The demo key only ever pays and submits; it cannot
+refund itself.
 
 **The marketplace.** Two reference sellers are live, both registered through the ENSv2
 storefront and priced by their own text records: `openbook.eth` (0.10 USDC/query, and
@@ -299,9 +303,11 @@ fresh clone, not inferred from the code.
   x402. Agent Wallets do support Arc testnet; we chose the escrow path because the product
   is the refund, which x402 cannot express. Moving the buyer onto an Agent Wallet is the
   first mainnet step in RUNBOOK.md.
-- **The hook's freshness fact is the operator's claim.** The attester key lives on the
-  server (`/api/attest`), which verifies the job, its floor and the submitted deliverable
-  onchain before it posts, but the delivered block itself is not independently proven.
+- **The hook's freshness fact is the operator's claim.** The attester signs the block it
+  observed and is also the job's evaluator, so the venue's key is the trust anchor. The
+  hook makes paying without an attestation above the floor impossible, and a buyer's worst
+  case is a refund at the deadline (`claimRefund`), never a lost payment. An attester
+  the venue does not control (a Gateway-signed `_meta`, or 2-of-2) is the next step.
 
 ## Status
 

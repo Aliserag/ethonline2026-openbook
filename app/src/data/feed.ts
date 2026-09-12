@@ -99,6 +99,24 @@ export function totals(jobs: JobView[], feeBP: number): Totals {
   return { settledCount, settledUsdc, refundedCount, refundedUsdc, feesUsdc: (settledUsdc * BigInt(feeBP)) / 10000n };
 }
 
+/** Totals with this session's finished runs the subgraph has not indexed yet. */
+export function totalsWithRuns(jobs: JobView[], runs: SessionRun[], feeBP: number): Totals {
+  const indexed = new Set(jobs.map((j) => j.jobId.toString()));
+  const t = totals(jobs, feeBP);
+  for (const r of runs) {
+    if (indexed.has(r.jobId)) continue;
+    if (r.outcome === "settled") {
+      t.settledCount += 1;
+      t.settledUsdc += r.amount;
+    } else if (r.outcome === "refunded") {
+      t.refundedCount += 1;
+      t.refundedUsdc += r.amount;
+    }
+  }
+  t.feesUsdc = (t.settledUsdc * BigInt(feeBP)) / 10000n;
+  return t;
+}
+
 export function boardRows(
   jobs: JobView[],
   runs: SessionRun[],

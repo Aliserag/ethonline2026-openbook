@@ -86,7 +86,7 @@ export function buildFrames(
   job: JobView,
   split: FeeSplit | null,
   heads: { arc: bigint; subgraph: bigint },
-  ens: { price: string; maxBlockLag: number },
+  ens: { name: string; price: string; maxBlockLag: number },
 ): Frame[] {
   const moneyRows: [string, string][] =
     split !== null
@@ -112,12 +112,13 @@ export function buildFrames(
       id: "quote",
       title: "quote",
       rows: [
+        ["ens name", ens.name],
         ["ens price", ens.price],
         ["sla maxBlockLag", ens.maxBlockLag > 0 ? `${ens.maxBlockLag} blocks` : "· unreadable (svc.sla)"],
         amountRow("amount", job.amount),
         ["minBlock (SLA floor)", job.minBlock.toString()],
       ],
-      note: "price and SLA window are live ENS storefront records (same resolution as quote <dataset>)",
+      note: "price and SLA window are the live ENS records of that name (the dataset's subname when its price matches the amount, else the parent)",
     },
     {
       id: "pay",

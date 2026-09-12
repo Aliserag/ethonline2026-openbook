@@ -1,5 +1,5 @@
 import { useMemo, type JSX } from "react";
-import { boardRows, latestRefund, totals, useFeed } from "../data/feed";
+import { boardRows, latestRefund, totalsWithRuns, useFeed } from "../data/feed";
 import { useSessionRuns } from "../flow/session";
 import { useLiveValue } from "../ui/useLiveValue";
 import { getPublicClient } from "../data/chain";
@@ -24,7 +24,7 @@ export function Hero({ onBuy, onFail }: { onBuy(): void; onFail(): void }): JSX.
     return lr ? (rows.find((r) => r.jobId === lr.jobId.toString()) ?? null) : null;
   }, [jobs, runs, sellers.value]);
 
-  const t = totals(jobs, fee.value?.feeBP ?? 200);
+  const t = totalsWithRuns(jobs, runs, fee.value?.feeBP ?? 200);
   const sellerCount = sellers.value ? sellers.value.sellers.length : null;
 
   return (

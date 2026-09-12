@@ -144,8 +144,9 @@ describe("validateProposal", () => {
   });
 
   it("rejects wrong arg arity: too few and too many", () => {
-    const tooFew = validateProposal({ command: "quote", argv: [], rationale: "x" }, CMDS());
-    expect(tooFew).toContain("quote");
+    // quote defaults its dataset now, so the arity floor is checked on buy
+    const tooFew = validateProposal({ command: "buy", argv: [], rationale: "x" }, CMDS());
+    expect(tooFew).toContain("buy");
     expect(tooFew).toContain("at least 1");
     const tooMany = validateProposal({ command: "settle", argv: ["y"], rationale: "x" }, CMDS());
     expect(tooMany).toContain("settle");

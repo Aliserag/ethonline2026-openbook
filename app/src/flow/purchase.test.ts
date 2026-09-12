@@ -13,7 +13,9 @@ function deps(over: Partial<PurchaseDeps> = {}): PurchaseDeps {
     createJob: async () => 42n,
     query: async () => ({ payloadHash: "0xab" as `0x${string}`, metaBlock: 990, proof: "deadbeef" }),
     submit: async () => "0xsubmit" as `0x${string}`,
-    attest: async () => "0xattest" as `0x${string}`,
+    proofSigner: async () => null,
+    attester: async () => "0xattester" as `0x${string}`,
+    attest: async () => ({ txHash: "0xattest" as `0x${string}` }),
     simulateComplete: async () => ({ reverted: false }),
     verify: async (input) => ({
       verdict: input.metaBlock >= input.minBlock ? "APPROVE" : "REJECT",
@@ -117,6 +119,69 @@ describe("runPurchase", () => {
     expect(result.ok).toBe(false);
     expect(result.failedStep).toBe("settle");
     expect(steps(events).at(-1)).toBe("settle:failed");
+  });
+});
+
+describe("runPurchase with the attester as evaluator", () => {
+  test("the attest call settles: verify is never used and the signer is checked against the hook", async () => {
+    const events: PurchaseEvent[] = [];
+    let verifyCalls = 0;
+    const d = deps({
+      proofSigner: async () => "0xattester" as `0x${string}`,
+      attest: async () => ({ txHash: "0xattest" as `0x${string}`, settle: { verdict: "APPROVE", txHash: "0xcomplete" as `0x${string}` } }),
+      verify: async () => {
+        verifyCalls += 1;
+        throw new Error("must not be called");
+      },
+    });
+    const result = await runPurchase({ datasetId: "aave-v3-arbitrum-lending", mode: "fresh", onEvent: (e) => events.push(e) }, d);
+    expect(verifyCalls).toBe(0);
+    expect(result.ok).toBe(true);
+    expect(result.outcome).toBe("settled");
+    expect(result.txHash).toBe("0xcomplete");
+    const deliver = events.filter((e) => e.step === "deliver" && e.status === "done").pop()!;
+    expect(deliver.detail).toContain("signature verified here");
+    const settle = events.find((e) => e.step === "settle" && e.status === "done")!;
+    expect(settle.detail).toContain("adjudicator");
+  });
+
+  test("a refund carries the contract's refusal and the reject tx", async () => {
+    const events: PurchaseEvent[] = [];
+    const d = deps({
+      proofSigner: async () => "0xattester" as `0x${string}`,
+      attest: async () => ({
+        txHash: "0xattest" as `0x${string}`,
+        settle: { verdict: "REJECT", reason: "STALE_DATA", refusal: "SlaNotMet(attested 990, floor 991)", txHash: "0xreject" as `0x${string}` },
+      }),
+      simulateComplete: async () => {
+        throw new Error("must not simulate once the adjudicator reported the refusal");
+      },
+    });
+    const result = await runPurchase({ datasetId: "aave-v3-arbitrum-lending", mode: "fail", onEvent: (e) => events.push(e) }, d);
+    expect(result.ok).toBe(true);
+    expect(result.outcome).toBe("refunded");
+    expect(result.refundReason).toBe("STALE_DATA");
+    expect(result.txHash).toBe("0xreject");
+    const verdict = events.find((e) => e.step === "verdict" && e.status === "done")!;
+    expect(verdict.detail).toContain("SlaNotMet(attested 990, floor 991)");
+  });
+
+  test("a delivery signed by someone other than the hook's attester is refused before payment", async () => {
+    const events: PurchaseEvent[] = [];
+    let paid = false;
+    const d = deps({
+      proofSigner: async () => "0xstranger" as `0x${string}`,
+      createJob: async () => {
+        paid = true;
+        return 44n;
+      },
+    });
+    // fail mode delivers before it pays, so a bad signature costs nothing
+    const result = await runPurchase({ datasetId: "aave-v3-arbitrum-lending", mode: "fail", onEvent: (e) => events.push(e) }, d);
+    expect(result.ok).toBe(false);
+    expect(paid).toBe(false);
+    expect(events.at(-1)?.step).toBe("deliver");
+    expect(events.at(-1)?.detail).toContain("not by the hook's attester");
   });
 });
 

@@ -10,6 +10,7 @@
  * subgraph's PolicyConfig entity is empty on our instance and is never used
  * (controller ruling, carry-ins).
  */
+import { marketJobs } from "../../data/feed";
 import { CONFIG, type DatasetConfig } from "../../config";
 import { env } from "../../env";
 import { hasGatewayAccess } from "../../data/api";
@@ -325,11 +326,11 @@ const datasetsCommand: Command = {
 
 const quoteCommand: Command = {
   name: "quote",
-  args: "<dataset>",
-  help: "ENS-priced quote + SLA floor (live reads, no tx)",
+  args: "[dataset]",
+  help: "ENS-priced quote + SLA floor (live reads, no tx); defaults to the first dataset",
   kind: "inspect",
   run: async (_ctx, argv) => {
-    const id = argv[1];
+    const id = argv[1] ?? CONFIG.datasets[0]?.id;
     if (!id) return { render: "text", data: "usage: quote <dataset> · try datasets" };
     const dataset = CONFIG.datasets.find((d) => d.id === id);
     if (!dataset) return { render: "text", data: `unknown dataset: ${id} · try datasets` };
@@ -426,7 +427,8 @@ const booksCommand: Command = {
     } catch (error) {
       return { render: "text", data: `books failed: ${reason(error)} · is the subgraph reachable? (try lag)` };
     }
-    const jobs = out.value;
+    // the same scope as the page's books: jobs on the market escrow, funded ones only
+    const jobs = marketJobs(out.value);
     const totals = scopedTotals(jobs);
     const cutoff = Math.floor(Date.now() / 1000) - days.days * 86_400;
     const rows = jobs

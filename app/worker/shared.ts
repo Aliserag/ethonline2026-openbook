@@ -16,10 +16,9 @@
  * escrow in the Submitted state with our hook, and the deliverable the browser
  * names must be the one the provider actually submitted onchain.
  */
-import { createPublicClient, createWalletClient, defineChain, http, keccak256, parseAbi, toBytes, type Hex } from "viem";
+import { createPublicClient, createWalletClient, defineChain, http, keccak256, parseAbi, recoverMessageAddress, toBytes, type Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import openbook from "../../mcp/config/openbook.json";
-import demo2 from "../../mcp/config/demo2.json";
 import { appendMeta, extractMeta, stripMeta } from "../../mcp/src/gateway";
 
 export const STUDIO_UPSTREAM = "https://api.studio.thegraph.com/query/1760032/open-book/v0.0.8";
@@ -32,7 +31,7 @@ export const LLM_MODEL_DEFAULT = "accounts/fireworks/models/deepseek-v4-flash-07
 
 /** The subgraphs this deployment sells: the only ones the Gateway key will query. */
 const SOLD_SUBGRAPHS = new Set<string>(
-  [...(openbook as { datasets: { subgraphId: string }[] }).datasets, ...(demo2 as { datasets: { subgraphId: string }[] }).datasets].map((d) => d.subgraphId),
+  (openbook as { datasets: { subgraphId: string }[] }).datasets.map((d) => d.subgraphId),
 );
 
 export const arcTestnet = defineChain({
@@ -44,7 +43,17 @@ export const arcTestnet = defineChain({
 
 const ESCROW_ABI = parseAbi([
   "function jobs(uint256 jobId) view returns (uint256 id, address client, address provider, address evaluator, string description, uint256 budget, uint256 expiredAt, uint8 status, address hook)",
+  "function complete(uint256 jobId, bytes32 reason, bytes optParams)",
+  "function reject(uint256 jobId, bytes32 reason, bytes optParams)",
 ]);
+/** SlaHook's `SlaNotMet(uint256 attested, uint256 floor)` selector: the one revert that means "stale, refund". */
+const SLA_NOT_MET_SELECTOR = "0x49407c8b";
+const SIGNATURE_RE = /^0x[0-9a-fA-F]{130}$/;
+
+/** keccak of the settlement reason, the same convention the agent uses onchain. */
+function reasonHash(reason: string): Hex {
+  return keccak256(toBytes(reason));
+}
 const HOOK_ABI = parseAbi([
   "function submitted(uint256 jobId) view returns (bytes32)",
   "function attester() view returns (address)",
@@ -53,13 +62,10 @@ const HOOK_ABI = parseAbi([
 
 const HASH_RE = /^0x[0-9a-fA-F]{64}$/;
 
-// ---- the deliver signature (HMAC-SHA256 under the attester key) -------------
-
-async function hmacHex(secret: string, message: string): Promise<string> {
-  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
-  const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(message));
-  return [...new Uint8Array(sig)].map((b) => b.toString(16).padStart(2, "0")).join("");
-}
+// ---- the deliver signature (EIP-191, attester key) ------------------------------
+// The attester signs `${payloadHash}|${metaBlock}` the moment it observes the
+// Gateway answer. Anyone can recover the signer and compare it with the hook's
+// attester() onchain: the page does exactly that before it shows the row.
 
 export function proofMessage(deliverable: string, metaBlock: number): string {
   return `${deliverable.toLowerCase()}|${metaBlock}`;
@@ -81,7 +87,7 @@ export function parseDeliverRequest(raw: unknown): DeliverRequest | string {
 }
 
 export type DeliverResult =
-  | { ok: true; data: unknown; payloadHash: Hex; metaBlock: number; hasIndexingErrors: boolean; proof: string }
+  | { ok: true; data: unknown; payloadHash: Hex; metaBlock: number; hasIndexingErrors: boolean; proof: string; attester: Hex }
   | { ok: false; status: number; error: string };
 
 /** Run the query with the server-held key, hash the payload, sign the observation. */
@@ -106,10 +112,14 @@ export async function deliver(req: DeliverRequest, gatewayKey: string, attesterP
   }
   const meta = extractMeta(root.data);
   if (meta.block === null) return { ok: false, status: 502, error: "the gateway answered without a freshness block, so nothing can be attested" };
+  if (meta.hasIndexingErrors) {
+    return { ok: false, status: 503, error: "the subgraph reports indexing errors, so its answer cannot be sold as fresh right now" };
+  }
   const payload = stripMeta(root.data);
   const payloadHash = keccak256(toBytes(JSON.stringify(payload)));
-  const proof = await hmacHex(attesterPk, proofMessage(payloadHash, meta.block));
-  return { ok: true, data: payload, payloadHash, metaBlock: meta.block, hasIndexingErrors: meta.hasIndexingErrors, proof };
+  const account = privateKeyToAccount(attesterPk as Hex);
+  const proof = await account.signMessage({ message: proofMessage(payloadHash, meta.block) });
+  return { ok: true, data: payload, payloadHash, metaBlock: meta.block, hasIndexingErrors: false, proof, attester: account.address };
 }
 
 // ---- attest -------------------------------------------------------------------
@@ -119,11 +129,19 @@ export interface AttestRequest {
   deliverable: Hex;
   metaBlock: number;
   minBlock: number;
-  /** the deliver signature over `${deliverable}|${metaBlock}` */
+  /** the attester's EIP-191 signature over `${deliverable}|${metaBlock}` */
   proof: string;
 }
 
-export type AttestResult = { ok: true; txHash: Hex } | { ok: false; status: number; error: string };
+export interface Settlement {
+  verdict: "APPROVE" | "REJECT";
+  /** the SlaHook revert the adjudicator saw when it simulated complete() */
+  refusal?: string;
+  reason?: string;
+  txHash: Hex;
+}
+
+export type AttestResult = { ok: true; txHash: Hex; settle?: Settlement } | { ok: false; status: number; error: string };
 
 export function parseAttestRequest(raw: unknown): AttestRequest | string {
   if (typeof raw !== "object" || raw === null) return "body must be a JSON object";
@@ -132,21 +150,27 @@ export function parseAttestRequest(raw: unknown): AttestRequest | string {
   if (typeof r.deliverable !== "string" || !HASH_RE.test(r.deliverable)) return "deliverable must be a 32-byte hex hash";
   if (typeof r.metaBlock !== "number" || !Number.isInteger(r.metaBlock) || r.metaBlock < 0) return "metaBlock must be a non-negative integer";
   if (typeof r.minBlock !== "number" || !Number.isInteger(r.minBlock) || r.minBlock < 0) return "minBlock must be a non-negative integer";
-  if (typeof r.proof !== "string" || !/^[0-9a-f]{64}$/.test(r.proof)) return "proof must be the deliver signature (64 hex)";
+  if (typeof r.proof !== "string" || !SIGNATURE_RE.test(r.proof)) return "proof must be the attester's deliver signature (65-byte hex)";
   return { jobId: r.jobId, deliverable: r.deliverable as Hex, metaBlock: r.metaBlock, minBlock: r.minBlock, proof: r.proof };
 }
 
 /** Verify the deliver signature and the job onchain, then post the attestation. */
 export async function attest(req: AttestRequest, attesterPk: string): Promise<AttestResult> {
   if (!/^0x[0-9a-fA-F]{64}$/.test(attesterPk)) return { ok: false, status: 500, error: "attester key is not configured" };
-  const expected = await hmacHex(attesterPk, proofMessage(req.deliverable, req.metaBlock));
-  if (expected !== req.proof) {
-    return { ok: false, status: 403, error: "the freshness block was not observed by this server for that deliverable (deliver signature mismatch)" };
+  const account = privateKeyToAccount(attesterPk as Hex);
+  let signer: string;
+  try {
+    signer = await recoverMessageAddress({ message: proofMessage(req.deliverable, req.metaBlock), signature: req.proof as Hex });
+  } catch {
+    return { ok: false, status: 400, error: "the deliver signature is malformed" };
+  }
+  if (signer.toLowerCase() !== account.address.toLowerCase()) {
+    return { ok: false, status: 403, error: "the freshness block was not observed by this attester for that deliverable (deliver signature mismatch)" };
   }
   const publicClient = createPublicClient({ chain: arcTestnet, transport: http(ARC_RPC) });
   const jobId = BigInt(req.jobId);
   const job = await publicClient.readContract({ address: ESCROW, abi: ESCROW_ABI, functionName: "jobs", args: [jobId] });
-  const [, , , , description, , , status, hook] = job;
+  const [, , , evaluator, description, , , status, hook] = job;
   if (status !== 2) return { ok: false, status: 409, error: `job ${req.jobId} is not in the Submitted state (status ${status})` };
   if (hook.toLowerCase() !== HOOK.toLowerCase()) return { ok: false, status: 409, error: `job ${req.jobId} does not use the OpenBook hook` };
   let floor: number;
@@ -163,7 +187,6 @@ export async function attest(req: AttestRequest, attesterPk: string): Promise<At
   if (submitted.toLowerCase() !== req.deliverable.toLowerCase()) {
     return { ok: false, status: 409, error: "the deliverable hash does not match what the provider submitted onchain" };
   }
-  const account = privateKeyToAccount(attesterPk as Hex);
   const attesterOnchain = await publicClient.readContract({ address: HOOK, abi: HOOK_ABI, functionName: "attester" });
   if (attesterOnchain.toLowerCase() !== account.address.toLowerCase()) {
     return { ok: false, status: 500, error: "the configured attester key is not the hook's attester" };
@@ -180,7 +203,52 @@ export async function attest(req: AttestRequest, attesterPk: string): Promise<At
   });
   const receipt = await publicClient.waitForTransactionReceipt({ hash });
   if (receipt.status !== "success") return { ok: false, status: 502, error: `attest reverted onchain (tx ${hash})` };
-  return { ok: true, txHash: hash };
+  // The attester is also the job's evaluator on the page's purchases: it asks
+  // the escrow whether complete() would pass the hook and settles either way
+  // in the same request. The contract decides; the server only relays.
+  if (evaluator.toLowerCase() !== account.address.toLowerCase()) return { ok: true, txHash: hash };
+  const fees = { maxFeePerGas: gasPrice < 20_000_000_000n ? 25_000_000_000n : gasPrice + 5_000_000_000n, maxPriorityFeePerGas: 1_000_000_000n };
+  let refusal: string | undefined;
+  try {
+    await publicClient.simulateContract({ address: ESCROW, abi: ESCROW_ABI, functionName: "complete", args: [jobId, reasonHash("SLA_MET"), "0x"], account });
+  } catch (error) {
+    const data = revertData(error);
+    if (data === undefined || !data.startsWith(SLA_NOT_MET_SELECTOR)) {
+      return { ok: false, status: 502, error: `attested (tx ${hash}), but complete() reverted for an unexpected reason${data ? ` (${data.slice(0, 10)})` : ""}` };
+    }
+    const attested = BigInt(`0x${data.slice(10, 74)}`);
+    const floor = BigInt(`0x${data.slice(74, 138)}`);
+    refusal = `SlaNotMet(attested ${attested}, floor ${floor})`;
+  }
+  const settleHash = await wallet.writeContract({
+    address: ESCROW,
+    abi: ESCROW_ABI,
+    functionName: refusal === undefined ? "complete" : "reject",
+    args: [jobId, reasonHash(refusal === undefined ? "SLA_MET" : "STALE_DATA"), "0x"],
+    ...fees,
+  });
+  const settled = await publicClient.waitForTransactionReceipt({ hash: settleHash });
+  if (settled.status !== "success") return { ok: false, status: 502, error: `attested (tx ${hash}), but ${refusal === undefined ? "complete" : "reject"}() reverted onchain (tx ${settleHash})` };
+  return {
+    ok: true,
+    txHash: hash,
+    settle: refusal === undefined ? { verdict: "APPROVE", txHash: settleHash } : { verdict: "REJECT", reason: "STALE_DATA", refusal, txHash: settleHash },
+  };
+}
+
+/** The raw revert data on viem's cause chain, if any. */
+function revertData(error: unknown): string | undefined {
+  let node: unknown = error;
+  for (let i = 0; i < 8 && typeof node === "object" && node !== null; i++) {
+    const n = node as { data?: unknown; raw?: unknown; cause?: unknown };
+    const raw = typeof n.raw === "string" ? n.raw : typeof n.data === "string" ? n.data : undefined;
+    if (raw !== undefined && raw.startsWith("0x") && raw.length >= 10) return raw.toLowerCase();
+    if (typeof n.data === "object" && n.data !== null && typeof (n.data as { data?: unknown }).data === "string") {
+      return ((n.data as { data: string }).data).toLowerCase();
+    }
+    node = n.cause;
+  }
+  return undefined;
 }
 
 // ---- ask (the console's LLM, key held here) ------------------------------------

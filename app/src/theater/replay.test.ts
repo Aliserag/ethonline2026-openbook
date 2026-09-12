@@ -5,7 +5,7 @@ import type { FeeSplit, JobView } from "../data/types";
 const BUYER = "0xAC548CFEfe70bb3199ee214F39bC9730a8A754De";
 const SELLER = "0x64A78b6d5e99274d01D1d0A70B180A73AAEb8d21";
 const HEAD = { arc: 61_678_977n, subgraph: 61_678_900n };
-const ENS = { price: "0.10 USDC/query", maxBlockLag: 50 };
+const ENS = { name: "openbook.eth", price: "0.10 USDC/query", maxBlockLag: 50 };
 
 /** The canonical settled-with-fee example (our instance's job 4, receipt-verified). */
 const settledJob: JobView = {

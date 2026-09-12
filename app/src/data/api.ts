@@ -1,15 +1,18 @@
 /**
  * The page's server-side helpers (app/worker/*): on a deployed origin the
  * browser never holds the Gateway key, the hook attester key or the LLM key.
- *   /api/deliver   the server runs the dataset query, hashes the payload,
+ *   /api/deliver   the attester runs the dataset query, hashes the payload,
  *                  records the indexed block and signs that observation
- *   /api/attest    the server verifies the job onchain and requires the deliver
- *                  signature before it posts the freshness proof
+ *                  (EIP-191; the page recovers the signer and checks it
+ *                  against the hook's attester onchain)
+ *   /api/attest    the attester verifies the job onchain, requires its own
+ *                  deliver signature, posts the freshness proof and, as the
+ *                  job's evaluator, completes or refunds in the same request
  *   /api/ask       the console's LLM, key held server-side
  * Local dev without VITE_API_BASE falls back to a browser-side Gateway key for
  * queries (no signature, so attest will refuse) and has no ask mode.
  */
-import { keccak256, toBytes } from "viem";
+import { keccak256, recoverMessageAddress, toBytes } from "viem";
 import { appendMeta, extractMeta, GatewayHttpError, GraphQueryError, stripMeta, type GatewayMeta } from "../../../mcp/src/gateway";
 import { env, hasGraphKey } from "../env";
 
@@ -46,8 +49,27 @@ export interface Delivery {
   data: unknown;
   payloadHash: `0x${string}`;
   metaBlock: number;
-  /** the server's signature over `${payloadHash}|${metaBlock}` (empty on the local key path) */
+  /** the attester's EIP-191 signature over `${payloadHash}|${metaBlock}` (empty on the local key path) */
   proof: string;
+  /** who signed, as the server reports it; verify with recoverProofSigner */
+  attester: `0x${string}` | null;
+}
+
+/** Recover who signed a delivery observation; null when the proof is not a signature. */
+export async function recoverProofSigner(payloadHash: string, metaBlock: number, proof: string): Promise<`0x${string}` | null> {
+  if (!/^0x[0-9a-fA-F]{130}$/.test(proof)) return null;
+  try {
+    return await recoverMessageAddress({ message: `${payloadHash.toLowerCase()}|${metaBlock}`, signature: proof as `0x${string}` });
+  } catch {
+    return null;
+  }
+}
+
+export interface Settlement {
+  verdict: "APPROVE" | "REJECT";
+  refusal?: string;
+  reason?: string;
+  txHash: `0x${string}`;
 }
 
 /** Deliver a dataset query: server-observed on deployed origins, key-local in dev. */
@@ -60,7 +82,8 @@ export async function deliverViaApi(opts: { subgraphId: string; query: string })
       if (status === 429) throw new GatewayHttpError(429, root.error ?? text.slice(0, 160));
       throw new Error(root.error ?? `deliver failed (${status}): ${text.slice(0, 160)}`);
     }
-    return { data: root.data, payloadHash: root.payloadHash as `0x${string}`, metaBlock: root.metaBlock, proof: root.proof ?? "" };
+    const attester = typeof root.attester === "string" && /^0x[0-9a-fA-F]{40}$/.test(root.attester) ? (root.attester as `0x${string}`) : null;
+    return { data: root.data, payloadHash: root.payloadHash as `0x${string}`, metaBlock: root.metaBlock, proof: root.proof ?? "", attester };
   }
   const { status, json, text } = await postJson(
     `https://gateway.thegraph.com/api/${env.graphKey}/subgraphs/id/${opts.subgraphId}`,
@@ -74,25 +97,30 @@ export async function deliverViaApi(opts: { subgraphId: string; query: string })
   const meta: GatewayMeta = extractMeta(root.data);
   if (meta.block === null) throw new Error("the gateway answered without a freshness block, so nothing can be attested");
   const payload = stripMeta(root.data);
-  return { data: payload, payloadHash: keccak256(toBytes(JSON.stringify(payload))), metaBlock: meta.block, proof: "" };
+  return { data: payload, payloadHash: keccak256(toBytes(JSON.stringify(payload))), metaBlock: meta.block, proof: "", attester: null };
 }
 
-/** Ask the server to attest a delivery; returns the attest tx hash. */
+/**
+ * Ask the attester to post the freshness proof. When the attester is the job's
+ * evaluator (every page purchase), the same call settles: `settle` carries the
+ * complete() or reject() tx the contract allowed.
+ */
 export async function attestViaApi(input: {
   jobId: string;
   deliverable: `0x${string}`;
   metaBlock: number;
   minBlock: number;
   proof: string;
-}): Promise<`0x${string}`> {
+}): Promise<{ txHash: `0x${string}`; settle?: Settlement }> {
   const base = apiBase();
   if (base === null) throw new Error("attestation runs on the server; set VITE_API_BASE to a deployed origin for local runs");
   const { status, json, text } = await postJson(`${base}/api/attest`, input);
-  const root = (typeof json === "object" && json !== null ? json : {}) as { txHash?: string; error?: string };
+  const root = (typeof json === "object" && json !== null ? json : {}) as { txHash?: string; settle?: Settlement; error?: string };
   if (status >= 400 || typeof root.txHash !== "string") {
     throw new Error(root.error ?? `attest failed (${status}): ${text.slice(0, 160)}`);
   }
-  return root.txHash as `0x${string}`;
+  const settle = root.settle && (root.settle.verdict === "APPROVE" || root.settle.verdict === "REJECT") && typeof root.settle.txHash === "string" ? root.settle : undefined;
+  return { txHash: root.txHash as `0x${string}`, settle };
 }
 
 /** Where the console's ask mode sends chat requests: the server route on deployed origins. */

@@ -33,6 +33,7 @@ import { fetchJobEvents, fetchLagShared } from "../data/subgraph";
 import { cachedAsOfLabel } from "../data/cache";
 import type { FeeSplit, JobView } from "../data/types";
 import { useLiveValue } from "../ui/useLiveValue";
+import { resolveDatasetQuote } from "../console/commands/act";
 import { createEnsTextReader, parseSlaRecord } from "../../../mcp/src/ens";
 import { hostedQueryViaProxy } from "../data/endpoint";
 import { explorerUrl, truncateHash } from "../format";
@@ -62,7 +63,7 @@ interface TheaterData {
   splitError?: string;
   tx: `0x${string}` | null;
   heads: { arc: bigint; subgraph: bigint };
-  ens: { price: string; maxBlockLag: number };
+  ens: { name: string; price: string; maxBlockLag: number };
 }
 
 interface HeavyData {
@@ -184,11 +185,8 @@ async function loadHeads(publicClient: PublicClient): Promise<{ arc: bigint; sub
 /** Compose the theater's live inputs: cached history + freshly polled heads/ENS. */
 async function loadTheater(jobId: bigint): Promise<TheaterData> {
   const publicClient = getPublicClient();
-  const [heavy, heads, ens] = await Promise.all([
-    heavyData(jobId),
-    loadHeads(publicClient),
-    loadEns(),
-  ]);
+  const [heavy, heads] = await Promise.all([heavyData(jobId), loadHeads(publicClient)]);
+  const ens = await loadEns(heavy.job);
   return { ...heavy, heads, ens };
 }
 
@@ -254,8 +252,20 @@ async function chainScan(publicClient: PublicClient, jobId: bigint): Promise<Cha
   }
 }
 
-async function loadEns(): Promise<{ price: string; maxBlockLag: number }> {
+async function loadEns(job: JobView): Promise<{ name: string; price: string; maxBlockLag: number }> {
   const readEnsText = createEnsTextReader({ rpcUrl: env.sepoliaRpc });
+  // the dataset a job bought is not onchain: match its amount against each seller's live record
+  const quotes = await Promise.all(
+    CONFIG.datasets.map(async (d) => {
+      try {
+        return await resolveDatasetQuote(d, readEnsText);
+      } catch {
+        return null;
+      }
+    }),
+  );
+  const matched = quotes.filter((q): q is NonNullable<typeof q> => q !== null && BigInt(q.amountUsdc) === job.amount);
+  if (matched.length === 1) return { name: matched[0]!.priceName, price: matched[0]!.price, maxBlockLag: matched[0]!.maxBlockLag };
   const [price, sla] = await Promise.all([
     readEnsText(CONFIG.ens, "svc.price").catch(() => null),
     readEnsText(CONFIG.ens, "svc.sla").catch(() => null),
@@ -268,7 +278,7 @@ async function loadEns(): Promise<{ price: string; maxBlockLag: number }> {
       // unreadable record — the quote frame renders "· unreadable", never a fake figure
     }
   }
-  return { price: price ?? "✗ svc.price unreadable (ENS)", maxBlockLag };
+  return { name: CONFIG.ens, price: price ?? "✗ svc.price unreadable (ENS)", maxBlockLag };
 }
 
 /**

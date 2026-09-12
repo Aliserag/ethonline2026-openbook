@@ -361,6 +361,7 @@ export async function askLlm(
       });
       if (!response.ok) {
         const body = await response.text().catch(() => "");
+        if (response.status === 503) throw new Error("ask mode is off on this deployment (no LLM key configured) · every command still works typed");
         throw new Error(`llm ${response.status}${body.length > 0 ? `: ${body.slice(0, 200)}` : ""}`);
       }
       const data = (await response.json()) as { choices?: { message?: { content?: string } }[] };

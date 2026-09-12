@@ -189,8 +189,7 @@ export function TryIt({ armed, onArmedConsumed }: { armed: "fresh" | "fail" | nu
             <details className="details">
               <summary>Details</summary>
               <dl className="kv">
-                {events
-                  .filter((e) => e.data)
+                {[...new Map(events.filter((e) => e.data).map((e) => [e.step, e])).values()]
                   .flatMap((e) =>
                     Object.entries(e.data!).map(([k, v]) => (
                       <div key={`${e.step}-${k}`} style={{ display: "contents" }}>

@@ -69,7 +69,8 @@ hash, a subgraph row, or a measured value. The scripted half of this is
 
 - Both sellers and every buyer so far are ours; the mechanism is permissionless, the
   liquidity is not.
-- The demo wallet plays buyer, provider and evaluator in the keyless runs (legal per
-  ERC-8183); rows from those runs are labeled "our demo wallet (single-key run)".
+- The demo wallet plays buyer and provider in the keyless runs; the hook's attester (a
+  server key) is the evaluator and sends the complete() or reject() that settles them.
+  Rows from those runs are labeled "our demo wallet (buyer and seller)".
 - The staleness in Make it fail is staged (floor above the delivery); the hook's refusal
   is real and is the same path a natural miss takes.

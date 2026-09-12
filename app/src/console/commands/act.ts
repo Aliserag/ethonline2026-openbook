@@ -24,6 +24,7 @@ import { BaseError, keccak256, toBytes, type Address, type WalletClient } from "
 import { CONFIG, defaultQueryFor, type DatasetConfig } from "../../config";
 import { env } from "../../env";
 import { attestViaApi, deliverViaApi, hasGatewayAccess } from "../../data/api";
+import { readHookAttester } from "../../data/hook";
 import { ADDR } from "../../data/addresses";
 import { getProvider, arcWalletClient, ensureArcChain } from "../../arc";
 import { walletForDemo } from "../../data/chain";
@@ -670,10 +671,12 @@ const buyCommand: Command = {
     let jobId: bigint;
     try {
       await ensureChainFor(signer);
+      // the hook's attester is the evaluator: it can pay or refund, the buyer cannot
+      const evaluator = await readHookAttester(ctx.publicClient);
       jobId = await createJobWithSla(ctx.publicClient, {
         buyer: signer.wallet,
         provider: signer.wallet,
-        evaluator: signer.address,
+        evaluator,
         sla,
         amount6dec: BigInt(args.amountUsdc),
         expirySeconds: 3600,
@@ -833,9 +836,10 @@ const settleCommand: Command = {
     // 1. Hook freshness proof. Until T13 sets the demo key as the hook's
     // attester, this reverts NotAttester — rendered as the exact revert
     // reason, never glossed over.
+    let attested: Awaited<ReturnType<typeof attestViaApi>>;
     try {
       await ensureChainFor(signer);
-      await attestViaApi({ jobId: job.jobId, deliverable: job.payloadHash, metaBlock: job.metaBlock, minBlock: job.minBlock, proof: job.proof ?? "" });
+      attested = await attestViaApi({ jobId: job.jobId, deliverable: job.payloadHash, metaBlock: job.metaBlock, minBlock: job.minBlock, proof: job.proof ?? "" });
     } catch (error) {
       return {
         render: "kv",
@@ -851,7 +855,10 @@ const settleCommand: Command = {
     }
 
     let result: VerifyDeliveryResult;
-    try {
+    if (attested.settle) {
+      // the attester is this job's evaluator: it already completed or refunded
+      result = { verdict: attested.settle.verdict, reason: attested.settle.reason as VerifyDeliveryResult["reason"], minBlock: job.minBlock, txHash: attested.settle.txHash };
+    } else try {
       await ensureChainFor(signer);
       result = await verifyDelivery(
         {
