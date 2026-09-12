@@ -29,13 +29,13 @@
   color: var(--ink);
   border-bottom: 1px dashed var(--rule-strong);
   padding: 7px 14px;
-  font-size: 11px;
+  font-size: 12px;
   gap: 10px;
 }
 
 .console .console__title {
   color: var(--ink);
-  font-size: 11px;
+  font-size: 12px;
   letter-spacing: 0.14em;
 }
 
@@ -45,7 +45,7 @@
 }
 
 .console .console__chip {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--ink-2);
   background: var(--sheet);
   border: 1px solid var(--rule-strong);
@@ -60,7 +60,7 @@
 
 .console .console__hints {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   letter-spacing: 0.02em;
   text-transform: none;
 }
@@ -111,7 +111,7 @@
 
 .console .console__running {
   font-family: var(--mono);
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--muted);
   font-style: italic;
 }
@@ -178,7 +178,7 @@
 .tape__summary {
   margin-bottom: 6px;
   font-family: var(--mono);
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--ink);
   padding-bottom: 5px;
   border-bottom: 1px dashed var(--rule-strong);
@@ -196,7 +196,7 @@
   text-align: left;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
   border-bottom: 1px solid var(--rule-strong);
   padding: 3px 10px 5px 0;
@@ -224,7 +224,7 @@
 .tape__note {
   margin-top: 6px;
   font-family: var(--mono);
-  font-size: 11.5px;
+  font-size: 12px;
   line-height: 1.55;
   color: var(--muted);
 }
@@ -232,7 +232,17 @@
 /* freshness ruler (wraps the shared .ruler primitives) */
 .tape__ruler { display: flex; flex-direction: column; gap: 2px; }
 
-.tape__ruler-track { position: relative; height: 44px; }
+/* height matches T17's index.css fix (`.tape__ruler .tape__ruler-track` 58px):
+   the global `.lbl` sits at top:38px with a 12px font, so 58px is the fit */
+.tape__ruler-track { position: relative; height: 58px; }
+
+/* The global `.needle .lbl` is positioned against the NEEDLE (top:38px) whose
+   own top is 6px inside the track, so the label's line box starts at y=44; at
+   line-height 1.5 the 12px label ends at y=62 — 4px past the 58px track.
+   Tape-only tightening (line-height 1.2) brings it to 58.4 so labels fit. */
+.tape__ruler .needle .lbl {
+  line-height: 1.2;
+}
 
 /* tx card */
 .tape__txhead {
@@ -337,7 +347,7 @@
   justify-content: space-between;
   gap: 10px;
   font-family: var(--mono);
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--ink-2);
   font-variant-numeric: tabular-nums;
 }
@@ -349,7 +359,7 @@
   align-items: center;
   gap: 10px;
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: 12px;
   padding: 2px 0 5px;
 }
 
@@ -367,7 +377,7 @@
 
 .tape__kind {
   margin-left: auto;
-  font-size: 11px;
+  font-size: 12px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--ink-2);
@@ -410,7 +420,7 @@
 .tape__ack {
   margin-top: 6px;
   font-family: var(--mono);
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--settled);
   animation: tape-ack 120ms ease-out both;
 }
@@ -434,7 +444,7 @@
   left: 50%;
   transform: translateX(-50%);
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: 12px;
   letter-spacing: 0.5em;
   padding: 0 6px;
   color: var(--muted);
@@ -474,13 +484,13 @@
 .tape__hints {
   margin-top: 12px;
   font-family: var(--mono);
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--muted);
 }
 
 .tape__hints kbd {
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: 12px;
   color: var(--ink-2);
   border: 1px solid var(--rule-strong);
   border-radius: 2px;
@@ -521,7 +531,7 @@
 
 .tape__rowhint {
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
   white-space: nowrap;
 }
@@ -555,7 +565,7 @@
 
 .tape__pop-head {
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: 12px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--muted);
@@ -582,7 +592,7 @@
 
 .tape__pop-hint {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   flex: 1;
   white-space: nowrap;
   overflow: hidden;
@@ -590,7 +600,7 @@
 }
 
 .tape__pop-kind {
-  font-size: 11px;
+  font-size: 12px;
   letter-spacing: 0.1em;
   color: var(--accent);
 }
@@ -617,7 +627,7 @@
 
 .console .console__launcher kbd {
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: 12px;
   color: var(--ink-2);
   border: 1px solid var(--rule-strong);
   border-radius: 2px;
@@ -658,7 +668,7 @@
 
 .palette__kbd {
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: 12px;
   color: var(--sheet);
   background: var(--ink);
   border-radius: 3px;
@@ -721,7 +731,7 @@
 
 .palette__opt-hint {
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
   flex: 1;
   white-space: nowrap;
@@ -731,7 +741,7 @@
 
 .palette__opt-kind {
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: 12px;
   letter-spacing: 0.12em;
   color: var(--accent);
 }
@@ -740,7 +750,7 @@
 
 .palette__foot {
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
   padding: 6px 12px;
   border-top: 1px dashed var(--rule);
