@@ -40,6 +40,8 @@ export function defaultQueryFor(dataset: DatasetConfig): string {
     "dex-amm/4.0.1": "{ pools(first: 3) { id } }",
     "nft-marketplace/2.1.0":
       "{ trades(first: 3, orderBy: timestamp, orderDirection: desc) { timestamp priceETH } marketplaces(first: 1) { name tradeCount cumulativeTradeVolumeETH } }",
+    "sports-odds/1.0.0":
+      "{ sportMarkets(first: 3, orderBy: timestamp, orderDirection: desc, where: {isOpen: true}) { homeTeam awayTeam homeOdds awayOdds } }",
     "ens/1.0.0":
       "{ registrations(first: 3, orderBy: registrationDate, orderDirection: desc) { registrationDate domain { name } } }",
   };

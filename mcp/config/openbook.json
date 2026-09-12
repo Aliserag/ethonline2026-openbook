@@ -56,6 +56,17 @@
       },
       "priceUsdc": 100000,
       "chain": "ethereum"
+    },
+    {
+      "id": "overtime-sports-odds",
+      "subgraphId": "DFNKpS95y26V3kuTa9MtD2J3ws65QF6RPP7RFLRjaHFx",
+      "schema": "sports-odds/1.0.0",
+      "description": "Live sports prediction-market odds on Arbitrum (Overtime) \u2014 teams and implied probabilities that move minute to minute",
+      "freshness": {
+        "maxAge": 50
+      },
+      "priceUsdc": 100000,
+      "chain": "arbitrum"
     }
   ]
 }

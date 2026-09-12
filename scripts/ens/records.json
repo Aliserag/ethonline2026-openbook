@@ -2,7 +2,7 @@
   {
     "type": "text",
     "key": "svc.menu",
-    "value": "[{\"id\": \"aave-v3-arbitrum-lending\", \"schema\": \"lending/3.1.0\"}, {\"id\": \"uniswap-v3-arbitrum-dex\", \"schema\": \"dex-amm/4.0.1\"}, {\"id\": \"opensea-nft-trades\", \"schema\": \"nft-marketplace/2.1.0\"}, {\"id\": \"ens-registrations\", \"schema\": \"ens/1.0.0\"}]"
+    "value": "[{\"id\": \"aave-v3-arbitrum-lending\", \"schema\": \"lending/3.1.0\"}, {\"id\": \"uniswap-v3-arbitrum-dex\", \"schema\": \"dex-amm/4.0.1\"}, {\"id\": \"opensea-nft-trades\", \"schema\": \"nft-marketplace/2.1.0\"}, {\"id\": \"ens-registrations\", \"schema\": \"ens/1.0.0\"}, {\"id\": \"overtime-sports-odds\", \"schema\": \"sports-odds/1.0.0\"}]"
   },
   {
     "type": "text",
