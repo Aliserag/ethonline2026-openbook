@@ -166,7 +166,7 @@ verifies the bundles and the proxy before it reports PASS. `scripts/app-audit.mj
 release gate: 20 browser assertions over the live page (hero, try it, market, books,
 console, overflow at three widths, font floor, console errors).
 
-**The console (`⌘K`)** is still there for judges who want the raw surfaces: 18 commands in
+**The console (`⌘K`)** is still there for judges who want the raw surfaces: 19 commands in
 three families, **inspect** (read every live surface), **act** (transact as the demo
 buyer), **sandbox** (safe re-enactments on the same live contracts).
 
