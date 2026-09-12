@@ -76,7 +76,7 @@ async function subgraph(request: Request, ctx: { waitUntil(p: Promise<unknown>):
     upstream = await fetch(STUDIO_UPSTREAM, { method: "POST", headers: { "content-type": "application/json" }, body });
   } catch (error) {
     if (cached) return clientResponse(cached, "STALE");
-    return json({ error: `upstream unreachable: ${String(error)}` }, 502);
+    return json({ error: `upstream unreachable: ${String(error)}` }, 424);
   }
   if (!upstream.ok) {
     if (cached) return clientResponse(cached, "STALE");
@@ -151,7 +151,7 @@ export default {
         return new Response(out.text, { status: out.status, headers: { "content-type": "application/json", ...CORS } });
       }
     } catch (error) {
-      return json({ error: `server error: ${error instanceof Error ? error.message.slice(0, 300) : String(error)}` }, 502);
+      return json({ error: `server error: ${error instanceof Error ? error.message.slice(0, 300) : String(error)}` }, 424);
     }
     return json({ error: "not found" }, 404);
   },

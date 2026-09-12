@@ -71,7 +71,7 @@ export async function handler(route: Route, req: IncomingMessage & { body?: unkn
         upstream = await fetch(STUDIO_UPSTREAM, { method: "POST", headers: { "content-type": "application/json" }, body });
       } catch (error) {
         if (hit && now - hit.at < KEEP_MS) send(res, 200, hit.text, { "x-openbook-cache": "STALE" });
-        else send(res, 502, JSON.stringify({ error: `upstream unreachable: ${String(error)}` }), { "x-openbook-cache": "MISS" });
+        else send(res, 424, JSON.stringify({ error: `upstream unreachable: ${String(error)}` }), { "x-openbook-cache": "MISS" });
         return;
       }
       const text = await upstream.text();
@@ -145,6 +145,6 @@ export async function handler(route: Route, req: IncomingMessage & { body?: unkn
     });
     send(res, out.status, out.text);
   } catch (error) {
-    send(res, 502, JSON.stringify({ error: `server error: ${error instanceof Error ? error.message.slice(0, 300) : String(error)}` }));
+    send(res, 424, JSON.stringify({ error: `server error: ${error instanceof Error ? error.message.slice(0, 300) : String(error)}` }));
   }
 }

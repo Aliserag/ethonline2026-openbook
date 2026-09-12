@@ -101,18 +101,18 @@ export async function deliver(req: DeliverRequest, gatewayKey: string, attesterP
     body: JSON.stringify({ query: appendMeta(req.query) }),
   });
   const text = await upstream.text();
-  if (!upstream.ok) return { ok: false, status: upstream.status === 429 ? 429 : 502, error: `gateway ${upstream.status}: ${text.slice(0, 160)}` };
+  if (!upstream.ok) return { ok: false, status: upstream.status === 429 ? 429 : 424, error: `gateway ${upstream.status}: ${text.slice(0, 160)}` };
   let root: { data?: unknown; errors?: { message?: string }[] };
   try {
     root = JSON.parse(text) as typeof root;
   } catch {
-    return { ok: false, status: 502, error: "gateway returned non-JSON" };
+    return { ok: false, status: 424, error: "gateway returned non-JSON" };
   }
   if (Array.isArray(root.errors) && root.errors.length > 0) {
-    return { ok: false, status: 502, error: `gateway error: ${root.errors.map((e) => e.message ?? "error").join("; ").slice(0, 200)}` };
+    return { ok: false, status: 424, error: `gateway error: ${root.errors.map((e) => e.message ?? "error").join("; ").slice(0, 200)}` };
   }
   const meta = extractMeta(root.data);
-  if (meta.block === null) return { ok: false, status: 502, error: "the gateway answered without a freshness block, so nothing can be attested" };
+  if (meta.block === null) return { ok: false, status: 424, error: "the gateway answered without a freshness block, so nothing can be attested" };
   if (meta.hasIndexingErrors) {
     return { ok: false, status: 503, error: "the subgraph reports indexing errors, so its answer cannot be sold as fresh right now" };
   }
@@ -203,7 +203,7 @@ export async function attest(req: AttestRequest, attesterPk: string): Promise<At
     maxPriorityFeePerGas: 1_000_000_000n,
   });
   const receipt = await publicClient.waitForTransactionReceipt({ hash });
-  if (receipt.status !== "success") return { ok: false, status: 502, error: `attest reverted onchain (tx ${hash})` };
+  if (receipt.status !== "success") return { ok: false, status: 424, error: `attest reverted onchain (tx ${hash})` };
   // The attester is also the job's evaluator on the page's purchases: it asks
   // the escrow whether complete() would pass the hook and settles either way
   // in the same request. The contract decides; the server only relays.
@@ -215,7 +215,7 @@ export async function attest(req: AttestRequest, attesterPk: string): Promise<At
   } catch (error) {
     const data = revertData(error);
     if (data === undefined || !data.startsWith(SLA_NOT_MET_SELECTOR)) {
-      return { ok: false, status: 502, error: `attested (tx ${hash}), but complete() reverted for an unexpected reason${data ? ` (${data.slice(0, 10)})` : ""}` };
+      return { ok: false, status: 424, error: `attested (tx ${hash}), but complete() reverted for an unexpected reason${data ? ` (${data.slice(0, 10)})` : ""}` };
     }
     const attested = BigInt(`0x${data.slice(10, 74)}`);
     const floor = BigInt(`0x${data.slice(74, 138)}`);
@@ -229,7 +229,7 @@ export async function attest(req: AttestRequest, attesterPk: string): Promise<At
     ...fees,
   });
   const settled = await publicClient.waitForTransactionReceipt({ hash: settleHash });
-  if (settled.status !== "success") return { ok: false, status: 502, error: `attested (tx ${hash}), but ${refusal === undefined ? "complete" : "reject"}() reverted onchain (tx ${settleHash})` };
+  if (settled.status !== "success") return { ok: false, status: 424, error: `attested (tx ${hash}), but ${refusal === undefined ? "complete" : "reject"}() reverted onchain (tx ${settleHash})` };
   return {
     ok: true,
     txHash: hash,

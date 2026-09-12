@@ -337,6 +337,18 @@ export async function runPurchase(
   if (opts.mode === "fail") {
     const r = await deliver();
     if (r) return r;
+  } else {
+    // fresh mode pays first (the floor is set at pay time), so prove the query and the
+    // delivery route work before any money moves: a failed delivery after payment would
+    // leave the escrow holding the buyer's funds until the deadline
+    if (!d.hasGatewayKey) {
+      return fail("deliver", "Delivery runs through the deployed server (it holds the Graph key); local runs need VITE_API_BASE or VITE_GRAPH_GATEWAY_KEY.");
+    }
+    try {
+      await d.query(dataset);
+    } catch (error) {
+      return fail("deliver", `The data query failed before anything was paid: ${plainReason(error)}`);
+    }
   }
 
   emit({ step: "pay", status: "running" });

@@ -35,7 +35,9 @@ export function hasGatewayAccess(): boolean {
 
 async function postJson(url: string, body: unknown): Promise<{ status: number; json: unknown; text: string }> {
   const response = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
-  const text = await response.text();
+  let text = await response.text();
+  // an edge error page is HTML; never show markup as an error message
+  if (/^\s*<!DOCTYPE|^\s*<html/i.test(text)) text = `the edge answered with an error page (HTTP ${response.status}); try again in a moment`;
   let json: unknown = null;
   try {
     json = JSON.parse(text);
