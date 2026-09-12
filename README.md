@@ -38,8 +38,8 @@ the refund executes onchain, automatically.** Money flows both ways.
 **Watch the money move backwards (one click, no wallet):** a delivery pinned to a stale
 `_meta` block got `REJECT (STALE_DATA)` and the escrow refunded the buyer on its own, 
 [Refunded tx 0x25e7805a…6063f on ArcScan](https://testnet.arcscan.app/tx/0x25e7805ae79fd8320ccbc74d90dead9d87b082fd299ecfe5a5949a968e16063f),
-indexed in the agent's books ([live P&L panel](https://openbook.litai.ca), 
-refunds column, no keys needed; [raw subgraph](https://api.studio.thegraph.com/query/1760032/open-book/v0.0.6)).
+indexed in the agent's books ([the live books](https://openbook.litai.ca/#books), 
+no keys needed; [raw subgraph](https://api.studio.thegraph.com/query/1760032/open-book/v0.0.6)).
 On the marketplace escrow the same mechanic refunded two stale deliveries in full:
 [job 42 (0.15)](https://testnet.arcscan.app/tx/0xcef2e16b6028c650d6a33f9e3838d57f3d99e62963d6c6e3194e71ed19c40ca1)
 and [job 46 (0.12)](https://testnet.arcscan.app/tx/0x85ef3525ea9e57818a6c99f8e858ed36a2994be1d30b8ce02b3d78a76964b9aa) —
@@ -232,9 +232,9 @@ of `openbook.eth` (`"source": "ENS"`), and `get_pnl` returns the P&L rows the
 `open-book` subgraph indexed from the escrow + policy contracts on Arc testnet.
 
 ```bash
-bun test          # 71 unit tests, mock-injected, no keys needed
-cd app && bun run dev   # storefront UI (quote + P&L work keyless;
-                        # VITE_GRAPH_GATEWAY_KEY unlocks the live delivery step)
+bun test          # 364 unit tests across agent, mcp, app and scripts; mock-injected, no keys needed
+cd app && bun run dev   # the product page on localhost:5173 (reads Studio directly; the
+                        # deployed lanes read it through the cached /api/subgraph proxy)
 ```
 
 **Transact as an external buyer (~10 min, testnet money):**
@@ -277,7 +277,7 @@ fresh clone, not inferred from the code.
 | The judge path works with **no keys** | fresh clone → the stdio command above returns a quote (`"source": "ENS"`) and the indexed P&L in under a second |
 | A stale delivery **refunded the buyer onchain, automatically** | the [Refunded tx](https://testnet.arcscan.app/tx/0x25e7805ae79fd8320ccbc74d90dead9d87b082fd299ecfe5a5949a968e16063f) and the `refunds` row in the live P&L |
 | Treasury policy is enforced **onchain** | `PolicyWallet` verified on ArcScan; `PolicyBlocked` rows indexed by the subgraph |
-| Contracts and tests are real | 20 forge tests · 71 unit tests · 3-job CI (badge above) |
+| Contracts and tests are real | 20 forge tests · 364 unit tests · 3-job CI (badge above) · 20-check browser audit (`scripts/app-audit.mjs`) |
 
 **Not proven, stated plainly:**
 

@@ -13,7 +13,7 @@ agent's public P&L.
 flowchart LR
     subgraph BuyerSide["Buyer (agent CLI / human)"]
         BC[agent/buyer-cli.ts<br/>quote → pay → deliver → verify → settle/refund]
-        FE[Frontend app<br/>Vite + wagmi · one ledger route<br/>ENS panel · quote · pay · ruler · P&L]
+        FE[Frontend app · openbook.litai.ca<br/>one page: the latest refund · keyless buy / make-it-fail<br/>market · public books · console]
     end
 
     subgraph ENSv2["ENSv2 · Sepolia (hard-fail gateway)"]

@@ -1,62 +1,75 @@
-# Journey Walkthrough — OpenBook (keyless + funded states)
+# Journey walkthrough: OpenBook, the live page
 
-Manually driven against the live app (vite dev, http://127.0.0.1:5173) after the UX review
-loop (6 passes → SATISFIED). Every journey is keyed to observable evidence.
+Driven against the deployed page (https://openbook.litai.ca) on 2026-09-12, in headless
+Chrome and in a real browser. Every journey is keyed to observable evidence: a transaction
+hash, a subgraph row, or a measured value. The scripted half of this is
+`scripts/app-audit.mjs` (20 assertions, all passing on the live domain at submission).
 
-## J1 — Zero-context judge (keyless first load) ✅
-- Masthead: brand `▤ OB`, "OpenBook — THE AGENT'S SETTLEMENT LEDGER", tagline with SLA
-  tooltip, Connect wallet ghost button, chain badges (arc · 5042002 / ensv2 · sepolia /
-  the graph · gateway / openbook.eth).
-- Cards in order with live state chips: 1 See what's for sale — **failed** (red; records
-  absent on openbook.eth — correct, no hardcoded values); 2 Get the price — waiting;
-  3 Watch data arrive — **needs setup** (blue; Graph key card with exact 60s steps);
-  4 Settle — or refund — waiting; The agent's books — needs setup; Daily rows — idle.
-- Every disabled CTA carries a visible caption with the named prerequisite (aria-describedby
-  linked); nothing is a silent dead end.
+## J1: zero-context judge, cold load (no wallet, no keys)
 
-## J2 — ENSv2 storefront (Sepolia) ✅ (fails honestly)
-- Records resolve via viem ≥2.35 against ENSv2 Sepolia; when absent the hard-fail notice
-  names exactly the missing keys (by-name matching — regression-tested) and the setup card
-  lists `scripts/ens/setup.sh` → reload → step 2 unlocks.
-- After the funded run registers openbook.eth: table fills with live records; step 1 → done.
+- Hero: the headline, one paragraph, two buttons (Buy a query, Watch a refund happen),
+  the latest real refund as a receipt (amount, seller, reason, job id, ArcScan link),
+  three live counters (refunds executed, USDC settled, sellers listed).
+- Data arrives through the same-origin `/api/subgraph` proxy (20 s cache, stale copy on
+  a Studio 429) and from ENSv2 Sepolia and the Arc RPC. Nothing is typed in; a failed
+  source renders its reason in place ("could not be read right now"), never a fake value.
+- Verified at 1280, 390 and 320 wide: no horizontal scroll, headline and primary button
+  inside a 640 px tall phone screen.
 
-## J3 — Dataset select → query sync ✅
-- aave-v3-arbitrum-lending → `{ markets(first: 3) { id } }`; uniswap-v3-arbitrum-dex →
-  `{ pools(first: 3) { id } }`. Both directions verified live.
+## J2: buy a query (the happy path)
 
-## J4 — Connect wallet (no provider) ✅
-- Click "Connect wallet" → zero page errors, state unchanged (graceful wagmi no-op;
-  documented). With a real provider the pay/settle path unlocks.
+- Pick a dataset; the line under it reads the live ENS price and freshness promise
+  ("0.15 USDC per query · fresh within 50 blocks (about 13 seconds) · sold by openbook.eth").
+- Click Buy. Six rows land in about 25 s: price read from ENS, paid into escrow (job id,
+  floor, tx), data delivered (indexed block), freshness checked (attest tx), settled
+  (settle tx), fee split (98% seller, 2% treasury, derived from the receipt).
+- Evidence: job 49 on Aave (settle tx `0xd95df8fa…502706`, split 0.147 / 0.003), job 50
+  on OpenSea (Ethereum chain, 10-minute window), both settled.
 
-## J5 — Buyer flow (quote → pay → deliver → settle) — key-gated, proven at the spine
-- Browser path needs an injected wallet + valid Graph key — not walkable keyless.
-- The onchain spine is proven live separately: ERC-8183 lifecycle GREEN on funded wallets
-  (createJob → setBudget → approve → fund → submit → complete, provider paid) + smoke
-  script 3/3 cycles (complete / reject / expire-refund) without revert.
-- UI steps verified statically + by unit tests (deriveSteps/chipClass/missingHardFailKeys).
+## J3: make it fail (the refund)
 
-## J6 — P&L books ✅ (blocked state)
-- Keyless: "needs setup" + setup card with the exact key steps; statline placeholders; no
-  fake rows. After the key lands: running balance + daily rows from openbook-pnl.
+- Click Make it fail. The data is delivered first, then the job is funded with the floor
+  one block above the delivered block, the hook refuses `complete()` (`SlaNotMet`, shown
+  in the verdict row), and `reject()` refunds the buyer in full. Five rows, about 30 s.
+- The hero receipt switches to this refund ("confirming" until the subgraph indexes it);
+  the board shows the row at the top.
+- Evidence: job 48 (`0x6f35cb69…b731b1`), job 52 (`0xa589ed…1c093e`).
 
-## J7 — The Tape ✅ (idle)
-- Idle: status "idle", one event "tape idle — awaiting settlement activity", no ghost scale.
-- Delivered/settled/refunded/stale states render conditionally (code-verified; the stale
-  path is the deterministic stale-proxy money shot).
+## J4: the market
 
-## J8 — Mobile (390px) ✅
-- Zero horizontal overflow; wallet action topmost (grid areas, DOM-first); cards stack;
-  tooltips viewport-anchored bottom banners (never clipped); 24px touch targets.
+- Two seller cards from live ENS (`openbook.eth`, `alpha.openbook.eth`) with per-dataset
+  prices, the freshness promise, purchases / settled / refunded from the subgraph's
+  provider stats (labeled when served from cache or the build-time snapshot), operator link.
+- The venue line reads `platformFeeBP` and the treasury address from the escrow.
 
-## J9 — Reload stability ✅
-- 3 fresh loads + 2 reloads: identical terminal state, chip stays "failed", no stuck
-  "resolving…", console clean (0 errors/warnings/pageerrors).
+## J5: the books
 
-## J10 — Keyboard-first ✅
-- Tab order: Connect wallet → SLA tip → step cards in order; tooltips open on focus;
-  focus-visible outline; aria-live tape announces settlements; role=status on notices.
+- Four figures (settled, refunded, venue fees, treasury balance), the settlement board
+  (12 latest jobs, seller name or dataset, outcome badge, tx or replay link), the
+  treasury's refusals (`PolicyBlocked` rows with tx links).
+- Session runs appear immediately and lose their "confirming" label once the v0.0.6
+  subgraph indexes them (verified for jobs 48, 49, 50).
 
-## Gated for the funded run (the funded-stack notes)
-- Live Gateway queries + P&L rows: needs the Studio key (the funded-stack notes §4).
-- Pay/settle in browser: needs an injected wallet on Arc testnet (MetaMask add-chain 5042002).
-- ENS records set: needs SEPOLIA_PK + Sepolia ETH + MockUSDC mint (scripts/ens/setup.sh).
+## J6: secondary surfaces
+
+- Replay theater from any board row (`#theater/<jobId>`), the system map (`#map`), and
+  the console (`⌘K`, or the footer link on desktop): `help` lists 18 commands, `quote`
+  renders the ENS price and floor.
+
+## Accessibility and motion (measured)
+
+- Text contrast ≥ 4.5:1 on both grounds after the muted token was darkened (5.0 and 5.4).
+- Every control shows a 2 px focus ring under real Tab key presses; tab order follows
+  reading order.
+- Four transitions and three keyframe animations, one easing family, none on layout
+  properties; `prefers-reduced-motion` disables all of them.
+- No text under 13 px on the landing surfaces.
+
+## Known limits
+
+- Both sellers and every buyer so far are ours; the mechanism is permissionless, the
+  liquidity is not.
+- The demo wallet plays buyer, provider and evaluator in the keyless runs (legal per
+  ERC-8183); rows from those runs are labeled "our demo wallet (single-key run)".
+- The staleness in Make it fail is staged (floor above the delivery); the hook's refusal
+  is real and is the same path a natural miss takes.

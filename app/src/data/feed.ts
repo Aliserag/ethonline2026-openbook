@@ -42,6 +42,8 @@ export interface BoardRow {
   seller: `0x${string}` | null;
   /** ENS name of the seller when the address is a listed seller's operator */
   sellerName?: string;
+  /** a deliverable was submitted onchain (so a refund means a failed check, not a no-show) */
+  delivered: boolean;
 }
 
 export function latestRefund(jobs: JobView[]): JobView | null {
@@ -95,6 +97,7 @@ export function boardRows(
       refundReason: j.refundReason,
       seller: j.seller,
       sellerName: sellerNames[j.seller.toLowerCase()],
+      delivered: j.metaBlock !== undefined,
     });
   }
   for (const r of runs) {
@@ -114,6 +117,7 @@ export function boardRows(
       confirming: true,
       refundReason: r.refundReason,
       seller: null,
+      delivered: true,
     });
   }
   return [...byId.values()]

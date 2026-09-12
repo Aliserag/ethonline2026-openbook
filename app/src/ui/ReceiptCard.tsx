@@ -5,12 +5,11 @@ import { datasetTitle, priceLabel, relativeTime } from "../copy/plain";
 import { explorerUrl, truncateHash } from "../format";
 import { Badge } from "./Badge";
 
-export function refundWhy(reason: string | undefined): string {
+export function refundWhy(reason: string | undefined, delivered = true): string {
   if (reason === "STALE_DATA") return "the delivery missed the freshness floor";
   if (reason === "INVALID_HASH") return "the delivery did not match its proof";
-  if (reason === "client-refund") return "the delivery did not settle, so the escrow returned the payment";
-  if (reason) return reason.replace(/_/g, " ").toLowerCase();
-  return "the delivery did not settle, so the escrow returned the payment";
+  if (delivered) return "the delivery did not clear the freshness check, so the escrow returned the payment";
+  return "no valid delivery arrived before the deadline, so the escrow returned the payment";
 }
 
 export function ReceiptCard({
@@ -51,7 +50,7 @@ export function ReceiptCard({
         <dt>{row.datasetId ? "dataset" : "seller"}</dt>
         <dd>{row.datasetId ? datasetTitle(row.datasetId) : (row.sellerName ?? (row.seller ? truncateHash(row.seller) : "onchain data query"))}</dd>
         <dt>why</dt>
-        <dd>{refundWhy(row.refundReason)}</dd>
+        <dd>{refundWhy(row.refundReason, row.delivered)}</dd>
         <dt>job</dt>
         <dd>{row.jobId}</dd>
         {row.txHash && (

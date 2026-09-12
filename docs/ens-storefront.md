@@ -69,7 +69,7 @@ machine-readable records.
 | `svc.sla` | `{"maxBlockLag":50,"maxLatencyMs":2000}` | Task 5 freshness gate; **hard-fail when missing** |
 | `svc.payee` | `0x4e83eB15EE973A49E40D9A79aB2cA89a4Eb4894E` (PolicyWallet, live) | Revenue recipient; Task 5/6 payouts; **hard-fail when missing** |
 | `svc.operator` | `0x64A78b6d5e99274d01D1d0A70B180A73AAEb8d21` (live) | Operator / agent address |
-| `svc.pnl` | `https://api.studio.thegraph.com/query/1760032/open-book/version/latest` (live) | Task 4 Studio subgraph endpoint (`get_pnl`, Task 7 dashboard) |
+| `svc.pnl` | `https://api.studio.thegraph.com/query/1760032/open-book/v0.0.6` (live) | Task 4 Studio subgraph endpoint (`get_pnl`, Task 7 dashboard) |
 | `agent-context` | `OpenBook: …ERC-8004 agent 894065 on Arc.` *(ENSIP-26, live)* | Agent self-description for any AI client |
 | `agent-endpoint[mcp]` | `https://github.com/Aliserag/OpenBook/tree/main/mcp` *(live)* | MCP endpoint (`sse`/streamable) |
 | `agent-endpoint[web]` | `https://openbook.litai.ca` *(live)* | Buyer frontend |

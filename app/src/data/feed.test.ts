@@ -57,6 +57,12 @@ describe("feed derivations", () => {
     expect(rows[1]!.confirming).toBe(false);
     expect(rows[1]!.datasetId).toBe("x");
     expect(rows[2]!.refundReason).toBe("STALE_DATA");
+    expect(rows[2]!.delivered).toBe(false);
+    expect(rows[0]!.delivered).toBe(true);
+  });
+  test("boardRows marks delivered when the job carries a metaBlock", () => {
+    const jobs = [job({ jobId: 6n, state: "refunded", metaBlock: 123 })];
+    expect(boardRows(jobs, [], 5)[0]!.delivered).toBe(true);
   });
   test("boardRows names sellers by operator address", () => {
     const jobs = [job({ jobId: 7n, seller: "0xAbC" as `0x${string}`, state: "settled" })];
