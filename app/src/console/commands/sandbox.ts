@@ -8,13 +8,15 @@
  *                          checkWithdrawal mirror over LIVE contract caps
  *                          plus a keyless simulateContract as the wallet's
  *                          agent — no tx is ever sent
- *   sandbox stale          a built-to-fail job whose SLA floor equals the
- *                          dataset-chain head, so ANY indexer lag is stale:
- *                          attest the TRUE below-floor _meta.block, capture
- *                          the SlaNotMet revert from a simulated complete()
- *                          as evidence (the one real revert this sandbox
- *                          produces, plus onlyAgentOrOwner), then arm the
- *                          refund claim
+ *   sandbox stale          a staged built-to-fail job: the deliverable is
+ *                          captured FIRST and the SLA floor is written one
+ *                          block above its _meta.block (delivered + 1) —
+ *                          precisely because a head-anchored floor was
+ *                          live-observed to be overtaken on a caught-up
+ *                          indexer. The hook's REAL SlaNotMet check is the
+ *                          contract path the simulated complete() reverts
+ *                          through; the staging is disclosed in the rows
+ *                          and help. Then arm the refund claim.
  *   sandbox claim          executes claimRefund for real once the deadline
  *                          passes (no attester needed — the buyer reclaims)
  *
