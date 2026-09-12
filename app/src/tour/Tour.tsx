@@ -86,6 +86,37 @@ function settledFromResult(result: CommandResult): SettleState | null {
   };
 }
 
+/**
+ * The act commands' shared lifecycle as a StepState patch — read fresh from the
+ * module state every call, never cached. `delivery` comes ONLY from the
+ * current job (a re-buy has no payload yet — an old payload must never show as
+ * delivered), and `settle` clears when the job id changes (an old verdict must
+ * never stamp a new lifecycle).
+ */
+function actJobView(prev: StepState): StepState {
+  const job = getActJob();
+  if (job === null) return { ...prev, job: null, delivery: null };
+  const jobDataset = CONFIG.datasets.find((d) => d.id === job.datasetId) ?? null;
+  const delivery: DeliveryState | null =
+    job.payloadHash !== undefined && job.metaBlock !== undefined && jobDataset !== null
+      ? {
+          dataset: jobDataset,
+          payloadHash: job.payloadHash,
+          metaBlock: job.metaBlock,
+          chainHeadBlock: null,
+          freshness: "no-meta",
+          result: null,
+        }
+      : null;
+  const freshLifecycle = job.jobId !== prev.job?.jobId;
+  return {
+    ...prev,
+    job: { jobId: job.jobId, minBlock: job.minBlock, hashes: [] },
+    delivery,
+    settle: freshLifecycle ? null : prev.settle,
+  };
+}
+
 /** `#tour` (exactly) → on-route; anything else → null (mirrors parseTheaterHash). */
 export function parseTourHash(hash: string): boolean {
   return /^#tour$/.test(hash.trim());
@@ -197,33 +228,26 @@ export function Tour({ onClose }: { onClose: () => void }): JSX.Element {
     };
   }, [dataset, ens, readEnsText]);
 
-  // Mirror the act commands' shared lifecycle (the console's buy/deliver/settle
-  // mutate the same module state), so a job funded from either surface shows up
-  // in both. Runs on mount too: the console may have funded it already.
-  const syncFromActJob = (): void => {
-    const job = getActJob();
-    setState((prev) => {
-      if (job === null) return { ...prev, job: null, delivery: null };
-      const jobDataset = CONFIG.datasets.find((d) => d.id === job.datasetId) ?? null;
-      const delivery: DeliveryState | null =
-        job.payloadHash !== undefined &&
-        job.metaBlock !== undefined &&
-        jobDataset !== null
-          ? {
-              dataset: jobDataset,
-              payloadHash: job.payloadHash,
-              metaBlock: job.metaBlock,
-              chainHeadBlock: null,
-              freshness: "no-meta",
-              result: null,
-            }
-          : prev.delivery;
-      return { ...prev, job: { jobId: job.jobId, minBlock: job.minBlock, hashes: [] }, delivery };
-    });
-  };
+  // The act commands' shared lifecycle, derived FRESH at render time (never a
+  // mount snapshot): the console dock's buy/deliver/settle mutate the same
+  // module state while the tour is open, so pay/deliver chips always read the
+  // current job. A (re-)buy starts a new lifecycle: an old job's delivery and
+  // verdict must never carry over, so delivery is derived solely from the
+  // current job and settle clears when the job id changes.
+  const live = actJobView(state);
 
+  // While the tour is open, hash/focus/visibility changes can mean the console
+  // acted elsewhere; force a re-render so `live` re-derives the chips.
   useEffect(() => {
-    syncFromActJob();
+    const pulse = (): void => setState((prev) => ({ ...prev }));
+    window.addEventListener("hashchange", pulse);
+    window.addEventListener("focus", pulse);
+    document.addEventListener("visibilitychange", pulse);
+    return () => {
+      window.removeEventListener("hashchange", pulse);
+      window.removeEventListener("focus", pulse);
+      document.removeEventListener("visibilitychange", pulse);
+    };
   }, []);
 
   // CTA: run the step's console command and print the console's own result.
@@ -233,7 +257,11 @@ export function Tour({ onClose }: { onClose: () => void }): JSX.Element {
     try {
       const result = await dispatch(cmd, ctx);
       setRuns((r) => ({ ...r, [step]: { cmd, running: false, result } }));
-      if (step === "pay" || step === "deliver") syncFromActJob();
+      if (step === "pay") {
+        // A (re-)buy opens a fresh lifecycle: any prior verdict belongs to
+        // the old job.
+        setState((prev) => ({ ...prev, settle: null }));
+      }
       if (step === "settle") {
         const settled = settledFromResult(result);
         setState((prev) => (settled === null ? prev : { ...prev, settle: settled }));
@@ -259,7 +287,7 @@ export function Tour({ onClose }: { onClose: () => void }): JSX.Element {
   }, [onClose]);
 
   const ensDone = ens !== null && ens.hardFail === null;
-  const step = deriveSteps(ensDone, ensLoading, state);
+  const step = deriveSteps(ensDone, ensLoading, live);
   const stepState = (k: StepKind): StepStateAttr =>
     k === "done" ? "done" : k === "failed" ? "failed" : k === "live" ? "active" : "idle";
 
@@ -383,7 +411,12 @@ export function Tour({ onClose }: { onClose: () => void }): JSX.Element {
               <select
                 id="tour-dataset"
                 value={datasetId}
-                onChange={(event) => setDatasetId(event.target.value)}
+                onChange={(event) => {
+                  // The new dataset's quote has not resolved yet: step 2 must
+                  // never keep the previous dataset's price/SLA/payee.
+                  setState((prev) => ({ ...prev, quote: null }));
+                  setDatasetId(event.target.value);
+                }}
               >
                 {CONFIG.datasets.map((d) => (
                   <option key={d.id} value={d.id}>
@@ -426,7 +459,7 @@ export function Tour({ onClose }: { onClose: () => void }): JSX.Element {
           <StepCard
             n={4}
             state={
-              state.delivery !== null ? "done" : !hasGraphKey ? "blocked" : stepState(step.deliver)
+              live.delivery !== null ? "done" : !hasGraphKey ? "blocked" : stepState(step.deliver)
             }
             stateLabel={!hasGraphKey ? "needs a Graph key" : undefined}
             title="Watch data arrive"
