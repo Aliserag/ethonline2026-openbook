@@ -1,0 +1,8 @@
+{
+  "name": "openbook-scripts",
+  "private": true,
+  "description": "OpenBook operational + audit scripts (app-audit.mjs needs puppeteer-core)",
+  "dependencies": {
+    "puppeteer-core": "^25.10.0"
+  }
+}
