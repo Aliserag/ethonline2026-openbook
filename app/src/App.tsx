@@ -29,6 +29,7 @@ import { createJobWithSla, ERC8183, ERC8183_ABI, setUsdcAddress, usdcAddress, US
 import { verifyDelivery } from "../../mcp/src/escrow";
 import { Console } from "./console/Console";
 import { TheaterRoute } from "./theater/Theater";
+import { SystemMap } from "./map/MapCanvas";
 
 // Chain-specific USDC (VITE_USDC_ADDRESS), mainnet override for the escrow module.
 if (env.usdcAddress !== undefined && /^0x[0-9a-fA-F]{40}$/.test(env.usdcAddress)) {
@@ -1242,6 +1243,8 @@ export default function App() {
           </div>
         </div>
       </main>
+
+      <SystemMap />
 
       <footer className="foot">
         <a
