@@ -9,7 +9,7 @@
  * Reads go through viem's getEnsText with the ENSv2 UniversalResolverV2 for
  * Sepolia. The resolver itself is injectable so tests never touch the network.
  */
-import { createPublicClient, http, type Address } from "viem";
+import { createPublicClient, fallback, http, type Address, type Transport } from "viem";
 import { sepolia } from "viem/chains";
 import { UNIVERSAL_RESOLVER_V2 } from "./constants";
 
@@ -26,6 +26,26 @@ export const SERVICE_RECORD_KEYS = ["menu", "price", "sla", "payee"] as const;
 
 export const ENS_RESOLUTION_FAILED = "ENS_RESOLUTION_FAILED";
 
+/**
+ * Public Sepolia RPCs tried in order after the caller's own (viem's built-in
+ * default, sepolia.drpc.org, stopped serving Sepolia on its free plan, so a
+ * single endpoint is one outage away from an unreadable storefront).
+ */
+export const SEPOLIA_PUBLIC_RPCS = [
+  "https://ethereum-sepolia-rpc.publicnode.com",
+  "https://sepolia.gateway.tenderly.co",
+  "https://1rpc.io/sepolia",
+] as const;
+
+/** A Sepolia transport that fails over across public RPCs; `rpcUrl` goes first. */
+export function sepoliaTransport(rpcUrl?: string): Transport {
+  const urls = [...(rpcUrl ? [rpcUrl] : []), ...SEPOLIA_PUBLIC_RPCS.filter((u) => u !== rpcUrl)];
+  return fallback(
+    urls.map((u) => http(u, { timeout: 15_000, retryCount: 1 })),
+    { rank: false, retryCount: 0 },
+  );
+}
+
 /** Live ENSv2 text reader bound to a viem public client on Sepolia. */
 export function createEnsTextReader(opts?: {
   rpcUrl?: string;
@@ -33,7 +53,7 @@ export function createEnsTextReader(opts?: {
 }): EnsTextReader {
   const client = createPublicClient({
     chain: sepolia,
-    transport: http(opts?.rpcUrl),
+    transport: sepoliaTransport(opts?.rpcUrl),
   });
   const resolver = opts?.universalResolverAddress ?? UNIVERSAL_RESOLVER_V2;
   return (name, key) =>

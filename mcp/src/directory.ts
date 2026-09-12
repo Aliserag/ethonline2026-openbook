@@ -19,7 +19,6 @@
  */
 import {
   createPublicClient,
-  http,
   isAddress,
   isAddressEqual,
   labelhash,
@@ -33,6 +32,7 @@ import { sepolia } from "viem/chains";
 import {
   createEnsTextReader,
   parseSlaRecord,
+  sepoliaTransport,
   type EnsTextReader,
   type SlaRecord,
 } from "./ens";
@@ -161,10 +161,7 @@ export function envSepoliaRpc(): string | undefined {
 export function createDirectoryClient(rpcUrl?: string): PublicClient {
   return createPublicClient({
     chain: sepolia,
-    transport: http(rpcUrl ?? envSepoliaRpc() ?? DIRECTORY_RPC_FALLBACK, {
-      timeout: 20_000,
-      retryCount: 3,
-    }),
+    transport: sepoliaTransport(rpcUrl ?? envSepoliaRpc() ?? DIRECTORY_RPC_FALLBACK),
   });
 }
 
