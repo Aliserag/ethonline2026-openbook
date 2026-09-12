@@ -209,6 +209,17 @@ the page recovers the signer and checks it against the hook's `attester()`), and
 proof, asks the escrow whether `complete()` would pass, then sends `complete()` or
 `reject()` in the same request. No wallet in this flow can refund itself.
 
+**Treasury funding across chains (Circle App Kit).** The buyer wallet is topped up from the
+treasury's USDC on Arbitrum Sepolia with App Kit's Bridge (CCTP v2) and Circle's Forwarding
+Service, so no destination gas is needed:
+[burn on Arbitrum Sepolia](https://sepolia.arbiscan.io/tx/0x49ea8d6245655b183e7972bd39d65fdbb6cd038ca61c1615ddb71df49b4a5bca),
+[mint on Arc](https://testnet.arcscan.app/tx/0xe54af84c20628ff04f3e691f12818f1f1a6220d109c476b50432d35909b769f1)
+(`bun scripts/circle/fund-buyer.ts 2.00`). A Gateway Unified Balance
+[deposit](https://sepolia.arbiscan.io/tx/0x577395fb4f7e51afde9b69f034b2667034f3d40b1f5fff061f7c0282899ab701)
+from the same treasury spends on Arc once attested. Source-chain testnet USDC comes from
+Circle's faucet API. The full product-by-product map for all three bounties is
+[docs/bounty-tech-map.md](docs/bounty-tech-map.md).
+
 **The marketplace.** Two reference sellers are live, both registered through the ENSv2
 storefront and priced by their own text records: `openbook.eth` (0.10 USDC/query, and
 0.15 for the `aave-v3-arbitrum-lending` subname) and `alpha.openbook.eth`
