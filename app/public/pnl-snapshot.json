@@ -1,5 +1,5 @@
 {
-  "takenAt": "2026-09-12T23:44:31.626Z",
+  "takenAt": "2026-09-12T23:57:48.600Z",
   "dailyPnLs": [
     {
       "id": "day-2838",
@@ -126,12 +126,12 @@
   "providers": [
     {
       "id": "0xb63fa642b3bc64d91722f0884d86af5b00e66ca9",
-      "jobs": 9,
+      "jobs": 11,
       "settled": "735000",
       "refunded": "600000",
       "delivered": 9,
       "avgLagBlocks": "20.66666666666666666666666666666667",
-      "lastJobAt": "1789256650"
+      "lastJobAt": "1789257308"
     },
     {
       "id": "0xfbe4e6d717adbd06431871182d666890b9d83c8d",
