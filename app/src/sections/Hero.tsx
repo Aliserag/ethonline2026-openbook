@@ -7,6 +7,7 @@ import { platformFee } from "../data/escrow";
 import { readSellers } from "../components/Market";
 import { priceLabel } from "../copy/plain";
 import { ReceiptCard } from "../ui/ReceiptCard";
+import { sellerNameMap } from "../data/sellers";
 
 export function Hero({ onBuy, onFail }: { onBuy(): void; onFail(): void }): JSX.Element {
   const feed = useFeed();
@@ -16,12 +17,12 @@ export function Hero({ onBuy, onFail }: { onBuy(): void; onFail(): void }): JSX.
   const jobs = feed.value?.jobs ?? [];
 
   const refund = useMemo(() => {
-    const rows = boardRows(jobs, runs, 200);
+    const rows = boardRows(jobs, runs, 200, sellerNameMap(sellers.value));
     const sessionRefund = runs.find((r) => r.outcome === "refunded");
     if (sessionRefund) return rows.find((r) => r.jobId === sessionRefund.jobId) ?? null;
     const lr = latestRefund(jobs);
     return lr ? (rows.find((r) => r.jobId === lr.jobId.toString()) ?? null) : null;
-  }, [jobs, runs]);
+  }, [jobs, runs, sellers.value]);
 
   const t = totals(jobs, fee.value?.feeBP ?? 200);
   const sellerCount = sellers.value ? sellers.value.sellers.length : null;

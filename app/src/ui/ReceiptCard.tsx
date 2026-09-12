@@ -8,9 +8,9 @@ import { Badge } from "./Badge";
 export function refundWhy(reason: string | undefined): string {
   if (reason === "STALE_DATA") return "the delivery missed the freshness floor";
   if (reason === "INVALID_HASH") return "the delivery did not match its proof";
-  if (reason === "client-refund") return "the deadline passed without a valid delivery";
+  if (reason === "client-refund") return "the delivery did not settle, so the escrow returned the payment";
   if (reason) return reason.replace(/_/g, " ").toLowerCase();
-  return "the deadline passed without a valid delivery";
+  return "the delivery did not settle, so the escrow returned the payment";
 }
 
 export function ReceiptCard({
@@ -48,8 +48,8 @@ export function ReceiptCard({
       <p className="receipt__amount">+{priceLabel(row.amount)}</p>
       <p className="small receipt__sub">back to the buyer, executed by the escrow</p>
       <dl className="kv">
-        <dt>dataset</dt>
-        <dd>{row.datasetId ? datasetTitle(row.datasetId) : "onchain data query"}</dd>
+        <dt>{row.datasetId ? "dataset" : "seller"}</dt>
+        <dd>{row.datasetId ? datasetTitle(row.datasetId) : row.sellerName ?? "onchain data query"}</dd>
         <dt>why</dt>
         <dd>{refundWhy(row.refundReason)}</dd>
         <dt>job</dt>

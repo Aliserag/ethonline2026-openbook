@@ -8,6 +8,8 @@ import { ADDR } from "../data/addresses";
 import { datasetTitle, priceLabel, relativeTime } from "../copy/plain";
 import { explorerUrl, truncateHash } from "../format";
 import { Badge } from "../ui/Badge";
+import { readSellers } from "../components/Market";
+import { sellerNameMap } from "../data/sellers";
 
 const BALANCE_ABI = [
   {
@@ -25,7 +27,7 @@ function Row({ row, isNew }: { row: BoardRow; isNew: boolean }): JSX.Element {
     <li className={`board__row${isNew ? " board__row--new" : ""}`}>
       <span className="tiny">{relativeTime(row.at)}</span>
       <span className="mono">#{row.jobId}</span>
-      <span>{row.datasetId ? datasetTitle(row.datasetId) : "onchain data query"}</span>
+      <span>{row.datasetId ? datasetTitle(row.datasetId) : row.sellerName ? `sold by ${row.sellerName}` : "onchain data query"}</span>
       <span className="mono">{priceLabel(row.amount)}</span>
       <span>
         <Badge kind={kind}>
@@ -60,8 +62,9 @@ export function Books(): JSX.Element {
       }) as Promise<bigint>,
     { pollMs: 30_000, staleAfterMs: 90_000 },
   );
+  const sellers = useLiveValue(readSellers, { pollMs: 60_000, staleAfterMs: 180_000, cacheKey: "market.sellers" });
   const jobs = feed.value?.jobs ?? [];
-  const rows = boardRows(jobs, runs, 12);
+  const rows = boardRows(jobs, runs, 12, sellerNameMap(sellers.value));
   const t = totals(jobs, fee.value?.feeBP ?? 200);
   const seen = useRef<Set<string>>(new Set());
   const primed = useRef(false);

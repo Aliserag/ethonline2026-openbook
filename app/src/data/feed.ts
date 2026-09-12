@@ -40,6 +40,8 @@ export interface BoardRow {
   confirming: boolean;
   refundReason?: string;
   seller: `0x${string}` | null;
+  /** ENS name of the seller when the address is a listed seller's operator */
+  sellerName?: string;
 }
 
 export function latestRefund(jobs: JobView[]): JobView | null {
@@ -75,7 +77,12 @@ export function totals(jobs: JobView[], feeBP: number): Totals {
   return { settledCount, settledUsdc, refundedCount, refundedUsdc, feesUsdc: (settledUsdc * BigInt(feeBP)) / 10000n };
 }
 
-export function boardRows(jobs: JobView[], runs: SessionRun[], limit = 12): BoardRow[] {
+export function boardRows(
+  jobs: JobView[],
+  runs: SessionRun[],
+  limit = 12,
+  sellerNames: Record<string, string> = {},
+): BoardRow[] {
   const byId = new Map<string, BoardRow>();
   for (const j of jobs) {
     byId.set(j.jobId.toString(), {
@@ -87,6 +94,7 @@ export function boardRows(jobs: JobView[], runs: SessionRun[], limit = 12): Boar
       confirming: false,
       refundReason: j.refundReason,
       seller: j.seller,
+      sellerName: sellerNames[j.seller.toLowerCase()],
     });
   }
   for (const r of runs) {

@@ -58,6 +58,11 @@ describe("feed derivations", () => {
     expect(rows[1]!.datasetId).toBe("x");
     expect(rows[2]!.refundReason).toBe("STALE_DATA");
   });
+  test("boardRows names sellers by operator address", () => {
+    const jobs = [job({ jobId: 7n, seller: "0xAbC" as `0x${string}`, state: "settled" })];
+    expect(boardRows(jobs, [], 5, { "0xabc": "alpha.openbook.eth" })[0]!.sellerName).toBe("alpha.openbook.eth");
+    expect(boardRows(jobs, [], 5)[0]!.sellerName).toBeUndefined();
+  });
   test("boardRows respects the limit", () => {
     const jobs = Array.from({ length: 20 }, (_, i) => job({ jobId: BigInt(i), timestamp: i }));
     expect(boardRows(jobs, [], 12)).toHaveLength(12);

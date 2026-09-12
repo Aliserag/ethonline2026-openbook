@@ -72,6 +72,19 @@ function isSeller(provider: Address): boolean {
   return provider.toHexString().toLowerCase() == SELLER.toLowerCase();
 }
 
+// The OpenBook escrow instance (living-protocol T14, 2% fee → PolicyWallet).
+// Every job on OUR instance is OpenBook's market by construction (keyless
+// demo buyers, the console, external sellers listed under openbook.eth), so
+// its ledger rows are booked for every provider. The SELLER filter stays for
+// the SHARED reference contract, where foreign agents' jobs must be skipped.
+const OPENBOOK_ESCROW = "0x967e005154d0f62c33eac8e2f44b44d4c4c07dd5";
+
+/** True when this job belongs in OpenBook's ledger: any job on our own escrow
+ *  instance, or a SELLER-provided job on the shared reference contract. */
+function booksJob(emitter: Address, provider: Address): boolean {
+  return emitter.toHexString().toLowerCase() == OPENBOOK_ESCROW || isSeller(provider);
+}
+
 function logIndexId(hash: Bytes, logIndex: i32): Bytes {
   return hash.concatI32(logIndex);
 }
@@ -176,7 +189,7 @@ export function handleJobCreated(event: JobCreatedEvent): void {
 
   // Seller-scoped ledger below is unchanged (foreign jobs skipped as before).
   // Shared reference contract — skip foreign jobs (their provider isn't SELLER).
-  if (!isSeller(event.params.provider)) {
+  if (!booksJob(event.address, event.params.provider)) {
     return;
   }
   // PINNED RISK (accept-and-pin ruling): the "qp-"+jobId key is UNPREFIXED —
@@ -247,7 +260,7 @@ export function handleFulfilled(event: JobSubmittedEvent): void {
   provider.save();
 
   // Seller-scoped ledger below is unchanged (foreign deliveries skipped).
-  if (!isSeller(event.params.provider)) {
+  if (!booksJob(event.address, event.params.provider)) {
     return;
   }
   let id = logIndexId(event.transaction.hash, event.logIndex.toI32());
@@ -271,7 +284,7 @@ export function handleSettled(event: PaymentReleasedEvent): void {
 
   // THE revenue line — must be SELLER-scoped or foreign settlements inflate
   // OpenBook's DailyPnL on the shared reference contract.
-  if (!isSeller(event.params.provider)) {
+  if (!booksJob(event.address, event.params.provider)) {
     return;
   }
   let id = logIndexId(event.transaction.hash, event.logIndex.toI32());
