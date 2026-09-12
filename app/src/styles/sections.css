@@ -293,7 +293,7 @@
   border: 1.5px solid var(--line-strong);
   display: grid;
   place-items: center;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
   color: var(--ink-2);
   margin-top: 1px;
