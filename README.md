@@ -7,7 +7,7 @@
 > costs, and publishes its P&L onchain. Built for ETHOnline 2026 (Sep 4–16).
 
 **Bounties targeted (one project, three sponsors):**
-- **Arc: Best Agentic Economy Application with Circle Agent Stack** ($3,500; +$2,500 for a mainnet deployment by Sep 30)
+- **Arc: Best DeFi/Onchain Finance Application** ($3,500; +$2,500 for a mainnet deployment by Sep 30). Not the Agent Stack prize: no Circle Agent Wallet, Nanopayments or x402 is used, and we say so below.
 - **The Graph: Best AI Tooling or AI Use Case with The Graph (Start Fresh)** ($5,000 pool)
 - **ENS: Best Use of ENSv2** ($4,500)
 
@@ -114,6 +114,15 @@ are organs, not stickers:
   quotes 0.10, and the quote reads the most specific records through the
   hierarchical registry. `alpha.openbook.eth` has no resolver of its own and
   resolves through the parent's (wildcard resolution).
+- **Delegated record editing, live.** The parent owner granted alpha's own key the right to
+  edit one record on its own node
+  ([`authorizeTextRoles(alpha, "svc.price", 0xe09C…, true)`](https://sepolia.etherscan.io/tx/0x09589d0ed2d14d5b64181b41f6d38c9a4c069de1d21354addbcc7d97873b2f86)),
+  and alpha repriced itself from 0.12 to 0.13 USDC/query with that key
+  ([setText tx](https://sepolia.etherscan.io/tx/0x0b2c133612a735ff69a86cab43c8aabcc231adcf7af4113726f30269d41edac2)).
+  Everything else still reverts `EACUnauthorizedAccountRoles` (`0x4b27a133`): alpha writing
+  `svc.sla` (not granted), a stranger writing alpha's `svc.price`, alpha writing the parent's
+  `svc.price`. Reproduce with `cast call <resolver> "setText(bytes32,string,string)" … --from <key>`
+  against `0x59d9d95e8dEC7745a3A4243dB45458bfE513b0a3` on Sepolia.
 
 ## The app
 
@@ -193,7 +202,7 @@ refund itself.
 **The marketplace.** Two reference sellers are live, both registered through the ENSv2
 storefront and priced by their own text records: `openbook.eth` (0.10 USDC/query, and
 0.15 for the `aave-v3-arbitrum-lending` subname) and `alpha.openbook.eth`
-([`sellers/alpha.json`](sellers/alpha.json), 0.12 USDC/query, payout to
+([`sellers/alpha.json`](sellers/alpha.json), minted at 0.12 and repriced to 0.13 USDC/query by its own key, payout to
 `0xe09C8F90931E97d0aEE998885b306DDF08CE08Cc`). Both sell through the shared market escrow
 `0x967e005154D0F62C33Eac8E2F44b44d4C4C07Dd5`, whose 2 percent venue fee (`platformFeeBP`)
 routes every settlement's cut to the policy-gated treasury. A chosen-seller settlement is
@@ -240,7 +249,7 @@ of `openbook.eth` (`"source": "ENS"`), and `get_pnl` returns the P&L rows the
 `open-book` subgraph indexed from the escrow + policy contracts on Arc testnet.
 
 ```bash
-bun test          # 368 unit tests across agent, mcp, app and scripts; mock-injected, no keys needed
+bun test          # 371 unit tests across agent, mcp, app and scripts; mock-injected, no keys needed
 cd app && bun run dev   # the product page on localhost:5173 (reads Studio directly; the
                         # deployed lanes read it through the cached /api/subgraph proxy)
 ```
@@ -269,7 +278,7 @@ Full tool reference + the one-command live-data path:
 | --- | --- |
 | **Live demo (no keys needed)** | https://openbook.litai.ca, a real purchase and a real refund in two clicks, no wallet; every figure live from ENS, the subgraph and the escrow |
 | Frontend hosting | Cloudflare Pages project `openbook` (custom domain `openbook.litai.ca`); redeploy with `cd app && bun run build && npx wrangler pages deploy dist --project-name openbook` |
-| Storefront | `openbook.eth` on ENSv2 Sepolia (10 records: menu/price/SLA/payee/…/agent-registration; `agent-endpoint[web]` = the live demo URL) |
+| Storefront | `openbook.eth` on ENSv2 Sepolia (11 records: menu/price/SLA/payee/attester/…/agent-registration; `agent-endpoint[web]` = the live demo URL) |
 | Escrow rail | OpenBook market escrow (ERC-8183 instance, 2% fee, SlaHook whitelisted) `0x967e005154D0F62C33Eac8E2F44b44d4C4C07Dd5` on Arc testnet (chain 5042002); the shared reference deployment `0x0747EEf0…4583` carries the early history |
 | Policy treasury | `PolicyWallet` `0x4e83eB15EE973A49E40D9A79aB2cA89a4Eb4894E` (Arc testnet) |
 | Agent identity | ERC-8004 **agentId 894065** on Arc testnet |
@@ -285,7 +294,7 @@ fresh clone, not inferred from the code.
 | The judge path works with **no keys** | fresh clone → the stdio command above returns a quote (`"source": "ENS"`) and the indexed P&L in under a second |
 | A stale delivery **refunded the buyer onchain, automatically** | the [Refunded tx](https://testnet.arcscan.app/tx/0x25e7805ae79fd8320ccbc74d90dead9d87b082fd299ecfe5a5949a968e16063f) and the `refunds` row in the live P&L |
 | Treasury policy is enforced **onchain** | `PolicyWallet` verified on ArcScan; `PolicyBlocked` rows indexed by the subgraph |
-| Contracts and tests are real | 20 forge tests · 368 unit tests · 3-job CI (badge above) · 20-check browser audit (`scripts/app-audit.mjs`) |
+| Contracts and tests are real | 20 forge tests · 371 unit tests · 3-job CI (badge above) · 20-check browser audit (`scripts/app-audit.mjs`) |
 
 **Not proven, stated plainly:**
 

@@ -33,6 +33,18 @@ machine-readable records.
 
 ## Ownership & permission model (verified on Sepolia)
 
+**Delegated editing, executed live (2026-09-12).** The parent owner `0xd055…1604` granted
+alpha's own key `0xe09C…08Cc` the text role for one key on alpha's node:
+`authorizeTextRoles(dns("alpha.openbook.eth"), "svc.price", 0xe09C…, true)`
+([tx](https://sepolia.etherscan.io/tx/0x09589d0ed2d14d5b64181b41f6d38c9a4c069de1d21354addbcc7d97873b2f86)).
+Alpha then repriced itself with its own key, `setText(node, "svc.price", "0.13 USDC/query")`
+([tx](https://sepolia.etherscan.io/tx/0x0b2c133612a735ff69a86cab43c8aabcc231adcf7af4113726f30269d41edac2)).
+Three writes still revert `EACUnauthorizedAccountRoles` (`0x4b27a133`) by `eth_call`: alpha on
+`svc.sla` (key not granted), `0x9870…E4Ed` on alpha's `svc.price` (account not granted), alpha
+on the parent's `svc.price` (node not granted). The resolver is `PermissionedResolver`
+(impl `0x9eae5c2730a7dd16bdd1dee6421a1b91e3b0365e`, UUPS proxy at `0x59d9…b0a3`).
+
+
 - **Owner / deployer:** `TREASURY_EOA` (`SEPOLIA_PK`). Registration grants the owner the
   v2 registry roles (`ROLE_SET_SUBREGISTRY`, `ROLE_SET_RESOLVER`, `ROLE_CAN_TRANSFER_ADMIN`).
 - **Resolver:** `ens resolver deploy <TREASURY_EOA> …` creates an `OwnedResolver` via the

@@ -52,7 +52,7 @@ Every `sell register` writes exactly five text records on `<slug>.openbook.eth`:
 | key | value |
 |---|---|
 | `svc.menu` | `[{"id": <dataset id>, "schema": <dataset schema>}]` |
-| `svc.price` | `"0.12 USDC/query"` (name-level; all datasets must share one price) |
+| `svc.price` | `"0.12 USDC/query"` at mint (name-level; all datasets must share one price). Alpha later repriced itself to 0.13 with its own delegated key, see docs/ens-storefront.md |
 | `svc.sla` | `{"maxBlockLag": <tightest maxAge>, "maxLatencyMs": 2000}` |
 | `svc.payee` | the seller's payout address |
 | `svc.operator` | the address derived from the `operatorKey` env key (falls back to payee) |

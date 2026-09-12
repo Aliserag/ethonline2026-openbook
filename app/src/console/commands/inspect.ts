@@ -134,12 +134,14 @@ const helpCommand: Command = {
     if (argv.length > 1) {
       // Longest-prefix match: "help sandbox stale" resolves "sandbox stale",
       // not the bare "sandbox" (which is not a command) — same as dispatch.
-      const found = find(argv.slice(1).join(" "));
+      const term = argv.slice(1).join(" ");
+      const found = find(term);
+      if (found) return { render: "text", data: `${found.name}${found.args ? ` ${found.args}` : ""} · ${found.help}` };
+      // "help ens" lists every command in that group ("ens show", "ens set …")
+      const group = all.filter((c) => c.name.startsWith(`${term} `) || c.name.startsWith(term));
       return {
         render: "text",
-        data: found
-          ? `${found.name}${found.args ? ` ${found.args}` : ""} · ${found.help}`
-          : `unknown command: ${argv[1]} · try help`,
+        data: group.length > 0 ? group.map((c) => `${c.name}${c.args ? ` ${c.args}` : ""} · ${c.help}`).join("\n") : `unknown command: ${term} · try help`,
       };
     }
     const lines = all.map((c) => `${c.name}${c.args ? ` ${c.args}` : ""} · ${c.help}`);

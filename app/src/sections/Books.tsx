@@ -87,8 +87,8 @@ export function Books(): JSX.Element {
       </div>
       <div className="books__figures">
         <div className="figure">
-          <strong>{feed.value ? priceLabel(t.settledUsdc) : feed.state === "error" ? "?" : "…"}</strong>
-          <span className="small">settled to sellers</span>
+          <strong>{feed.value ? priceLabel(t.settledUsdc - t.feesUsdc) : feed.state === "error" ? "?" : "…"}</strong>
+          <span className="small">paid out to sellers, after the fee</span>
         </div>
         <div className="figure figure--back">
           <strong>{feed.value ? priceLabel(t.refundedUsdc) : feed.state === "error" ? "?" : "…"}</strong>

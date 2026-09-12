@@ -78,11 +78,11 @@ export function Hero({ onBuy, onFail }: { onBuy(): void; onFail(): void }): JSX.
           </span>
         </div>
         <div className="figure">
-          <strong>{feed.value ? priceLabel(t.settledUsdc) : feed.state === "error" ? "?" : "…"}</strong>
+          <strong>{feed.value ? priceLabel(t.settledUsdc - t.feesUsdc) : feed.state === "error" ? "?" : "…"}</strong>
           <span className="small">
             {feed.value
-              ? `settled to sellers on the OpenBook escrow · ${priceLabel(t.feesUsdc)} earned by the venue`
-              : "settled to sellers"}
+              ? `paid out to sellers after the venue fee · ${priceLabel(t.feesUsdc)} earned by the venue`
+              : "paid out to sellers"}
           </span>
         </div>
         <div className="figure">

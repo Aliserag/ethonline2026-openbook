@@ -198,7 +198,7 @@ async function readAgentNode(): Promise<NodeLiveData> {
     allowlistCached(),
   ]);
   return {
-    summary: `#${AGENT_TOKEN_ID} · ${truncateHash(identity?.owner ?? "0x0")} · spent ${usdc6(policy.spentToday)}`,
+    summary: `#${AGENT_TOKEN_ID} · spent ${usdc6(policy.spentToday)} today`,
     rows: [
       ["registry", ADDR.registry],
       ["tokenId", AGENT_TOKEN_ID.toString()],
@@ -215,7 +215,7 @@ async function readAgentNode(): Promise<NodeLiveData> {
 async function readPolicyNode(): Promise<NodeLiveData> {
   const [view, allowed] = await Promise.all([policyCached(), allowlistCached()]);
   return {
-    summary: `perTx ${usdc6(view.perTxCap)} · daily ${usdc6(view.dailyCap)} · spent ${usdc6(view.spentToday)}`,
+    summary: `caps ${usdc6(view.perTxCap)}/tx · ${usdc6(view.dailyCap)}/day`,
     rows: [
       ["address", ADDR.policy],
       ["owner", view.owner],
@@ -238,7 +238,7 @@ async function readMcpNode(): Promise<NodeLiveData> {
   const menuCell =
     records.menu === null ? "✗ unreadable" : records.menu.length > 52 ? `${records.menu.slice(0, 52)}…` : records.menu;
   return {
-    summary: `${records.price ?? "✗ price"} · arb ${head !== null ? head.toLocaleString("en-US") : "✗"}`,
+    summary: `arb head ${head !== null ? head.toLocaleString("en-US") : "✗"}`,
     rows: [
       ["name", "sla-subgraph-mcp"],
       ["menu", menuCell],
