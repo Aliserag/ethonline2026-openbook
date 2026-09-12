@@ -7,6 +7,29 @@ import { datasetTitle, freshnessPromise, priceLabel } from "../copy/plain";
 import { runPurchase, type PurchaseEvent } from "../flow/purchase";
 import { recordRun } from "../flow/session";
 import { Stepper } from "../ui/Stepper";
+import { explorerUrl, truncateHash } from "../format";
+
+const TX_RE = /^0x[0-9a-fA-F]{64}$/;
+
+/** Detail values: transaction hashes become ArcScan links; everything else prints as is. */
+function DetailValue({ value }: { value: string }): JSX.Element {
+  const parts = value.split(",").map((v) => v.trim()).filter(Boolean);
+  if (parts.length > 0 && parts.every((v) => TX_RE.test(v))) {
+    return (
+      <>
+        {parts.map((hash, i) => (
+          <span key={hash}>
+            {i > 0 && ", "}
+            <a href={explorerUrl(hash)} target="_blank" rel="noreferrer">
+              {truncateHash(hash, 10, 8)}
+            </a>
+          </span>
+        ))}
+      </>
+    );
+  }
+  return <>{value}</>;
+}
 
 const ENS = createEnsTextReader({ rpcUrl: env.sepoliaRpc });
 
@@ -163,7 +186,9 @@ export function TryIt({ armed }: { armed: "fresh" | "fail" | null }): JSX.Elemen
                         <dt>
                           {e.step} · {k}
                         </dt>
-                        <dd>{v}</dd>
+                        <dd>
+                          <DetailValue value={v} />
+                        </dd>
                       </div>
                     )),
                   )}

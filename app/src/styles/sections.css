@@ -606,7 +606,8 @@
 /* phones: the console is a desktop power-user surface and its fixed launcher
    would cover the primary button; the brand tagline wraps into the header */
 @media (max-width: 600px) {
-  .console__launcher {
+  .console__launcher,
+  .builders__links .linkbtn {
     display: none;
   }
 
