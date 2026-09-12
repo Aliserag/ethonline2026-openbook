@@ -47,7 +47,7 @@ hash, a subgraph row, or a measured value. The scripted half of this is
 - Four figures (settled, refunded, venue fees, treasury balance), the settlement board
   (12 latest jobs, seller name or dataset, outcome badge, tx or replay link), the
   treasury's refusals (`PolicyBlocked` rows with tx links).
-- Session runs appear immediately and lose their "confirming" label once the v0.0.6
+- Session runs appear immediately and lose their "confirming" label once the v0.0.8
   subgraph indexes them (verified for jobs 48, 49, 50).
 
 ## J6: secondary surfaces

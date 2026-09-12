@@ -9,7 +9,7 @@
     "baseUrl": "https://gateway.thegraph.com"
   },
   "pnl": {
-    "endpoint": "https://api.studio.thegraph.com/query/1760032/open-book/v0.0.6",
+    "endpoint": "https://api.studio.thegraph.com/query/1760032/open-book/v0.0.8",
     "query": "{ dailyPnLs { id startedAt revenue costs refunds net } refundIssueds(first: 3, orderBy: id, orderDirection: desc) { id jobId reason } _meta { block { number } } }"
   },
   "datasets": [

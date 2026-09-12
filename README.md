@@ -39,7 +39,7 @@ the refund executes onchain, automatically.** Money flows both ways.
 `_meta` block got `REJECT (STALE_DATA)` and the escrow refunded the buyer on its own, 
 [Refunded tx 0x25e7805a…6063f on ArcScan](https://testnet.arcscan.app/tx/0x25e7805ae79fd8320ccbc74d90dead9d87b082fd299ecfe5a5949a968e16063f),
 indexed in the agent's books ([the live books](https://openbook.litai.ca/#books), 
-no keys needed; [raw subgraph](https://api.studio.thegraph.com/query/1760032/open-book/v0.0.6)).
+no keys needed; [raw subgraph](https://api.studio.thegraph.com/query/1760032/open-book/v0.0.8)).
 On the marketplace escrow the same mechanic refunded two stale deliveries in full:
 [job 42 (0.15)](https://testnet.arcscan.app/tx/0xcef2e16b6028c650d6a33f9e3838d57f3d99e62963d6c6e3194e71ed19c40ca1)
 and [job 46 (0.12)](https://testnet.arcscan.app/tx/0x85ef3525ea9e57818a6c99f8e858ed36a2994be1d30b8ce02b3d78a76964b9aa) —
@@ -269,7 +269,7 @@ Full tool reference + the one-command live-data path:
 | Escrow rail | OpenBook market escrow (ERC-8183 instance, 2% fee, SlaHook whitelisted) `0x967e005154D0F62C33Eac8E2F44b44d4C4C07Dd5` on Arc testnet (chain 5042002); the shared reference deployment `0x0747EEf0…4583` carries the early history |
 | Policy treasury | `PolicyWallet` `0x4e83eB15EE973A49E40D9A79aB2cA89a4Eb4894E` (Arc testnet) |
 | Agent identity | ERC-8004 **agentId 894065** on Arc testnet |
-| Audited books | `open-book` subgraph, `https://api.studio.thegraph.com/query/1760032/open-book/v0.0.6` (public; the page reads it through a cached same-origin proxy) |
+| Audited books | `open-book` subgraph, `https://api.studio.thegraph.com/query/1760032/open-book/v0.0.8` (public; the page reads it through a cached same-origin proxy) |
 
 ## What's proven, and what isn't
 

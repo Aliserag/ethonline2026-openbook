@@ -22,7 +22,7 @@ import openbook from "../../mcp/config/openbook.json";
 import demo2 from "../../mcp/config/demo2.json";
 import { appendMeta, extractMeta, stripMeta } from "../../mcp/src/gateway";
 
-export const STUDIO_UPSTREAM = "https://api.studio.thegraph.com/query/1760032/open-book/v0.0.6";
+export const STUDIO_UPSTREAM = "https://api.studio.thegraph.com/query/1760032/open-book/v0.0.8";
 export const GATEWAY_BASE = "https://gateway.thegraph.com/api";
 export const ESCROW = "0x967e005154D0F62C33Eac8E2F44b44d4C4C07Dd5" as const;
 export const HOOK = "0x606075F3Cf9b5B66E7e4DD2ea369894374Ff0846" as const;

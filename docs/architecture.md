@@ -38,7 +38,7 @@ flowchart LR
 
     subgraph Graph["The Graph"]
         GW[Gateway<br/>pinned Messari subgraphs<br/>Aave V3 Arb · Uniswap V3 Arb · Compound V3]
-        PNL[open-book subgraph · v0.0.6<br/>arc-testnet · Studio, read through the page's cached /api/subgraph proxy<br/>QueryPaid · Fulfilled · Settled · RefundIssued · CostPaid · PolicyBlocked · Provider]
+        PNL[open-book subgraph · v0.0.8<br/>arc-testnet · Studio, read through the page's cached /api/subgraph proxy<br/>QueryPaid · Fulfilled · Settled · RefundIssued · CostPaid · PolicyBlocked · Provider]
     end
 
     SP[scripts/stale-proxy.ts<br/>replays cached old _meta<br/>deterministic money shot]

@@ -27,7 +27,7 @@
   {
     "type": "text",
     "key": "svc.pnl",
-    "value": "https://api.studio.thegraph.com/query/1760032/open-book/v0.0.6"
+    "value": "https://api.studio.thegraph.com/query/1760032/open-book/v0.0.8"
   },
   {
     "type": "text",
