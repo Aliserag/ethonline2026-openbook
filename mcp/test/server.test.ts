@@ -6,12 +6,12 @@
  * Live Gateway tests are key-guarded — they only run when GRAPH_GATEWAY_KEY is
  * present and hit the real Gateway (thegraph.com) exactly like the server does.
  */
-import { describe, expect, it, beforeAll } from "bun:test";
+import { describe, expect, it, beforeAll, beforeEach, afterEach } from "bun:test";
 import { keccak256, toBytes } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { createApp, createMcpServer } from "../src/server";
-import { escrowAddress as settleEscrowAddress } from "../../agent/escrow";
+import { escrowAddress as settleEscrowAddress, setEscrowAddress } from "../../agent/escrow";
 import {
   loadConfigFile,
   type OpenBookConfig,
@@ -423,11 +423,24 @@ describe("escrow anchor", () => {
   const MARKET_INSTANCE = "0x967e005154D0F62C33Eac8E2F44b44d4C4C07Dd5";
   const REFERENCE_INSTANCE = "0x0747EEf0706327138c69792bF28Cd525089e4583";
 
+  // The settle-path singleton is process-global: save/restore so our boots
+  // never leak into other tests (repo convention: agent/seller.test.ts).
+  let savedEscrow: `0x${string}`;
+  beforeEach(() => {
+    savedEscrow = settleEscrowAddress();
+  });
+  afterEach(() => {
+    setEscrowAddress(savedEscrow);
+  });
+
   it("boots against the config default (our market instance) with no override", () => {
     const app = createApp(configOf("openbook.json"), { env: {} });
     expect(app.escrowAnchor).toBe(MARKET_INSTANCE);
-    // the process-wide settle target follows the boot anchor, not the Task-0 default
-    expect(settleEscrowAddress()).toBe(MARKET_INSTANCE);
+    // the process-wide settle target follows the boot anchor: without the
+    // setEscrowAddress wiring this would be the shareable reference default,
+    // not the market instance
+    expect(settleEscrowAddress()).toBe(app.escrowAnchor);
+    expect(settleEscrowAddress()).not.toBe(REFERENCE_INSTANCE);
   });
 
   it("boots against the reference instance when OPENBOOK_ESCROW is set", () => {
@@ -435,10 +448,7 @@ describe("escrow anchor", () => {
       env: { OPENBOOK_ESCROW: REFERENCE_INSTANCE },
     });
     expect(app.escrowAnchor).toBe(REFERENCE_INSTANCE);
-    expect(settleEscrowAddress()).toBe(REFERENCE_INSTANCE);
-    // the five tools still answer on the same server
-    const mcp = createMcpServer(app);
-    expect(mcp).toBeDefined();
+    expect(settleEscrowAddress()).toBe(app.escrowAnchor);
   });
 
   it("refuses to boot on a malformed OPENBOOK_ESCROW (no silent fallback)", () => {

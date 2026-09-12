@@ -13,15 +13,13 @@
  */
 import { keccak256, toBytes, type PublicClient, type WalletClient } from "viem";
 import {
-  ERC8183 as ERC8183_ADDRESS,
   complete as completeJob,
   getJob,
   parseSla,
   rejectAndRefund as rejectJobAndRefund,
 } from "../../agent/escrow";
-import type { OpenBookConfig } from "./datasets";
 
-export { ERC8183_ADDRESS, parseSla };
+export { parseSla };
 
 export type RejectReason = "STALE_DATA" | "INVALID_HASH";
 
@@ -134,9 +132,4 @@ export async function verifyDelivery(
 
 function toBigInt(jobId: bigint | string): bigint {
   return typeof jobId === "bigint" ? jobId : BigInt(jobId);
-}
-
-/** Resolve the escrow address for a config (single source of truth). */
-export function escrowAddress(config: OpenBookConfig): `0x${string}` {
-  return config.escrow ?? ERC8183_ADDRESS;
 }
