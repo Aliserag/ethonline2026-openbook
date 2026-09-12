@@ -40,7 +40,7 @@ alpha's own key `0xe09C…08Cc` the text role for one key on alpha's node:
 Alpha then repriced itself with its own key, `setText(node, "svc.price", "0.13 USDC/query")`
 ([tx](https://sepolia.etherscan.io/tx/0x0b2c133612a735ff69a86cab43c8aabcc231adcf7af4113726f30269d41edac2)).
 Three writes still revert `EACUnauthorizedAccountRoles` (`0x4b27a133`) by `eth_call`: alpha on
-`svc.sla` (key not granted), `0x9870…E4Ed` on alpha's `svc.price` (account not granted), alpha
+`svc.sla` (key not granted), `0x…dEaD` (any unrelated address) on alpha's `svc.price` (account not granted), alpha
 on the parent's `svc.price` (node not granted). The resolver is `PermissionedResolver`
 (impl `0x9eae5c2730a7dd16bdd1dee6421a1b91e3b0365e`, UUPS proxy at `0x59d9…b0a3`).
 

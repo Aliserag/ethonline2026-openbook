@@ -48,6 +48,7 @@ import {
   type EnsTextReader,
 } from "./ens";
 import { verifyDelivery as verifyDeliveryCore } from "./escrow";
+import { listSellers as listSellersLive, sellersForSchema, type SellerRef } from "./directory";
 import { setEscrowAddress } from "../../agent/escrow";
 import { ARC_MS_PER_BLOCK, ARC_RPC_URL } from "./constants";
 
@@ -134,11 +135,36 @@ export interface GetPnlResult {
   metaBlock: number | null;
 }
 
+export interface SellerCandidate {
+  name: string;
+  priceUsdc: number | null;
+  price: string | null;
+  maxBlockLag: number | null;
+  /** null when the index lag is unknown (keyless run) */
+  deliverableNow: boolean | null;
+  eligible: boolean;
+  reason: string;
+}
+
+export interface ChooseSellerResult {
+  datasetId: string;
+  schema: string;
+  prefer: "cheap" | "fresh";
+  maxPriceUsdc: number | null;
+  /** the live signal the decision used: the dataset's index lag right now */
+  signal: { chainHead: number; metaBlock: number; lagBlocks: number } | null;
+  candidates: SellerCandidate[];
+  choice: SellerCandidate | null;
+  rationale: string[];
+}
+
 export interface OpenBookApp {
   /** The ERC-8183 escrow this app boots against — config default, or OPENBOOK_ESCROW override when set. */
   escrowAnchor: `0x${string}`;
   listDatasets(): Promise<ListDatasetsResult>;
   getQuote(datasetId: string): Promise<GetQuoteResult>;
+  /** Pick a seller for a dataset from live ENS terms and the dataset's current index lag. */
+  chooseSeller(input: { datasetId: string; prefer?: "cheap" | "fresh"; maxPriceUsdc?: number }): Promise<ChooseSellerResult>;
   queryDataset(datasetId: string, graphql: string): Promise<QueryDatasetResult>;
   verifyDelivery(input: {
     jobId?: string;
@@ -157,6 +183,8 @@ export interface AppDeps {
   /** freshness head resolver — defaults to Alchemy via chainhead.ts (the
    * Gateway's _meta has no chainHeadBlock field; live probe 2026-09-09) */
   chainHead?: ChainHeadResolver;
+  /** seller enumeration seam (live: the ENSv2 subregistry walk in directory.ts) */
+  listSellers?: (parentName: string) => Promise<SellerRef[]>;
 }
 
 // --- app construction -------------------------------------------------------------
@@ -196,6 +224,7 @@ export function createApp(config: OpenBookConfig, deps: AppDeps = {}): OpenBookA
   const readEnsText = deps.readEnsText ?? createEnsTextReader({ rpcUrl: env["SEPOLIA_RPC"] });
   const fetchImpl = deps.fetchImpl;
   const chainHead = deps.chainHead ?? defaultChainHeadResolver(env["ALCHEMY_API_KEY"]);
+  const listSellersDep = deps.listSellers ?? ((parent: string) => listSellersLive(parent, { readEnsText }));
   const operatorKey = resolveOperatorKey(config, env);
   const gatewayKey = resolveGatewayKey(config, env);
 
@@ -438,7 +467,80 @@ export function createApp(config: OpenBookConfig, deps: AppDeps = {}): OpenBookA
     return { dailyPnLs: rows, metaBlock: meta.block };
   };
 
-  return { escrowAnchor, listDatasets, getQuote, queryDataset, verifyDelivery: verifyDeliveryTool, getPnl };
+  /**
+   * The buyer-side decision: which seller to buy this dataset from. Terms come
+   * from each seller's live ENS records (price, freshness window); the signal
+   * is the dataset's index lag right now (Gateway _meta vs the chain head). A
+   * seller whose promised window the index cannot meet at this moment is not
+   * eligible: buying from it would only end in a refund.
+   */
+  const chooseSeller = async (input: { datasetId: string; prefer?: "cheap" | "fresh"; maxPriceUsdc?: number }): Promise<ChooseSellerResult> => {
+    const dataset = config.datasets.find((d) => d.id === input.datasetId);
+    if (dataset === undefined) throw new Error(`unknown dataset: ${input.datasetId}`);
+    const prefer = input.prefer ?? "cheap";
+    const maxPriceUsdc = typeof input.maxPriceUsdc === "number" && input.maxPriceUsdc > 0 ? input.maxPriceUsdc : null;
+    const rationale: string[] = [];
+
+    const sellers = sellersForSchema(await listSellersDep(config.ens), dataset.schema);
+    rationale.push(`${sellers.length} seller(s) list ${dataset.schema} under ${config.ens} (read from ENSv2 just now)`);
+
+    let signal: ChooseSellerResult["signal"] = null;
+    if (gatewayKey) {
+      try {
+        const { meta } = await gatewayQuery({ key: gatewayKey, subgraphId: dataset.subgraphId, query: "{ _meta { block { number } } }", baseUrl: config.gateway.baseUrl, fetchImpl });
+        const head = meta.block === null ? null : await chainHead(dataset.chain);
+        if (meta.block !== null && head !== null) {
+          signal = { chainHead: head, metaBlock: meta.block, lagBlocks: Math.max(0, head - meta.block) };
+          rationale.push(`the ${dataset.id} index is ${signal.lagBlocks} block(s) behind the ${dataset.chain} head (${meta.block} vs ${head})`);
+        }
+      } catch (error) {
+        rationale.push(`index lag unknown (${error instanceof Error ? error.message.slice(0, 80) : String(error)}); deciding on ENS terms alone`);
+      }
+    } else {
+      rationale.push("no GRAPH_GATEWAY_KEY, so the index lag is unknown; deciding on ENS terms alone");
+    }
+
+    const candidates: SellerCandidate[] = sellers.map((seller) => {
+      const m = seller.price?.match(/^([0-9]+(?:\.[0-9]+)?)\s*USDC/i);
+      const priceUsdc = m ? Number(m[1]) : null;
+      const maxBlockLag = seller.sla?.maxBlockLag ?? null;
+      const deliverableNow = signal === null || maxBlockLag === null ? null : signal.lagBlocks <= maxBlockLag;
+      let reason: string;
+      let eligible = true;
+      if (priceUsdc === null) {
+        eligible = false;
+        reason = "svc.price unreadable";
+      } else if (maxBlockLag === null) {
+        eligible = false;
+        reason = "svc.sla unreadable";
+      } else if (maxPriceUsdc !== null && priceUsdc > maxPriceUsdc) {
+        eligible = false;
+        reason = `${priceUsdc} USDC is over the ${maxPriceUsdc} USDC budget`;
+      } else if (deliverableNow === false) {
+        eligible = false;
+        reason = `promises ≤${maxBlockLag} blocks but the index is ${signal!.lagBlocks} behind right now: a purchase would only be refunded`;
+      } else {
+        reason = deliverableNow === true ? `${priceUsdc} USDC, promises ≤${maxBlockLag} blocks, index lag ${signal!.lagBlocks}: deliverable now` : `${priceUsdc} USDC, promises ≤${maxBlockLag} blocks (lag unknown)`;
+      }
+      return { name: seller.name, priceUsdc, price: seller.price, maxBlockLag, deliverableNow, eligible, reason };
+    });
+
+    const eligible = candidates.filter((c) => c.eligible && c.priceUsdc !== null && c.maxBlockLag !== null);
+    eligible.sort((a, b) =>
+      prefer === "cheap"
+        ? a.priceUsdc! - b.priceUsdc! || a.maxBlockLag! - b.maxBlockLag!
+        : a.maxBlockLag! - b.maxBlockLag! || a.priceUsdc! - b.priceUsdc!,
+    );
+    const choice = eligible[0] ?? null;
+    if (choice) {
+      rationale.push(prefer === "cheap" ? `chose ${choice.name}: the cheapest seller that can deliver (${choice.priceUsdc} USDC)` : `chose ${choice.name}: the tightest freshness promise that can deliver (≤${choice.maxBlockLag} blocks at ${choice.priceUsdc} USDC)`);
+    } else {
+      rationale.push("no seller is eligible right now: do not buy");
+    }
+    return { datasetId: dataset.id, schema: dataset.schema, prefer, maxPriceUsdc, signal, candidates, choice, rationale };
+  };
+
+  return { escrowAnchor, listDatasets, getQuote, chooseSeller, queryDataset, verifyDelivery: verifyDeliveryTool, getPnl };
 }
 
 // --- MCP registration --------------------------------------------------------------
@@ -477,7 +579,7 @@ function wrap<Args>(fn: (args: Args) => Promise<unknown>): (args: Args) => Promi
   };
 }
 
-/** Register the 5 tools on an SDK McpServer. */
+/** Register the 6 tools on an SDK McpServer. */
 export function createMcpServer(app: OpenBookApp): McpServer {
   const server = new McpServer({ name: "sla-subgraph-mcp", version: "0.1.0" });
 
@@ -493,6 +595,13 @@ export function createMcpServer(app: OpenBookApp): McpServer {
     "Resolve the live price/SLA/payee for a dataset from the ENSv2 svc.* records (Sepolia). Hard-fails (ENS_RESOLUTION_FAILED) when records are missing — never quotes hard-coded values.",
     { datasetId: z.string().min(1) },
     wrap(async (args: { datasetId: string }) => app.getQuote(args.datasetId)),
+  );
+
+  server.tool(
+    "choose_seller",
+    "Decide which seller to buy a dataset from. Enumerates the sellers that list it on ENSv2, reads each one's live price and freshness window, measures the dataset's index lag right now (Gateway _meta vs chain head), drops sellers whose window the index cannot meet, and picks the cheapest (prefer=cheap) or tightest-window (prefer=fresh) seller within maxPriceUsdc. Returns candidates, the choice and the reasoning.",
+    { datasetId: z.string().min(1), prefer: z.enum(["cheap", "fresh"]).optional(), maxPriceUsdc: z.number().positive().optional() },
+    wrap(async (args: { datasetId: string; prefer?: "cheap" | "fresh"; maxPriceUsdc?: number }) => app.chooseSeller(args)),
   );
 
   server.tool(

@@ -99,7 +99,9 @@ are organs, not stickers:
 - **The Graph (the product):** `sla-subgraph-mcp`, a generic MCP server with a
   packaged, node-runnable bin (npm publishing is the one-line post-freeze step)
   that turns any subgraph into a paid, freshness-gated product; OpenBook is the reference
-  deployment. **The difference from a read-only MCP wrapper is where the freshness gate
+  deployment. Six tools, including `choose_seller`: the buyer-side decision that reads every
+  seller's live ENS terms and the dataset's index lag right now, drops sellers whose promised
+  window the index cannot meet, and picks the cheapest or the freshest, with its reasoning. **The difference from a read-only MCP wrapper is where the freshness gate
   sits: it decides whether money moves.** Stale data is never charged, and a missed SLA
   refunds the buyer onchain, provenance that *costs* the seller, not a footnote on an
   answer. Plus the `open-book` Studio subgraph on **arc-testnet** indexing every
@@ -120,9 +122,11 @@ are organs, not stickers:
   and alpha repriced itself from 0.12 to 0.13 USDC/query with that key
   ([setText tx](https://sepolia.etherscan.io/tx/0x0b2c133612a735ff69a86cab43c8aabcc231adcf7af4113726f30269d41edac2)).
   Everything else still reverts `EACUnauthorizedAccountRoles` (`0x4b27a133`): alpha writing
-  `svc.sla` (not granted), a stranger writing alpha's `svc.price`, alpha writing the parent's
-  `svc.price`. Reproduce with `cast call <resolver> "setText(bytes32,string,string)" … --from <key>`
-  against `0x59d9d95e8dEC7745a3A4243dB45458bfE513b0a3` on Sepolia.
+  `svc.sla` (not granted), an unrelated address writing alpha's `svc.price`, alpha writing the
+  parent's `svc.price`. Reproduce in the page's console with `ens can-edit <name> <key> <address>`
+  (an `eth_call` of `setText` from that address: allowed, or `EACUnauthorizedAccountRoles`), or
+  grant and prove a delegation yourself with `scripts/ens/delegate.sh <subname> <key> <address>`
+  against resolver `0x59d9d95e8dEC7745a3A4243dB45458bfE513b0a3` on Sepolia.
 
 ## The app
 

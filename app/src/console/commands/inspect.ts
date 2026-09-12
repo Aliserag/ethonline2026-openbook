@@ -22,6 +22,9 @@ import type { JobView } from "../../data/types";
 import { cachedAsOfLabel } from "../../data/cache";
 import { truncateHash, usdc6 } from "../../format";
 import { createEnsTextReader, parsePriceToAmount6dec, parseSlaRecord } from "../../../../mcp/src/ens";
+import { createDirectoryClient } from "../../../../mcp/src/directory";
+import { namehash, parseAbi } from "viem";
+import { walkRevertData } from "./act";
 import { defaultChainHeadResolver } from "../../../../mcp/src/chainhead";
 import { commands, find, register, type Command, type KvRow } from "../registry";
 import { actJobStatusRow, getActJob, isRecoveredActJob } from "./act";
@@ -254,6 +257,65 @@ const ensShowCommand: Command = {
         rows,
         summary:
           "live reads from sepolia ENSv2 · price/sla/payee unset hard-fails the quote (no hard-coded values)",
+      },
+    };
+  },
+};
+
+const OPENBOOK_RESOLVER = "0x59d9d95e8dEC7745a3A4243dB45458bfE513b0a3" as const;
+const RESOLVER_SET_TEXT_ABI = parseAbi(["function setText(bytes32 node, string key, string value)"]);
+const EAC_UNAUTHORIZED = "0x4b27a133";
+
+/**
+ * "May this key edit this record on this name?" answered by the resolver itself:
+ * an eth_call of setText from that address either passes or reverts
+ * EACUnauthorizedAccountRoles. No transaction, no hard-coded role table.
+ */
+const ensCanEditCommand: Command = {
+  name: "ens can-edit",
+  args: "<name> <key> <address>",
+  help: "ENSv2 access control, live: simulate setText from an address (EAC delegation check, no tx)",
+  kind: "inspect",
+  run: async (_ctx, argv) => {
+    const [, name, key, address] = argv;
+    if (!name || !key || !address || !/^0x[0-9a-fA-F]{40}$/.test(address)) {
+      return { render: "text", data: "usage: ens can-edit <name> <key> <0xaddress> · e.g. ens can-edit alpha.openbook.eth svc.price 0xe09C8F90931E97d0aEE998885b306DDF08CE08Cc" };
+    }
+    const client = createDirectoryClient(env.sepoliaRpc);
+    const node = namehash(name);
+    let verdict: string;
+    let detail: string;
+    try {
+      await client.simulateContract({
+        address: OPENBOOK_RESOLVER,
+        abi: RESOLVER_SET_TEXT_ABI,
+        functionName: "setText",
+        args: [node, key, "probe"],
+        account: address as `0x${string}`,
+      });
+      verdict = "allowed";
+      detail = "the resolver accepts setText from this address for this key on this node (a real write would succeed)";
+    } catch (error) {
+      const hex = walkRevertData(error);
+      if (hex !== undefined && hex.startsWith(EAC_UNAUTHORIZED)) {
+        verdict = "refused · EACUnauthorizedAccountRoles";
+        detail = "no text role for this key on this node (Enhanced Access Control); the parent owner can grant one with authorizeTextRoles";
+      } else {
+        verdict = `refused · ${hex !== undefined ? hex.slice(0, 10) : reason(error)}`;
+        detail = "reverted for a reason other than access control";
+      }
+    }
+    return {
+      render: "kv",
+      data: {
+        rows: [
+          ["name", name],
+          ["node", node],
+          ["key", key],
+          ["address", address],
+          ["verdict", verdict],
+        ],
+        note: `${detail} · resolver ${OPENBOOK_RESOLVER} (PermissionedResolver, Sepolia) · try scripts/ens/delegate.sh to grant`,
       },
     };
   },
@@ -648,6 +710,7 @@ registerAll(
   helpCommand,
   statusCommand,
   ensShowCommand,
+  ensCanEditCommand,
   datasetsCommand,
   quoteCommand,
   booksCommand,

@@ -23,12 +23,13 @@ node mcp/dist/server.js --config myconfig.json
 ```
 
 Any MCP client (Claude, Codex, Cursor, a custom stdio client…) connects over
-stdio and gets five tools:
+stdio and gets six tools:
 
 | tool              | purpose                                                        |
 | ----------------- | -------------------------------------------------------------- |
 | `list_datasets`   | catalog: pinned Start Fresh subgraphs + ENS `svc.menu` entries |
 | `get_quote`       | live ENSv2 price/SLA/payee for a dataset (hard-fails if unset) |
+| `choose_seller`   | decide which seller to buy from: live terms + the dataset's index lag now |
 | `query_dataset`   | Gateway query with `_meta` freshness gate + signed attestation |
 | `verify_delivery` | deterministic APPROVE/REJECT; `settle:true` executes onchain   |
 | `get_pnl`         | open-book DailyPnL from arc-testnet                            |
@@ -65,6 +66,10 @@ Gateway-backed, freshness-gated path.
 
 ## Get paid (the buyer→seller flow)
 
+0. **Buyer** calls `choose_seller({datasetId, prefer: "cheap" | "fresh"})` when more than one
+   seller lists the dataset: sellers whose promised window the index cannot meet right now
+   are dropped (buying from them would only end in a refund), then the cheapest or the
+   tightest window wins. The reasoning comes back as text.
 1. **Buyer** calls `get_quote(datasetId)` → `{amount, minBlockLag, deadlineBlocks, payee}`
    resolved **live from ENS** (`svc.price`, `svc.sla`, `svc.payee`) — never
    hard-coded. Missing records ⇒ `ENS_RESOLUTION_FAILED` (hard-fail on purpose).

@@ -23,7 +23,7 @@ export function Builders({ onConsole, onBuy }: { onConsole(): void; onBuy(): voi
           <h3>The Graph is the product</h3>
           <p className="small">
             Any of 15,000+ subgraphs becomes a paid, freshness-guaranteed dataset with one config entry. The seller
-            runs as an MCP server: agents get a quote, buy, and verify the delivery with five tools. The public books
+            runs as an MCP server: agents pick a seller, get a quote, buy, and verify the delivery with six tools. The public books
             are a subgraph too.
           </p>
           <pre className="mono builder__code">bun mcp/src/server.ts --config mcp/config/openbook.json</pre>

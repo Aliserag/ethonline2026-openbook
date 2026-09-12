@@ -471,7 +471,7 @@ describe("MCP server (protocol-level)", () => {
     });
   });
 
-  it("advertises exactly the 5 tools", async () => {
+  it("advertises exactly the 6 tools", async () => {
     const mcp = createMcpServer(app);
     const [client, serverSide] = InMemoryTransport.createLinkedPair();
     await mcp.connect(serverSide);
@@ -483,7 +483,7 @@ describe("MCP server (protocol-level)", () => {
       .map((t) => String(asRecord(t)["name"]))
       .sort((a, b) => a.localeCompare(b));
     expect(names).toEqual(
-      ["get_pnl", "get_quote", "list_datasets", "query_dataset", "verify_delivery"].sort(),
+      ["choose_seller", "get_pnl", "get_quote", "list_datasets", "query_dataset", "verify_delivery"].sort(),
     );
   });
 
@@ -667,4 +667,62 @@ describe.skipIf(!hasKey)("live Gateway (opt-in: RUN_LIVE=1 + GRAPH_GATEWAY_KEY)"
     },
     60_000,
   );
+});
+
+// --- choose_seller (the buyer-side decision over live terms + index lag) ------------
+
+describe("choose_seller (decides from ENS terms and the live index lag)", () => {
+  const sellers = [
+    { name: "openbook.eth", menu: [{ id: "aave-v3-arbitrum-lending", schema: "lending/3.1.0" }], price: "0.10 USDC/query", sla: { maxBlockLag: 50, maxLatencyMs: 2000 }, payee: null, operator: null },
+    { name: "alpha.openbook.eth", menu: [{ id: "aave-v3-arbitrum-lending", schema: "lending/3.1.0" }], price: "0.13 USDC/query", sla: { maxBlockLag: 50, maxLatencyMs: 2000 }, payee: null, operator: null },
+    { name: "strict.openbook.eth", menu: [{ id: "aave-v3-arbitrum-lending", schema: "lending/3.1.0" }], price: "0.05 USDC/query", sla: { maxBlockLag: 1, maxLatencyMs: 2000 }, payee: null, operator: null },
+    { name: "dex.openbook.eth", menu: [{ id: "uniswap-v3-arbitrum-dex", schema: "dex-amm/4.0.1" }], price: "0.01 USDC/query", sla: { maxBlockLag: 50, maxLatencyMs: 2000 }, payee: null, operator: null },
+  ];
+  const lagFetch = mockFetch(() => gatewayBody({}, 1000, "0xabc"));
+  const appWithKey = (): OpenBookApp =>
+    createApp(configOf("openbook.json"), {
+      env: { GRAPH_GATEWAY_KEY: "test-key" },
+      readEnsText: stubEns(ensFixtures),
+      fetchImpl: lagFetch.fetchImpl,
+      chainHead: async () => 1003, // 3 blocks behind
+      listSellers: async () => sellers,
+    });
+
+  it("prefers the cheapest seller that can deliver now; a 1-block window the index cannot meet is excluded", async () => {
+    const out = await appWithKey().chooseSeller({ datasetId: "aave-v3-arbitrum-lending" });
+    expect(out.signal).toEqual({ chainHead: 1003, metaBlock: 1000, lagBlocks: 3 });
+    expect(out.candidates.map((c) => c.name)).toEqual(["openbook.eth", "alpha.openbook.eth", "strict.openbook.eth"]);
+    const strict = out.candidates.find((c) => c.name === "strict.openbook.eth")!;
+    expect(strict.eligible).toBe(false);
+    expect(strict.reason).toContain("would only be refunded");
+    expect(out.choice?.name).toBe("openbook.eth");
+    expect(out.rationale.at(-1)).toContain("cheapest seller that can deliver");
+  });
+
+  it("prefer=fresh picks the tightest deliverable window, price as tie-break", async () => {
+    const out = await appWithKey().chooseSeller({ datasetId: "aave-v3-arbitrum-lending", prefer: "fresh" });
+    expect(out.choice?.name).toBe("openbook.eth");
+    expect(out.rationale.at(-1)).toContain("tightest freshness promise");
+  });
+
+  it("a budget excludes sellers above it and can leave no choice", async () => {
+    const out = await appWithKey().chooseSeller({ datasetId: "aave-v3-arbitrum-lending", maxPriceUsdc: 0.08 });
+    expect(out.choice).toBeNull();
+    expect(out.rationale.at(-1)).toContain("do not buy");
+    expect(out.candidates.find((c) => c.name === "alpha.openbook.eth")?.reason).toContain("over the 0.08 USDC budget");
+  });
+
+  it("keyless: decides on ENS terms alone and says so (signal null, lag unknown)", async () => {
+    const app = createApp(configOf("openbook.json"), { env: {}, readEnsText: stubEns(ensFixtures), listSellers: async () => sellers });
+    const out = await app.chooseSeller({ datasetId: "aave-v3-arbitrum-lending" });
+    expect(out.signal).toBeNull();
+    expect(out.rationale[1]).toContain("no GRAPH_GATEWAY_KEY");
+    // without a lag reading the strict seller is not excluded, and it is the cheapest
+    expect(out.choice?.name).toBe("strict.openbook.eth");
+    expect(out.choice?.deliverableNow).toBeNull();
+  });
+
+  it("unknown dataset throws", async () => {
+    await expect(appWithKey().chooseSeller({ datasetId: "nope" })).rejects.toThrow("unknown dataset");
+  });
 });

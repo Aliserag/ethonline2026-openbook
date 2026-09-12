@@ -56,6 +56,7 @@ printf '%s\n' \
 | ----------------- | ---------------------------------------------------------------------------- |
 | `list_datasets()` | the five datasets — `aave-v3-arbitrum-lending`, `uniswap-v3-arbitrum-dex`, `opensea-nft-trades`, `ens-registrations`, `overtime-sports-odds` — with schema/price/description (+ ENS `svc.menu` entries) |
 | `get_quote(id)`   | `{amount: 150000, amountUsdc: "0.15", minBlockLag: 50, deadlineBlocks: 1, payee, source: "ENS"}` for `aave-v3-arbitrum-lending` (its subname record); parent-priced datasets quote `0.10` |
+| `choose_seller({datasetId, prefer?, maxPriceUsdc?})` | the buyer's decision: every seller listing the dataset (ENSv2 subregistry walk), each one's live price and window, the dataset's index lag right now, which sellers could deliver, the pick (`cheap` or `fresh`) and the reasoning; keyless it decides on terms alone and says so |
 | `query_dataset(id, gql)` | fresh: `{result, meta: {block, hash}, attestation: {message, signature, signer}}`; stale: `{unavailable: true, reason: "STALE"}` |
 | `verify_delivery({jobId, payloadHash, metaBlock})` | `{verdict: "APPROVE"}` or `{verdict: "REJECT", reason: "STALE_DATA"}`; add `settle: true` to execute the onchain settlement |
 | `get_pnl()`       | `{dailyPnLs: [{id, revenue, costs, refunds, net}], metaBlock}` from the open-book subgraph (arc-testnet; public Studio endpoint — no key) |

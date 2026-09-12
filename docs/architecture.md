@@ -31,7 +31,7 @@ flowchart LR
     end
 
     subgraph MCP["sla-subgraph-mcp (server)"]
-        S["5 tools<br/>list_datasets · get_quote · query_dataset<br/>verify_delivery · get_pnl"]
+        S["6 tools<br/>list_datasets · get_quote · choose_seller · query_dataset<br/>verify_delivery · get_pnl"]
         GATE["_meta freshness gate<br/>chainHeadBlock − _meta.block > maxAge<br/>→ STALE · never charged"]
         SIGN["attestation<br/>queryId|payloadHash|metaBlock"]
     end
