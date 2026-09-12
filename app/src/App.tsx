@@ -407,6 +407,13 @@ export default function App() {
   useEffect(() => {
     const onHash = (): void => setMapRoute(window.location.hash === "#map");
     window.addEventListener("hashchange", onHash);
+    // Deep-link/refresh at `#map`: native fragment navigation runs before the
+    // wrapper exists (React mounts after), so browsers don't retry — scroll
+    // explicitly once the route has rendered. In-page clicks still use the
+    // native anchor jump (the element is already there).
+    if (window.location.hash === "#map") {
+      document.getElementById("map")?.scrollIntoView({ block: "start" });
+    }
     return () => window.removeEventListener("hashchange", onHash);
   }, []);
 
