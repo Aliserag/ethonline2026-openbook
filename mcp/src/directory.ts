@@ -146,11 +146,22 @@ export interface DirectoryDeps {
  */
 export const DIRECTORY_RPC_FALLBACK = "https://ethereum-sepolia.publicnode.com";
 
+/**
+ * SEPOLIA_RPC from the Node env, undefined when there is no `process` global.
+ * app/src/data/directory.ts re-exports listSellers into the Vite browser
+ * bundle, which has no process shim — a bare `process` identifier would throw
+ * `ReferenceError` at call time, so both RPC-defaulting sites must go through
+ * this guard (`process?.env` does NOT help; `typeof process` is the safe test).
+ */
+export function envSepoliaRpc(): string | undefined {
+  return typeof process === "undefined" ? undefined : process.env.SEPOLIA_RPC;
+}
+
 /** viem public client over Sepolia, honoring the repo's SEPOLIA_RPC env seam. */
 export function createDirectoryClient(rpcUrl?: string): PublicClient {
   return createPublicClient({
     chain: sepolia,
-    transport: http(rpcUrl ?? process.env.SEPOLIA_RPC ?? DIRECTORY_RPC_FALLBACK, {
+    transport: http(rpcUrl ?? envSepoliaRpc() ?? DIRECTORY_RPC_FALLBACK, {
       timeout: 20_000,
       retryCount: 3,
     }),
@@ -351,7 +362,7 @@ export async function listSellers(
 ): Promise<SellerRef[]> {
   const readEnsText =
     opts.readEnsText ??
-    createEnsTextReader({ rpcUrl: process.env.SEPOLIA_RPC ?? DIRECTORY_RPC_FALLBACK });
+    createEnsTextReader({ rpcUrl: envSepoliaRpc() ?? DIRECTORY_RPC_FALLBACK });
   const subnames = await listRegisteredSubnames(parentName, opts);
   return resolveSellers(parentName, subnames, readEnsText);
 }

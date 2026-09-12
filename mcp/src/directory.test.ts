@@ -11,6 +11,7 @@ import { describe, expect, it } from "bun:test";
 import { labelhash, type Address, type PublicClient } from "viem";
 import {
   ENSV2_FROM_BLOCK,
+  envSepoliaRpc,
   listRegisteredSubnames,
   resolveSellers,
   sellersForSchema,
@@ -192,6 +193,50 @@ describe("listRegisteredSubnames (stubbed chain)", () => {
       client: stubClient(["alpha"], ["alpha", "burned"], "0xBDC85dD5b15D7ecb354cd7cb6f2c50b4f2c4F0E2"),
     });
     expect(sub.map((s) => s.label)).toEqual(["alpha"]); // "burned" logged but not REGISTERED
+  });
+});
+
+// --- process-less environments (Vite browser bundle safety) -------------------
+
+/**
+ * The app bundle has no `process` global — a bare `process` identifier throws
+ * `ReferenceError` at call time. envSepoliaRpc() must read the env through a
+ * `typeof process === "undefined"` guard at BOTH RPC-defaulting sites.
+ */
+describe("envSepoliaRpc (no process shim in the browser bundle)", () => {
+  // globalThis is the well-known kernel; simulating a browser bundle that
+  // lacks Node's `process` global requires deleting + restoring it in a test.
+  const kernel = globalThis as typeof globalThis & { process?: unknown };
+
+  it("returns undefined when `process` is absent (typeof-guarded, no throw)", () => {
+    const saved = kernel.process;
+    try {
+      delete kernel.process;
+      expect(() => envSepoliaRpc()).not.toThrow();
+      expect(envSepoliaRpc()).toBeUndefined();
+    } finally {
+      kernel.process = saved;
+    }
+  });
+
+  it("returns the SEPOLIA_RPC value when `process.env` carries it", () => {
+    const savedVar = process.env.SEPOLIA_RPC;
+    try {
+      process.env.SEPOLIA_RPC = "https://example.invalid/rpc";
+      expect(envSepoliaRpc()).toBe("https://example.invalid/rpc");
+    } finally {
+      process.env.SEPOLIA_RPC = savedVar;
+    }
+  });
+
+  it("returns undefined when `process` exists but SEPOLIA_RPC is unset", () => {
+    const savedVar = process.env.SEPOLIA_RPC;
+    try {
+      delete process.env.SEPOLIA_RPC;
+      expect(envSepoliaRpc()).toBeUndefined();
+    } finally {
+      process.env.SEPOLIA_RPC = savedVar;
+    }
   });
 });
 
