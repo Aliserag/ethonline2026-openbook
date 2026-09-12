@@ -621,7 +621,7 @@ export default function App() {
           : { text: "DELIVERED · NO META · freshness cannot be attested", kind: "idle" as const },
     );
   } else if (job !== null) {
-    tapeEvents.push({ text: `FUNDED job ${job.jobId} · SLA minBlock ${job.minBlock}`, kind: "idle" as const });
+    tapeEvents.push({ text: `FUNDED job ${job.jobId} · SLA floor ${job.minBlock}`, kind: "idle" as const });
   } else if (quote !== null) {
     tapeEvents.push({ text: `QUOTED ${quote.amountUsdc} USDC/query · SLA lag ${quote.minBlockLag} · latency ${quote.maxLatencyMs}ms`, kind: "idle" as const });
   } else {
@@ -663,7 +663,7 @@ export default function App() {
               The data marketplace for agents, with{" "}
               <span className="accent">
                 automatic{" "}
-                <Tip text="A delivery is stale when its data is older than the freshness floor the SLA set at payment time. Missing the floor refunds the buyer automatically, onchain, with nobody asked to approve it.">refunds</Tip>{" "}
+                <Tip text="A delivery is stale when its data is older than the freshness floor the SLA set at payment time. Missing the floor triggers the escrow: it refunds the buyer automatically, onchain, with nobody asked to approve it.">refunds</Tip>{" "}
                 for every stale delivery
               </span>
               .
@@ -1331,12 +1331,12 @@ function FreshnessRuler({
         <span
           className="windowbar"
           style={{ left: `${pct(minBlock)}%`, width: `${Math.max(0, pct(chainHeadBlock) - pct(minBlock))}%` }}
-          title={`SLA accepts metaBlock >= ${minBlock}`}
+          title={`SLA floor accepts metaBlock >= ${minBlock}`}
         />
       )}
       {minBlock !== null && (
         <span className="mark minblock" style={{ left: `${pct(minBlock)}%` }}>
-          SLA min {minBlock}
+          SLA floor {minBlock}
         </span>
       )}
       <span className={`needle meta${freshness === "fresh" ? " fresh" : ""}`} style={{ left: `${pct(metaBlock)}%` }}>
