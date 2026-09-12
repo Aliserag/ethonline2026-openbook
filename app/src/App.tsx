@@ -28,6 +28,7 @@ import { defaultChainHeadResolver } from "../../mcp/src/chainhead";
 import { createJobWithSla, ERC8183, ERC8183_ABI, setUsdcAddress, usdcAddress, USDC_ABI, type Sla } from "../../agent/escrow";
 import { verifyDelivery } from "../../mcp/src/escrow";
 import { Console } from "./console/Console";
+import { TheaterRoute } from "./theater/Theater";
 
 // Chain-specific USDC (VITE_USDC_ADDRESS), mainnet override for the escrow module.
 if (env.usdcAddress !== undefined && /^0x[0-9a-fA-F]{40}$/.test(env.usdcAddress)) {
@@ -1253,6 +1254,7 @@ export default function App() {
       </footer>
 
       <Console />
+      <TheaterRoute />
     </>
   );
 }

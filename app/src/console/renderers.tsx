@@ -25,7 +25,14 @@ export function KvBlock({ data }: { data: KvData }): JSX.Element {
   );
 }
 
-export function TableBlock({ data }: { data: TableData }): JSX.Element {
+export function TableBlock({
+  data,
+  onOpenJob,
+}: {
+  data: TableData;
+  /** when set, rows carrying a numeric `job` cell become clickable replay links */
+  onOpenJob?: (jobId: string) => void;
+}): JSX.Element {
   return (
     <div className="console__tablewrap">
       {data.summary !== undefined && <div className="console__summary">{data.summary}</div>}
@@ -40,13 +47,41 @@ export function TableBlock({ data }: { data: TableData }): JSX.Element {
           </tr>
         </thead>
         <tbody>
-          {data.rows.map((row, i) => (
-            <tr key={i}>
-              {data.columns.map((column) => (
-                <td key={column}>{row[column] ?? ""}</td>
-              ))}
-            </tr>
-          ))}
+          {data.rows.map((row, i) => {
+            const openJob = onOpenJob;
+            const jobCell = row["job"];
+            const clickable = openJob !== undefined && jobCell !== undefined && /^[0-9]+$/.test(jobCell);
+            if (!clickable) {
+              return (
+                <tr key={i}>
+                  {data.columns.map((column) => (
+                    <td key={column}>{row[column] ?? ""}</td>
+                  ))}
+                </tr>
+              );
+            }
+            const jobId = jobCell;
+            return (
+              <tr
+                key={i}
+                className="console__row--job"
+                role="button"
+                tabIndex={0}
+                title={`replay job ${jobId} in the theater`}
+                onClick={() => openJob(jobId)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    openJob(jobId);
+                  }
+                }}
+              >
+                {data.columns.map((column) => (
+                  <td key={column}>{row[column] ?? ""}</td>
+                ))}
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>
@@ -116,23 +151,26 @@ export function FramesBlock({ data }: { data: FramesData }): JSX.Element {
   return (
     <div className="console__frames">
       <div className="console__note">
-        replay <code>{data.jobId}</code> — opened the theater at #theater/{data.jobId}. Frame-by-frame
-        playback (quote → pay → deliver → verdict → money → books) lands with the Theater task (T10);
-        until then, <code>job {data.jobId}</code> shows the onchain detail from the subgraph.
+        replay <code>{data.jobId}</code> — the theater is open at{" "}
+        <code>#theater/{data.jobId}</code>: quote → pay → deliver → verdict → money →
+        books (←/→ scrub, esc closes).
       </div>
     </div>
   );
 }
 
 /** Render any CommandResult through its kind's block. */
-export function renderResult(result: CommandResult): JSX.Element {
+export function renderResult(
+  result: CommandResult,
+  onOpenJob?: (jobId: string) => void,
+): JSX.Element {
   switch (result.render) {
     case "text":
       return <TextBlock text={result.data} />;
     case "kv":
       return <KvBlock data={result.data} />;
     case "table":
-      return <TableBlock data={result.data} />;
+      return <TableBlock data={result.data} onOpenJob={onOpenJob} />;
     case "ruler":
       return <RulerBlock data={result.data} />;
     case "tx":

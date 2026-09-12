@@ -251,7 +251,7 @@ export function Console(): JSX.Element {
                   ) : (
                     entry.results.map((result, i) => (
                       <div key={i} className={`console__block console__block--${result.render}`}>
-                        {renderResult(result)}
+                        {renderResult(result, (jobId) => ctx.navigate(`#theater/${jobId}`))}
                       </div>
                     ))
                   )}
