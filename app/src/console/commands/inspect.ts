@@ -19,7 +19,7 @@ import { fetchJobEvents, fetchJobs, fetchLag, scopedTotals } from "../../data/su
 import { truncateHash, usdc6 } from "../../format";
 import { createEnsTextReader, parsePriceToAmount6dec, parseSlaRecord } from "../../../../mcp/src/ens";
 import { defaultChainHeadResolver } from "../../../../mcp/src/chainhead";
-import { commands, register, type Command, type KvRow } from "../registry";
+import { commands, find, register, type Command, type KvRow } from "../registry";
 import { getActJob, isRecoveredActJob } from "./act";
 
 function reason(error: unknown): string {
@@ -123,7 +123,9 @@ const helpCommand: Command = {
   run: async (_ctx, argv) => {
     const all = commands();
     if (argv.length > 1) {
-      const found = all.find((c) => c.name === argv[1]);
+      // Longest-prefix match: "help sandbox stale" resolves "sandbox stale",
+      // not the bare "sandbox" (which is not a command) — same as dispatch.
+      const found = find(argv.slice(1).join(" "));
       return {
         render: "text",
         data: found

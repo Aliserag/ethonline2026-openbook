@@ -1,8 +1,9 @@
 import { describe, expect, it } from "bun:test";
 import { commands, dispatch, find, parseArgv, register } from "./registry";
 import type { Command, CommandContext } from "./registry";
-// Side-effect: registers the 11 inspect commands (same import the Console does).
+// Side-effect: registers the 11 inspect + 4 sandbox commands (same imports the Console does).
 import "./commands/inspect";
+import "./commands/sandbox";
 
 function ctx(): CommandContext {
   return {
@@ -28,7 +29,19 @@ describe("registry", () => {
   });
 
   it("help <cmd> prints the one-line help for that command", async () => {
-    expect(textOf(await dispatch("help lag", ctx()))).toContain("lag");
+    // Not just the name — the single-line description, which rules out the
+    // "unknown command: lag" receipt (its data also contains "lag").
+    expect(textOf(await dispatch("help lag", ctx()))).toBe(
+      "lag · arc head vs subgraph indexed block (freshness ruler)",
+    );
+  });
+
+  it("help <multi-word cmd> resolves by longest prefix, not the first token", async () => {
+    // "sandbox" is not itself a command; only "sandbox stale" is. The old
+    // first-token lookup answered "unknown command: sandbox".
+    const text = textOf(await dispatch("help sandbox stale", ctx()));
+    expect(text).toContain("sandbox stale");
+    expect(text).not.toContain("unknown command");
   });
 
   it("ships the 11 named inspect/replay commands (T15 count baseline)", () => {

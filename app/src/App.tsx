@@ -355,7 +355,11 @@ export default function App() {
     let cancelled = false;
     (async () => {
       try {
-        const escrow = CONFIG.escrow;
+        // One live source, consistent with the venue row (Market.tsx reads the
+        // same market instance via data/escrow.platformFee). CONFIG.escrow is the
+        // shared-reference deployment 0x0747…, which is not the escrow the app
+        // sells through — reading it here would show a fee from a foreign instance.
+        const escrow = ADDR.escrow;
         const [feeBP, treasuryAddr] = (await Promise.all([
           publicClient.readContract({ address: escrow, abi: ERC8183_ABI, functionName: "platformFeeBP" }),
           publicClient.readContract({ address: escrow, abi: ERC8183_ABI, functionName: "platformTreasury" }),
