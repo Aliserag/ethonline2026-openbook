@@ -28,9 +28,9 @@ Prize label: DeFi/Onchain Finance. The Agentic prize brief centres on the Agent 
 | Subgraph Studio (own subgraph) | the public books: every job, settlement, refund, fee | Live | `open-book` v0.0.8, read through `/api/subgraph` |
 | Gateway subgraphs with a Studio key | the datasets sold (Messari standardized schemas + ENS + Overtime) | Live | `/api/deliver` returns data, `_meta` block and an EIP-191 proof |
 | Subgraph `_meta` as the settlement fact | the block the hook enforces | Live | `SlaNotMet(attested, floor)` reverts on every fail run |
-| MCP server (AI tooling) | `sla-subgraph-mcp`, six tools, keyless quickstart | Live | `bun mcp/src/server.ts`; 59 tests |
+| MCP server (AI tooling) | `sla-subgraph-mcp`, seven tools, keyless quickstart | Live | `bun mcp/src/server.ts`; 62 tests |
 | Reasoning over data | `choose_seller`: live ENS terms + index lag → decision with rationale; console ask lane (LLM proposes, registry executes) | Live | MCP tests; ask lane on the page |
-| Subgraph MCP (official) | not used; our MCP targets the same Gateway directly | Not used | candidate: dataset discovery |
+| Subgraph MCP (official) | `discover_datasets` searches the catalog through it and returns paste-ready config entries | Live | `mcp/src/subgraph-mcp.ts`; MCP tests |
 | Substreams, one-prompt challenge | not attempted | Not used | |
 | Messari standardized subgraphs | three of five datasets share the standard schema | Live | `mcp/config/openbook.json` |
 

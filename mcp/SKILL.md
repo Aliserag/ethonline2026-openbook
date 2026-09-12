@@ -23,13 +23,14 @@ node mcp/dist/server.js --config myconfig.json
 ```
 
 Any MCP client (Claude, Codex, Cursor, a custom stdio client…) connects over
-stdio and gets six tools:
+stdio and gets seven tools:
 
 | tool              | purpose                                                        |
 | ----------------- | -------------------------------------------------------------- |
 | `list_datasets`   | catalog: pinned Start Fresh subgraphs + ENS `svc.menu` entries |
 | `get_quote`       | live ENSv2 price/SLA/payee for a dataset (hard-fails if unset) |
 | `choose_seller`   | decide which seller to buy from: live terms + the dataset's index lag now |
+| `discover_datasets` | search The Graph's catalog via the official Subgraph MCP; returns paste-ready config entries |
 | `query_dataset`   | Gateway query with `_meta` freshness gate + signed attestation |
 | `verify_delivery` | deterministic APPROVE/REJECT; `settle:true` executes onchain   |
 | `get_pnl`         | open-book DailyPnL from arc-testnet                            |

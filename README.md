@@ -99,7 +99,7 @@ are organs, not stickers:
 - **The Graph (the product):** `sla-subgraph-mcp`, a generic MCP server with a
   packaged, node-runnable bin (npm publishing is the one-line post-freeze step)
   that turns any subgraph into a paid, freshness-gated product; OpenBook is the reference
-  deployment. Six tools, including `choose_seller`: the buyer-side decision that reads every
+  deployment. Seven tools, including `discover_datasets` (The Graph's official Subgraph MCP as the catalog, one paste-ready config entry per hit) and `choose_seller`: the buyer-side decision that reads every
   seller's live ENS terms and the dataset's index lag right now, drops sellers whose promised
   window the index cannot meet, and picks the cheapest or the freshest, with its reasoning. **The difference from a read-only MCP wrapper is where the freshness gate
   sits: it decides whether money moves.** Stale data is never charged, and a missed SLA

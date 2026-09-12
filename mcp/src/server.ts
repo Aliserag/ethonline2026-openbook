@@ -49,6 +49,7 @@ import {
 } from "./ens";
 import { verifyDelivery as verifyDeliveryCore } from "./escrow";
 import { listSellers as listSellersLive, sellersForSchema, type SellerRef } from "./directory";
+import { createSubgraphSearch, type SubgraphCandidate, type SubgraphSearch } from "./subgraph-mcp";
 import { setEscrowAddress } from "../../agent/escrow";
 import { ARC_MS_PER_BLOCK, ARC_RPC_URL } from "./constants";
 
@@ -158,11 +159,20 @@ export interface ChooseSellerResult {
   rationale: string[];
 }
 
+export interface DiscoverResult {
+  keyword: string;
+  returned: number;
+  candidates: (SubgraphCandidate & { alreadySold: boolean; configEntry: Record<string, unknown> })[];
+  note: string;
+}
+
 export interface OpenBookApp {
   /** The ERC-8183 escrow this app boots against — config default, or OPENBOOK_ESCROW override when set. */
   escrowAnchor: `0x${string}`;
   listDatasets(): Promise<ListDatasetsResult>;
   getQuote(datasetId: string): Promise<GetQuoteResult>;
+  /** Search The Graph's catalog (official Subgraph MCP) and return ready-to-paste dataset entries. */
+  discoverDatasets(input: { keyword: string }): Promise<DiscoverResult>;
   /** Pick a seller for a dataset from live ENS terms and the dataset's current index lag. */
   chooseSeller(input: { datasetId: string; prefer?: "cheap" | "fresh"; maxPriceUsdc?: number }): Promise<ChooseSellerResult>;
   queryDataset(datasetId: string, graphql: string): Promise<QueryDatasetResult>;
@@ -185,6 +195,8 @@ export interface AppDeps {
   chainHead?: ChainHeadResolver;
   /** seller enumeration seam (live: the ENSv2 subregistry walk in directory.ts) */
   listSellers?: (parentName: string) => Promise<SellerRef[]>;
+  /** catalog search seam (live: The Graph's official Subgraph MCP over SSE) */
+  searchSubgraphs?: SubgraphSearch;
 }
 
 // --- app construction -------------------------------------------------------------
@@ -227,6 +239,7 @@ export function createApp(config: OpenBookConfig, deps: AppDeps = {}): OpenBookA
   const listSellersDep = deps.listSellers ?? ((parent: string) => listSellersLive(parent, { readEnsText }));
   const operatorKey = resolveOperatorKey(config, env);
   const gatewayKey = resolveGatewayKey(config, env);
+  const searchSubgraphs = deps.searchSubgraphs ?? (gatewayKey ? createSubgraphSearch(gatewayKey) : undefined);
 
   const arcRpc = env["ARC_TESTNET_RPC"] ?? ARC_RPC_URL;
   let arcPublic: PublicClient | undefined;
@@ -540,7 +553,42 @@ export function createApp(config: OpenBookConfig, deps: AppDeps = {}): OpenBookA
     return { datasetId: dataset.id, schema: dataset.schema, prefer, maxPriceUsdc, signal, candidates, choice, rationale };
   };
 
-  return { escrowAnchor, listDatasets, getQuote, chooseSeller, queryDataset, verifyDelivery: verifyDeliveryTool, getPnl };
+  /**
+   * Onboarding a dataset is one config entry; finding the subgraph is The Graph's
+   * job. This asks the official Subgraph MCP (same Gateway key) and hands back an
+   * entry you can paste into the config, marking anything this server already sells.
+   */
+  const discoverDatasets = async (input: { keyword: string }): Promise<DiscoverResult> => {
+    const keyword = input.keyword.trim();
+    if (keyword.length < 2) throw new Error("keyword must be at least 2 characters");
+    if (!searchSubgraphs) {
+      throw new Error("GRAPH_GATEWAY_KEY not set — the catalog search runs through The Graph's Subgraph MCP, which needs the same Studio key");
+    }
+    const found = await searchSubgraphs(keyword);
+    const sold = new Set(config.datasets.map((d) => d.subgraphId));
+    const slug = (name: string) => name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 48) || "dataset";
+    const candidates = found.map((c) => ({
+      ...c,
+      alreadySold: sold.has(c.subgraphId),
+      configEntry: {
+        id: slug(c.name),
+        subgraphId: c.subgraphId,
+        chain: "arbitrum",
+        schema: "custom/1.0.0",
+        priceUsdc: 100000,
+        freshness: { maxAge: 50 },
+        description: `${c.name} (from The Graph catalog)`,
+      },
+    }));
+    return {
+      keyword,
+      returned: candidates.length,
+      candidates,
+      note: "results from The Graph's Subgraph MCP (search_subgraphs_by_keyword); set chain and schema to match the subgraph, add the entry to mcp/config/*.json, and price it on ENS (svc.price on the dataset subname or the parent)",
+    };
+  };
+
+  return { escrowAnchor, listDatasets, getQuote, chooseSeller, discoverDatasets, queryDataset, verifyDelivery: verifyDeliveryTool, getPnl };
 }
 
 // --- MCP registration --------------------------------------------------------------
@@ -579,7 +627,7 @@ function wrap<Args>(fn: (args: Args) => Promise<unknown>): (args: Args) => Promi
   };
 }
 
-/** Register the 6 tools on an SDK McpServer. */
+/** Register the 7 tools on an SDK McpServer. */
 export function createMcpServer(app: OpenBookApp): McpServer {
   const server = new McpServer({ name: "sla-subgraph-mcp", version: "0.1.0" });
 
@@ -595,6 +643,13 @@ export function createMcpServer(app: OpenBookApp): McpServer {
     "Resolve the live price/SLA/payee for a dataset from the ENSv2 svc.* records (Sepolia). Hard-fails (ENS_RESOLUTION_FAILED) when records are missing — never quotes hard-coded values.",
     { datasetId: z.string().min(1) },
     wrap(async (args: { datasetId: string }) => app.getQuote(args.datasetId)),
+  );
+
+  server.tool(
+    "discover_datasets",
+    "Find subgraphs to sell: searches The Graph's catalog through the official Subgraph MCP (same Gateway key) and returns candidates with a ready-to-paste dataset config entry, marking the ones this server already sells.",
+    { keyword: z.string().min(2) },
+    wrap(async (args: { keyword: string }) => app.discoverDatasets(args)),
   );
 
   server.tool(

@@ -471,7 +471,7 @@ describe("MCP server (protocol-level)", () => {
     });
   });
 
-  it("advertises exactly the 6 tools", async () => {
+  it("advertises exactly the 7 tools", async () => {
     const mcp = createMcpServer(app);
     const [client, serverSide] = InMemoryTransport.createLinkedPair();
     await mcp.connect(serverSide);
@@ -483,7 +483,7 @@ describe("MCP server (protocol-level)", () => {
       .map((t) => String(asRecord(t)["name"]))
       .sort((a, b) => a.localeCompare(b));
     expect(names).toEqual(
-      ["choose_seller", "get_pnl", "get_quote", "list_datasets", "query_dataset", "verify_delivery"].sort(),
+      ["choose_seller", "discover_datasets", "get_pnl", "get_quote", "list_datasets", "query_dataset", "verify_delivery"].sort(),
     );
   });
 
@@ -724,5 +724,35 @@ describe("choose_seller (decides from ENS terms and the live index lag)", () => 
 
   it("unknown dataset throws", async () => {
     await expect(appWithKey().chooseSeller({ datasetId: "nope" })).rejects.toThrow("unknown dataset");
+  });
+});
+
+// --- discover_datasets (composition with The Graph's Subgraph MCP) --------------------
+
+describe("discover_datasets", () => {
+  const found = [
+    { subgraphId: "4xyasjQeREe7PxnF6wVdobZvCw5mhoHZq3T7guRpuNPf", name: "Aave V3 Arbitrum", ipfsHash: "QmA" },
+    { subgraphId: "C2zniPn45RnLDGzVeGZCx2Sw3GXrbc9gL4ZfL8B8Em2j", name: "Aave V2 Ethereum", ipfsHash: "QmB" },
+  ];
+  it("returns candidates with a config entry and marks what is already sold", async () => {
+    const app = createApp(configOf("openbook.json"), { env: { GRAPH_GATEWAY_KEY: "k" }, readEnsText: stubEns(ensFixtures), searchSubgraphs: async () => found });
+    const out = await app.discoverDatasets({ keyword: "aave" });
+    expect(out.returned).toBe(2);
+    expect(out.candidates[0]?.alreadySold).toBe(true);
+    expect(out.candidates[1]?.alreadySold).toBe(false);
+    expect(out.candidates[1]?.configEntry).toMatchObject({ id: "aave-v2-ethereum", subgraphId: "C2zniPn45RnLDGzVeGZCx2Sw3GXrbc9gL4ZfL8B8Em2j" });
+  });
+  it("needs the Gateway key (the official MCP is key-gated too)", async () => {
+    const app = createApp(configOf("openbook.json"), { env: {}, readEnsText: stubEns(ensFixtures) });
+    await expect(app.discoverDatasets({ keyword: "aave" })).rejects.toThrow("GRAPH_GATEWAY_KEY");
+  });
+});
+
+describe("subgraph-mcp result parsing", () => {
+  it("reads the text payload of search_subgraphs_by_keyword", async () => {
+    const { parseSearchResult } = await import("../src/subgraph-mcp");
+    const raw = { content: [{ type: "text", text: JSON.stringify({ returned: 1, subgraphs: [{ id: "X", metadata: { displayName: "Name" }, currentVersion: { subgraphDeployment: { ipfsHash: "Qm" } } }] }) }] };
+    expect(parseSearchResult(raw)).toEqual([{ subgraphId: "X", name: "Name", ipfsHash: "Qm" }]);
+    expect(parseSearchResult({ content: [{ type: "text", text: "nope" }] })).toEqual([]);
   });
 });
