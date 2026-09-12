@@ -100,6 +100,73 @@ are organs, not stickers:
   `aave-v3-arbitrum-lending.openbook.eth` prices itself, and the quote reads
   the most specific records through the hierarchical registry.
 
+## Living protocol: the app
+
+Open the live app and you are standing in the marketplace, not a mockup:
+**The data marketplace for agents, with automatic refunds for every stale delivery.**
+Every figure on the page resolves live from ENS records, the
+`open-book` subgraph and the Arc escrow. Nothing is pinned; when a dependency
+degrades, the page says so instead of inventing data.
+
+**Two lanes, one bundle.** [https://openbook.litai.ca](https://openbook.litai.ca)
+is the canonical URL (Cloudflare Pages, and the ENS `agent-endpoint[web]`
+record); [https://ethonline2026-openbook.vercel.app](https://ethonline2026-openbook.vercel.app)
+is the backup alias. `scripts/deploy-app.sh` publishes both lanes from the
+same `dist/` and verifies both serve the same bundle before it reports PASS.
+
+**The console (`⌘K`)** drives the whole marketplace, 18 commands in three
+families: **inspect** (read every live surface), **act** (transact as the
+demo buyer), **sandbox** (safe re-enactments on the same live contracts).
+
+| family | command | what it does |
+| --- | --- | --- |
+| inspect | `help` | list every command (`help <cmd>` for one line) |
+| inspect | `status` | one-shot health: arc head, subgraph lag, ENS storefront, gateway key, demo wallet |
+| inspect | `ens show` | live `svc.*` storefront records of `openbook.eth` |
+| inspect | `datasets` | the storefront menu: 5 datasets with live ENS prices + SLA windows |
+| inspect | `quote` | ENS-priced quote + SLA floor (live reads, no tx) |
+| inspect | `books` | scoped P&L: totals + rows over our addresses (subgraph) |
+| inspect | `jobs` | scoped job table from the subgraph |
+| inspect | `job` | one job's detail: paid → fulfilled → settled/refunded |
+| inspect | `lag` | arc head vs subgraph indexed block (freshness ruler) |
+| inspect | `policy show` | PolicyWallet caps/spend + allowlist, read live from the contract |
+| inspect | `replay` | the six-frame theater for a job (quote/pay/deliver/verdict/money/books) |
+| act | `buy` | fund an ERC-8183 job at the live ENS price (demo key or connected wallet) |
+| act | `deliver` | capture the gateway payload hash + freshness block and submit it onchain |
+| act | `settle` | attest the delivery, verify + settle onchain, print verdict + fee split |
+| sandbox | `policy refusals` | real `PolicyBlocked` rows from the subgraph (`PER_TX_CAP` / `DAILY_CAP` / `NOT_ALLOWLISTED`) |
+| sandbox | `policy try-overspend` | simulated cap check: mirror of `checkWithdrawal` over live contract caps, no tx sent |
+| sandbox | `sandbox stale` | floor pinned one block above the delivery so `complete()` reverts `SlaNotMet`; arm the refund |
+| sandbox | `sandbox claim` | execute `claimRefund` for real after the deadline (live countdown) |
+
+**Demo-buyer policy.** The act and sandbox commands sign with the demo buyer
+key (`VITE_DEMO_BUYER_KEY` in `app/.env.local`): testnet USDC as play money,
+spent live against the real escrow. When the balance runs out, refill the
+demo buyer address at [faucet.circle.com](https://faucet.circle.com) (Arc
+Testnet). The same key is the SLA hook's attester (the browser signs the
+attest in `settle`/`sandbox stale`), so the full hook-gated path runs keyless
+for a judge while the signing role stays honest: it is our demo key, role-play,
+not a third-party attester.
+
+**The marketplace.** Two reference sellers are live, both registered through
+the ENSv2 storefront and priced by their own text records: `openbook.eth`
+(the original storefront, 0.10 USDC/query, and 0.15 for the
+`aave-v3-arbitrum-lending` subname) and `alpha.openbook.eth`
+([`sellers/alpha.json`](sellers/alpha.json), 0.12 USDC/query, payout to
+`0xe09C8F90931E97d0aEE998885b306DDF08CE08Cc`). Both sell through the shared
+market escrow `0x967e005154D0F62C33Eac8E2F44b44d4C4C07Dd5`, whose 2 percent
+venue fee (`platformFeeBP`, rendered live in the app's venue row) routes every
+settlement's cut to the policy-gated treasury. The market panel labels this
+honestly: "two reference sellers we operate", not third-party liquidity.
+
+**The ENS-edit story.** The storefront is text records, so running the
+marketplace is editing records: repricing `alpha.openbook.eth` is one
+`ens set text`, and the app and the buyer CLI pick it up on the next read,
+no redeploy and no config release. Quotes prefer the most specific records
+through the hierarchical subname registry, and a storefront without
+`svc.price`/`svc.sla`/`svc.payee` hard-fails ("No ENS, no payment") rather
+than defaulting to anything.
+
 ## Repo layout
 
 - `contracts/`: PolicyWallet.sol (policy treasury) + SlaHook.sol (onchain SLA adjudication) + tests
