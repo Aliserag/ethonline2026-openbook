@@ -12,26 +12,26 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 APP_DIR="$(pwd)/app"
 
-echo "== [1/5] pnl snapshot (build-time fallback for a walled Studio gateway)"
+echo "== [1/6] pnl snapshot (build-time fallback for a walled Studio gateway)"
 node scripts/fetch-pnl-snapshot.mjs
 
-echo "== [2/5] build"
+echo "== [2/6] build"
 cd "$APP_DIR"
 ./node_modules/.bin/tsc --noEmit
 BASE_PATH=/ ./node_modules/.bin/vite build >/dev/null
 echo "   dist: $(ls dist/assets | wc -l | tr -d ' ') assets"
 
-echo "== [3/5] Vercel (project dist, team pyefi)"
+echo "== [3/6] Vercel (project dist, team pyefi)"
 DEPLOY_URL="$(vercel deploy dist --prod --yes 2>/dev/null | grep -oE 'https://dist-[a-z0-9]+-pyefi\.vercel\.app' | head -1)"
 [ -n "$DEPLOY_URL" ] || { echo "FAIL: vercel deploy produced no URL"; exit 1; }
 vercel alias set "$DEPLOY_URL" ethonline2026-openbook.vercel.app >/dev/null 2>&1
 echo "   $DEPLOY_URL → ethonline2026-openbook.vercel.app"
 
-echo "== [4/5] Cloudflare Pages (project openbook → openbook.litai.ca)"
+echo "== [4/6] Cloudflare Pages (project openbook → openbook.litai.ca)"
 cd /tmp && npx --yes wrangler pages deploy "$APP_DIR/dist" \
   --project-name openbook --branch main --commit-dirty=true 2>&1 | grep -E "Deployment complete|https://" | head -3
 
-echo "== [5/5] verify both lanes serve the same bundle"
+echo "== [5/6] verify both lanes serve the same bundle"
 cd /tmp
 V=$(curl -s -m 20 "https://ethonline2026-openbook.vercel.app/?cb=$(date +%s)" | grep -oE 'assets/index-[^"]+\.js' | head -1)
 echo "   vercel: $V"
@@ -48,3 +48,14 @@ if [ "$V" = "$L" ]; then
 else
   echo "WARN: bundle names differ after 60s — check the Pages deployment in the dashboard"
 fi
+
+echo "== [6/6] /api/subgraph proxy on both lanes (expect MISS then HIT, HTTP 200)"
+sleep 20   # Pages needs a moment to promote the new worker
+for host in https://openbook.litai.ca https://ethonline2026-openbook.vercel.app; do
+  for i in 1 2; do
+    H=$(curl -s -D - -o /dev/null -m 20 -X POST "$host/api/subgraph" -H 'content-type: application/json' -d '{"query":"{ _meta { block { number } } }"}' | tr -d '\r')
+    S=$(echo "$H" | awk 'NR==1{print $2}')
+    C=$(echo "$H" | awk -F': ' 'tolower($1)=="x-openbook-cache"{print $2}')
+    echo "   $host call $i: HTTP ${S:-none} cache ${C:-none}"
+  done
+done

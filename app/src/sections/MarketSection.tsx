@@ -21,7 +21,7 @@ function priceText(raw: string | null): string {
   }
 }
 
-function SellerCard({ row }: { row: MarketSellerRow }): JSX.Element {
+function SellerCard({ row, statsNote }: { row: MarketSellerRow; statsNote: string | null }): JSX.Element {
   return (
     <article className="seller">
       <h3>{row.name}</h3>
@@ -43,6 +43,12 @@ function SellerCard({ row }: { row: MarketSellerRow }): JSX.Element {
         <dd>{row.stats ? `${usdc6(row.stats.settled)} USDC` : "0.00 USDC"}</dd>
         <dt>refunded</dt>
         <dd>{row.stats ? `${usdc6(row.stats.refunded)} USDC` : "0.00 USDC"}</dd>
+        {statsNote && row.stats && (
+          <>
+            <dt>stats</dt>
+            <dd>{statsNote}</dd>
+          </>
+        )}
         {row.operator && (
           <>
             <dt>operator</dt>
@@ -81,7 +87,15 @@ export function MarketSection(): JSX.Element {
       {sellers.value !== null && (
         <div className="market__grid">
           {sellers.value.sellers.map((row) => (
-            <SellerCard key={row.name} row={row} />
+            <SellerCard
+              key={row.name}
+              row={row}
+              statsNote={
+                sellers.value!.statsSource === "live"
+                  ? null
+                  : `${sellers.value!.statsSource === "cache" ? "last read" : "snapshot from"} ${new Date(sellers.value!.statsAt).toLocaleTimeString()}`
+              }
+            />
           ))}
         </div>
       )}

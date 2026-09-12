@@ -83,15 +83,15 @@ export function Books(): JSX.Element {
       </div>
       <div className="books__figures">
         <div className="figure">
-          <strong>{feed.value ? priceLabel(t.settledUsdc) : "…"}</strong>
+          <strong>{feed.value ? priceLabel(t.settledUsdc) : feed.state === "error" ? "?" : "…"}</strong>
           <span className="small">settled to sellers</span>
         </div>
         <div className="figure figure--back">
-          <strong>{feed.value ? priceLabel(t.refundedUsdc) : "…"}</strong>
+          <strong>{feed.value ? priceLabel(t.refundedUsdc) : feed.state === "error" ? "?" : "…"}</strong>
           <span className="small">refunded to buyers</span>
         </div>
         <div className="figure">
-          <strong>{feed.value ? priceLabel(t.feesUsdc) : "…"}</strong>
+          <strong>{feed.value ? priceLabel(t.feesUsdc) : feed.state === "error" ? "?" : "…"}</strong>
           <span className="small">venue fees earned</span>
         </div>
         <div className="figure">
@@ -113,7 +113,13 @@ export function Books(): JSX.Element {
       </p>
       <ol className="board" aria-label="latest settlements and refunds">
         {rows.length === 0 && (
-          <li className="board__empty">{feed.state === "loading" ? "Reading the ledger…" : "No purchases indexed yet."}</li>
+          <li className="board__empty">
+            {feed.state === "loading"
+              ? "Reading the ledger…"
+              : feed.state === "error"
+                ? "The ledger could not be read right now. Runs you start above still appear here."
+                : "No purchases indexed yet."}
+          </li>
         )}
         {rows.map((r) => (
           <Row key={r.jobId} row={r} isNew={fresh.has(r.jobId)} />
@@ -121,7 +127,9 @@ export function Books(): JSX.Element {
       </ol>
       <div className="refusals">
         <h3>
-          The treasury said no {refusals.length} time{refusals.length === 1 ? "" : "s"}
+          {feed.value
+            ? `The treasury said no ${refusals.length} time${refusals.length === 1 ? "" : "s"}`
+            : "The treasury says no, onchain"}
         </h3>
         <p className="small">
           Seller revenue lands in a treasury with a per-transaction cap, a daily cap and an allowlist. Every refused

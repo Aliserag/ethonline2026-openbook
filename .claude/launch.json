@@ -4,8 +4,8 @@
     {
       "name": "app-preview",
       "runtimeExecutable": "bun",
-      "runtimeArgs": ["run", "--cwd", "app", "preview", "--", "--port", "4173", "--strictPort"],
-      "port": 4173
+      "runtimeArgs": ["run", "--cwd", "app", "preview", "--", "--port", "4174", "--strictPort"],
+      "port": 4174
     },
     {
       "name": "app-dev",

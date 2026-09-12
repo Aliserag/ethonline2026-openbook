@@ -67,13 +67,21 @@ export function Hero({ onBuy, onFail }: { onBuy(): void; onFail(): void }): JSX.
       </div>
       <div className="counters" aria-label="live totals">
         <div className="figure figure--back">
-          <strong>{feed.value ? t.refundedCount : "…"}</strong>
-          <span className="small">refunds executed by the escrow · {priceLabel(t.refundedUsdc)} returned to buyers</span>
+          <strong>{feed.value ? t.refundedCount : feed.state === "error" ? "?" : "…"}</strong>
+          <span className="small">
+            {feed.value
+              ? `refunds executed by the escrow · ${priceLabel(t.refundedUsdc)} returned to buyers`
+              : feed.state === "error"
+                ? "refunds executed by the escrow · the ledger could not be read right now"
+                : "refunds executed by the escrow"}
+          </span>
         </div>
         <div className="figure">
-          <strong>{feed.value ? priceLabel(t.settledUsdc) : "…"}</strong>
+          <strong>{feed.value ? priceLabel(t.settledUsdc) : feed.state === "error" ? "?" : "…"}</strong>
           <span className="small">
-            settled across {t.settledCount} purchases · {priceLabel(t.feesUsdc)} earned by the venue
+            {feed.value
+              ? `settled across ${t.settledCount} purchases · ${priceLabel(t.feesUsdc)} earned by the venue`
+              : "settled to sellers"}
           </span>
         </div>
         <div className="figure">
