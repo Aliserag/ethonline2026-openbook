@@ -26,7 +26,7 @@ it) get recourse they can verify without trusting the seller; **sellers** of pai
 freshness guarantee they can charge for.
 
 OpenBook's mechanic: **SLA-bound payments.** Every query carries verifiable conditions
-committed at payment time, freshness block height, deliverable hash, deadline, through
+committed at payment time (freshness block height, deliverable hash, deadline) through
 Arc's ERC-8183 escrow standard. Settlement checks them deterministically. **Miss the SLA and
 the refund executes onchain, automatically.** Money flows both ways.
 
