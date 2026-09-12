@@ -194,8 +194,10 @@ function isFullDeps(deps: Partial<PurchaseDeps> | undefined): deps is PurchaseDe
   return deps !== undefined && "quote" in deps && "signer" in deps && "verify" in deps;
 }
 
+/** "0.10", "0.15", "0.098": two decimals minimum, more only when the value needs them. */
 function usdcText(raw: bigint): string {
-  return (Number(raw) / 1_000_000).toString();
+  const n = Number(raw) / 1_000_000;
+  return Number.isInteger(n * 100) ? n.toFixed(2) : n.toString();
 }
 
 export async function runPurchase(

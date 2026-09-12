@@ -602,3 +602,15 @@
 .builders__grid > * {
   min-width: 0;
 }
+
+/* phones: the console is a desktop power-user surface and its fixed launcher
+   would cover the primary button; the brand tagline wraps into the header */
+@media (max-width: 600px) {
+  .console__launcher {
+    display: none;
+  }
+
+  .hero__brand .tiny {
+    display: none;
+  }
+}
