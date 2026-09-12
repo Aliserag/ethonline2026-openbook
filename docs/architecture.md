@@ -18,7 +18,7 @@ flowchart LR
 
     subgraph ENSv2["ENSv2 · Sepolia (hard-fail gateway)"]
         NAME[openbook.eth]
-        RECS["svc.menu · svc.price · svc.sla<br/>svc.payee · svc.operator · svc.pnl<br/>agent-context · agent-endpoint[mcp/web]<br/>agent-registration[ERC-8004]"]
+        RECS["svc.menu · svc.price · svc.sla<br/>svc.payee · svc.operator · svc.pnl · svc.attester<br/>agent-context · agent-endpoint[mcp/web]<br/>agent-registration[ERC-8004]<br/>subnames: alpha (own key, delegated svc.price) · aave-v3-arbitrum-lending"]
         NAME --> RECS
     end
 
@@ -37,7 +37,7 @@ flowchart LR
     end
 
     subgraph Graph["The Graph"]
-        GW[Gateway<br/>pinned Messari subgraphs<br/>Aave V3 Arb · Uniswap V3 Arb · Compound V3]
+        GW[Gateway<br/>pinned subgraphs, one config entry each<br/>Aave V3 Arb · Uniswap V3 Arb · OpenSea · ENS · Overtime]
         PNL[open-book subgraph · v0.0.8<br/>arc-testnet · Studio, read through the page's cached /api/subgraph proxy<br/>QueryPaid · Fulfilled · Settled · RefundIssued · CostPaid · PolicyBlocked · Provider]
     end
 

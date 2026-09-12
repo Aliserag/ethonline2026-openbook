@@ -63,7 +63,7 @@ hash, a subgraph row, or a measured value. The scripted half of this is
   reading order.
 - Four transitions and three keyframe animations, one easing family, none on layout
   properties; `prefers-reduced-motion` disables all of them.
-- No text under 13 px on the landing surfaces.
+- No text under 12 px anywhere; landing-page body copy is 13 px or larger (the audit enforces both).
 
 ## Known limits
 
