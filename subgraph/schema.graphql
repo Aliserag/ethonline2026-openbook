@@ -93,6 +93,7 @@ type Provider @entity(immutable: false) {
   avgLagBlocks: BigDecimal!   # running mean of (fulfillment block - job creation block)
   lastJobAt: BigInt!          # block timestamp of the provider's most recent JobCreated
   _lastActiveDay: String      # internal: last day bucket counted into MarketDay.providers (dedupe)
+  _lagSamples: Int!           # internal: deliveries that contributed a lag sample (mean denominator)
 }
 
 type MarketDay @entity(immutable: false) {

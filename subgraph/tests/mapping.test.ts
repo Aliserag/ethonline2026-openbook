@@ -438,4 +438,53 @@ describe("W4 market aggregates (Provider + MarketDay, every provider)", () => {
     assert.fieldEquals("Provider", FOREIGN.toLowerCase(), "delivered", "2");
     assert.fieldEquals("Provider", FOREIGN.toLowerCase(), "avgLagBlocks", "1500");
   });
+
+  test("meta-less delivery counts delivered but does not dilute the lag mean", () => {
+    clearStore();
+    let client = Address.fromString(CLIENT);
+    let foreign = Address.fromString(FOREIGN);
+
+    // delivery for a job whose JobCreated predates the index (no JobMeta row)
+    handleFulfilled(
+      createJobSubmittedEvent(
+        BigInt.fromI32(101),
+        foreign,
+        "0x0000000000000000000000000000000000000000000000000000000000a1b2c3",
+        BigInt.fromI32(22_000),
+      ),
+    );
+    // in-range job: created at 22,900 then delivered at 23,000 -> lag 100
+    handleJobCreated(
+      createJobCreatedEvent(BigInt.fromI32(102), client, foreign, BigInt.fromI32(999_999), BigInt.fromI32(22_900)),
+    );
+    handleFulfilled(
+      createJobSubmittedEvent(
+        BigInt.fromI32(102),
+        foreign,
+        "0x0000000000000000000000000000000000000000000000000000000000a1b2c3",
+        BigInt.fromI32(23_000),
+      ),
+    );
+
+    assert.fieldEquals("Provider", FOREIGN.toLowerCase(), "delivered", "2");
+    // denominator is the single lag sample, NOT the delivered count of 2
+    assert.fieldEquals("Provider", FOREIGN.toLowerCase(), "avgLagBlocks", "100");
+  });
+
+  test("meta-less refund books the day bucket but no provider attribution", () => {
+    clearStore();
+    let client = Address.fromString(CLIENT);
+
+    handleRefund(
+      createRefundedEvent(BigInt.fromI32(999), client, BigInt.fromString("500000"), BigInt.fromI32(22_000)),
+    );
+
+    // no JobMeta for the job -> the day bucket still books the market refund...
+    assert.fieldEquals("MarketDay", "day-1", "refunds", "500000");
+    // ...but no Provider row is created or touched (nothing attributable)
+    assert.entityCount("Provider", 0);
+    // seller-scoped ledger unchanged: no RefundIssued, no DailyPnL
+    assert.entityCount("RefundIssued", 0);
+    assert.entityCount("DailyPnL", 0);
+  });
 });

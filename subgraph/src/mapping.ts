@@ -131,6 +131,7 @@ function loadOrCreateProvider(provider: Address): Provider {
     p.avgLagBlocks = BigDecimal.zero();
     p.lastJobAt = BigInt.zero();
     p._lastActiveDay = "";
+    p._lagSamples = 0;
   }
   return p;
 }
@@ -178,6 +179,15 @@ export function handleJobCreated(event: JobCreatedEvent): void {
   if (!isSeller(event.params.provider)) {
     return;
   }
+  // PINNED RISK (accept-and-pin ruling): the "qp-"+jobId key is UNPREFIXED —
+  // the shared reference escrow and the OpenBook instance (ERC8183OpenBook)
+  // each own a uint256 jobId counter. A row-id collision would require a
+  // shared-escrow lifecycle event for a jobId that the instance later mints,
+  // landing AFTER the instance's JobCreated in chain order — impossible today
+  // (instance counter 1-4 vs shared 185k+, and the instance mints first in
+  // any interleaving). The same key is loaded in handleQueryPaid/handleRefund.
+  // Migrating to a contract-prefixed key would break the frozen row-id
+  // contract and needs a coordinated reindex — deliberately NOT done.
   let id = Bytes.fromUTF8("qp-" + event.params.jobId.toString());
   let queryPaid = QueryPaid.load(id);
   if (queryPaid == null) {
@@ -218,17 +228,21 @@ export function handleFulfilled(event: JobSubmittedEvent): void {
   // W4 market (GLOBAL): count the delivery + running mean lag in blocks
   // (fulfillment block - job creation block) for every provider. Jobs whose
   // JobCreated predates this dataSource's startBlock have no JobMeta row —
-  // they still count as delivered but contribute nothing to the mean.
+  // they count as delivered but contribute NO lag sample to the mean.
   let provider = loadOrCreateProvider(event.params.provider);
   provider.delivered += 1;
   let meta = JobMeta.load(jobMetaId(event.address, event.params.jobId));
   if (meta != null) {
-    let n = provider.delivered;
+    // Running mean over LAG SAMPLES ONLY. The mean denominator is
+    // _lagSamples, never delivered: a meta-less delivery must not dilute the
+    // averages of later in-range deliveries (avg = (avg*(n-1) + lag) / n).
+    let n = provider._lagSamples + 1;
     let lag = event.block.number.minus(meta.createdAt);
     provider.avgLagBlocks = provider.avgLagBlocks
       .times(BigDecimal.fromString((n - 1).toString()))
       .plus(BigDecimal.fromString(lag.toString()))
       .div(BigDecimal.fromString(n.toString()));
+    provider._lagSamples = n;
   }
   provider.save();
 
