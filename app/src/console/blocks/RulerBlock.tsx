@@ -29,7 +29,7 @@ export function RulerBlock({ data }: { data: RulerData }): JSX.Element {
           )}
           {floor !== undefined && (
             <span className="mark minblock" style={{ left: `${pct(floor)}%` }}>
-              SLA min {floor}
+              SLA floor {floor}
             </span>
           )}
           <span className={`needle meta${delivered >= (floor ?? 0) ? " fresh" : ""}`} style={{ left: `${pct(delivered)}%` }}>
