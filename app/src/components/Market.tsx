@@ -294,7 +294,9 @@ function SellerBlock({ row }: { row: MarketSellerRow }): JSX.Element {
         ) : (
           <div className="market__kvrow">
             <dt>stats</dt>
-            <dd className="market__muted">no subgraph stats indexed yet</dd>
+            <dd className="market__muted">
+              {row.operator === null ? "no operator published" : "no subgraph stats indexed yet"}
+            </dd>
           </div>
         )}
       </dl>

@@ -10,7 +10,7 @@ import { LogBlock } from "./LogBlock";
 export function RulerBlock({ data }: { data: RulerData }): JSX.Element {
   const { delivered, head, floor, label, note } = data;
   if (delivered === undefined || head === undefined) {
-    return <LogBlock text={`${label} — incomplete: delivered ${delivered ?? "—"} vs head ${head ?? "—"}`} />;
+    return <LogBlock text={`${label} · incomplete: delivered ${delivered ?? "n/a"} vs head ${head ?? "n/a"}`} />;
   }
   const lo = Math.min(delivered, head, floor ?? head);
   const hi = Math.max(delivered, head, floor ?? head);

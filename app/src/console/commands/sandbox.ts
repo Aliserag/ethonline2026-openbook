@@ -105,12 +105,12 @@ const refusalsCommand: Command = {
     try {
       refusals = await fetchPolicyRefusals();
     } catch (error) {
-      return { render: "text", data: `policy refusals failed: ${reason(error)} — is the subgraph reachable? (try lag)` };
+      return { render: "text", data: `policy refusals failed: ${reason(error)} · is the subgraph reachable? (try lag)` };
     }
     if (refusals.length === 0) {
       return {
         render: "text",
-        data: "no PolicyBlocked events indexed — the policy wallet has never refused an intent onchain (blank, not zeroed)",
+        data: "no PolicyBlocked events indexed · the policy wallet has never refused an intent onchain (blank, not zeroed)",
       };
     }
     const rows = refusals.map((r) => {
@@ -124,7 +124,7 @@ const refusalsCommand: Command = {
         rows,
         summary:
           `${refusals.length} policy refusal${refusals.length === 1 ? "" : "s"} onchain · ` +
-          "PolicyWallet.sol emits PolicyBlocked instead of reverting — these events are the refusal evidence",
+          "PolicyWallet.sol emits PolicyBlocked instead of reverting · these events are the refusal evidence",
       },
     };
   },
@@ -135,14 +135,14 @@ const refusalsCommand: Command = {
 const tryOverspendCommand: Command = {
   name: "policy try-overspend",
   args: "<usdc>",
-  help: "SIMULATED overspend: pure checkWithdrawal mirror over LIVE contract caps + keyless probe as the wallet agent — NO TX SENT",
+  help: "SIMULATED overspend: pure checkWithdrawal mirror over LIVE contract caps + keyless probe as the wallet agent · NO TX SENT",
   kind: "sandbox",
   run: async (ctx, argv) => {
     const raw = argv[2]; // argv[0..1] are the multi-word command name
     if (!raw) return { render: "text", data: "usage: policy try-overspend <usdc e.g. 1.50>" };
     const amount = Math.round(parseFloat(raw) * 1_000_000);
     if (!Number.isFinite(amount) || amount <= 0) {
-      return { render: "text", data: `invalid amount "${raw}" — a positive USDC number` };
+      return { render: "text", data: `invalid amount "${raw}" · a positive USDC number` };
     }
     const rows: KvRow[] = [];
     try {
@@ -168,15 +168,15 @@ const tryOverspendCommand: Command = {
         lastDayStart: view.lastDayStart,
         headBlock: head,
       });
-      rows.push(["pure mirror", mirror.ok ? "ok — within per-tx cap, daily cap, allowlist" : `✗ ${mirror.reason}`]);
+      rows.push(["pure mirror", mirror.ok ? "ok · within per-tx cap, daily cap, allowlist" : `✗ ${mirror.reason}`]);
       const probe = await simulateOverspend(ctx.publicClient, BigInt(amount));
       rows.push(
         probe.reverted
           ? ["live probe", `reverted: ${probe.reason}`]
-          : ["live probe", `no revert — ${probe.reason}`],
+          : ["live probe", `no revert · ${probe.reason}`],
       );
       if (probe.data !== undefined) rows.push(["revert data", `${probe.data.slice(0, 10)}…`]);
-      rows.push(["tx", "NONE — simulation only"]);
+      rows.push(["tx", "NONE · simulation only"]);
     } catch (error) {
       rows.push(["✗", reason(error)]);
     }
@@ -185,7 +185,7 @@ const tryOverspendCommand: Command = {
       data: {
         rows,
         note:
-          "SIMULATED — caps/spend are LIVE contract reads (never the subgraph's empty PolicyConfig); PolicyWallet.sol answers cap hits by emitting PolicyBlocked, not by reverting",
+          "SIMULATED · caps/spend are LIVE contract reads (never the subgraph's empty PolicyConfig); PolicyWallet.sol answers cap hits by emitting PolicyBlocked, not by reverting",
       },
     };
   },
@@ -237,7 +237,7 @@ function parseDeadline(argv: string[]): { seconds: number } | { error: string } 
   if (raw === undefined) return { seconds: 120 };
   const seconds = Number(raw);
   if (!Number.isInteger(seconds) || seconds < 1) {
-    return { error: `--deadline must be a whole number of seconds ≥ 1 — got "${raw}"` };
+    return { error: `--deadline must be a whole number of seconds ≥ 1 · got "${raw}"` };
   }
   return { seconds };
 }
@@ -246,7 +246,7 @@ const staleCommand: Command = {
   name: "sandbox stale",
   args: "[--deadline <secs>]",
   help:
-    "STAGED refusal for the demo: the SLA floor is written one block above the delivered proof so this job can never clear it (the hook's SlaNotMet check itself is real — the floor is ours; the same code path a real stale miss takes). Attest as the hook ATTESTER (role-play, spec §5.3b), capture the SlaNotMet revert from a simulated complete() as evidence, then arm the refund claim",
+    "STAGED refusal for the demo: the SLA floor is written one block above the delivered proof so this job can never clear it (the hook's SlaNotMet check itself is real · the floor is ours; the same code path a real stale miss takes). Attest as the hook ATTESTER (role-play, spec §5.3b), capture the SlaNotMet revert from a simulated complete() as evidence, then arm the refund claim",
   kind: "sandbox",
   run: async (ctx, argv) => {
     const parsed = parseDeadline(argv);
@@ -256,7 +256,7 @@ const staleCommand: Command = {
       return {
         render: "kv",
         data: {
-          rows: [["gateway", "✗ delivery refused — VITE_GRAPH_GATEWAY_KEY is not set"]],
+          rows: [["gateway", "✗ delivery refused · VITE_GRAPH_GATEWAY_KEY is not set"]],
         },
       };
     }
@@ -300,7 +300,7 @@ const staleCommand: Command = {
         return {
           render: "kv",
           data: {
-            rows: [...rows, ["delivery", "✗ no _meta in the gateway payload — nothing to attest"]],
+            rows: [...rows, ["delivery", "✗ no _meta in the gateway payload · nothing to attest"]],
           },
         };
       }
@@ -318,11 +318,11 @@ const staleCommand: Command = {
       schemaHash: keccak256(toBytes(dataset.schema)),
       maxLatencyMs: quote.maxLatencyMs,
     };
-    rows.push(["sla floor", `${floor.toLocaleString("en-US")} = delivered metaBlock + 1 — STAGED one block above the delivered proof (${metaBlock.toLocaleString("en-US")}): a deterministic refusal, the same code path a real miss takes; the hook's SlaNotMet check itself is real`]);
+    rows.push(["sla floor", `${floor.toLocaleString("en-US")} = delivered metaBlock + 1 · STAGED one block above the delivered proof (${metaBlock.toLocaleString("en-US")}): a deterministic refusal, the same code path a real miss takes; the hook's SlaNotMet check itself is real`]);
 
     const expirySeconds = clampDeadline(requested);
     if (requested !== expirySeconds) {
-      rows.push(["deadline clamp", `${requested}s requested — clamped to ${expirySeconds}s (escrow floor 5 min, ExpiryTooShort)`]);
+      rows.push(["deadline clamp", `${requested}s requested · clamped to ${expirySeconds}s (escrow floor 5 min, ExpiryTooShort)`]);
     }
 
     let jobId: bigint;
@@ -359,7 +359,7 @@ const staleCommand: Command = {
     try {
       await attestDelivery(ctx.publicClient, signer.wallet, ADDR.hook, jobId, payloadHash, metaBlock, sla.minBlock);
       attested = true;
-      rows.push(["attest", `ok — posted metaBlock ${metaBlock}, minBlock ${sla.minBlock}`]);
+      rows.push(["attest", `ok · posted metaBlock ${metaBlock}, minBlock ${sla.minBlock}`]);
     } catch (error) {
       rows.push(["attest", `✗ ${formatSendError(error)}`]);
     }
@@ -378,7 +378,7 @@ const staleCommand: Command = {
           args: [jobId, reasonHash("SLA_MET"), "0x"],
           account: signer.address,
         });
-        rows.push(["simulate complete", "no revert — unexpected: the hook did not refuse a below-floor attestation"]);
+        rows.push(["simulate complete", "no revert · unexpected: the hook did not refuse a below-floor attestation"]);
       } catch (error) {
         // viem nests the raw revert hex on a cause-chain node
         // (ContractFunctionRevertedError.raw / RawContractError.data) — the
@@ -390,14 +390,14 @@ const staleCommand: Command = {
           evidenceData = hex;
           rows.push([
             "evidenced refusal",
-            `complete() would revert ${evidence} (data ${hex.slice(0, 10)}…) — the protocol refuses the stale delivery, NO TX SENT`,
+            `complete() would revert ${evidence} (data ${hex.slice(0, 10)}…) · the protocol refuses the stale delivery, NO TX SENT`,
           ]);
         } else {
           rows.push(["simulate complete", `✗ simulate failed: ${reason(error)}`]);
         }
       }
     } else if (!attested) {
-      rows.push(["evidenced refusal", "awaiting the attester key — T13 provisions the demo key as the hook attester (OPENBOOK_ATTESTER_PK)"]);
+      rows.push(["evidenced refusal", "awaiting the attester key · T13 provisions the demo key as the hook attester (OPENBOOK_ATTESTER_PK)"]);
     }
 
     let deadline = 0n;
@@ -425,7 +425,7 @@ const staleCommand: Command = {
       data: {
         rows,
         note:
-          "the floor was STAGED one block above the delivered proof — a deterministic refusal exercising the real SlaNotMet check; funds still in escrow — run `sandbox claim` after the deadline to execute claimRefund for real (buyer refund, no attester needed)",
+          "the floor was STAGED one block above the delivered proof · a deterministic refusal exercising the real SlaNotMet check; funds still in escrow · run `sandbox claim` after the deadline to execute claimRefund for real (buyer refund, no attester needed)",
       },
     };
   },
@@ -447,7 +447,7 @@ const claimCommand: Command = {
     if (!state) {
       return {
         render: "text",
-        data: "sandbox claim: no act job to claim — run buy <dataset> (claimable after its deadline) or sandbox stale to stage one",
+        data: "sandbox claim: no act job to claim · run buy <dataset> (claimable after its deadline) or sandbox stale to stage one",
       };
     }
     const job = state.job;
@@ -458,7 +458,7 @@ const claimCommand: Command = {
     if (state.evidence !== null) {
       rows.push(["protocol evidence", `complete() refused with ${state.evidence}${state.evidenceData ? ` (${state.evidenceData.slice(0, 10)}…)` : ""}`]);
     } else if (isRecoveredActJob()) {
-      rows.push(["protocol evidence", "none captured (session restarted — the job was recovered; the refund path is unaffected)"]);
+      rows.push(["protocol evidence", "none captured (session restarted · the job was recovered; the refund path is unaffected)"]);
     } else {
       rows.push(["protocol evidence", "none captured (attestation or staleness did not land)"]);
     }
@@ -466,8 +466,8 @@ const claimCommand: Command = {
       rows.push([
         "countdown",
         sandbox !== null
-          ? "✗ deadline unknown — the onchain read-back raced; rerun `sandbox stale` to re-arm"
-          : "✗ deadline unknown — the onchain read-back raced; run `status` to confirm the job, the refund window cannot be computed",
+          ? "✗ deadline unknown · the onchain read-back raced; rerun `sandbox stale` to re-arm"
+          : "✗ deadline unknown · the onchain read-back raced; run `status` to confirm the job, the refund window cannot be computed",
       ]);
       return { render: "kv", data: { rows } };
     }
@@ -475,10 +475,10 @@ const claimCommand: Command = {
     if (!canClaimRefund(job.deadline, nowSec)) {
       const wait = Number(job.deadline) - nowSec;
       rows.push(["deadline", job.deadline.toString()]);
-      rows.push(["countdown", `not eligible yet — the escrow releases the refund at the deadline (in ${wait}s)`]);
+      rows.push(["countdown", `not eligible yet · the escrow releases the refund at the deadline (in ${wait}s)`]);
       return {
         render: "kv",
-        data: { rows, note: "claimRefund opens at the deadline (WrongStatus before it) — anyone can poke it; the funds always return to the buyer" },
+        data: { rows, note: "claimRefund opens at the deadline (WrongStatus before it) · anyone can poke it; the funds always return to the buyer" },
       };
     }
     const signed = await resolveSigner();
@@ -506,7 +506,7 @@ const claimCommand: Command = {
         hash: receipt.transactionHash,
         title: `refunded sandbox job ${job.jobId}`,
         kind: "refunded",
-        rows: [...rows, ["claim", `claimRefund executed — job → Expired, buyer refunded`]],
+        rows: [...rows, ["claim", `claimRefund executed · job → Expired, buyer refunded`]],
         note: "the refund tx executed for real; the full amount returns to the buyer (claimRefund needs no attester)",
       },
     };

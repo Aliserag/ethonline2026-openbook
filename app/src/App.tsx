@@ -692,6 +692,16 @@ export default function App() {
           </a>{" "}
           (pick Arc Testnet). Step 4 lets you watch the SLA verdict settle onchain.
         </p>
+        <button
+          type="button"
+          className="ghost tour-entry"
+          data-tour-entry
+          onClick={() => {
+            window.location.hash = "#tour";
+          }}
+        >
+          Take the 5-step tour
+        </button>
         <p className="envline" aria-label="environment status">
           <span>
             <span className={hasGraphKey ? "dot yes" : "dot no"} aria-hidden="true" />
@@ -981,7 +991,6 @@ export default function App() {
                 </div>
               )}
 
-              <FreshnessRuler delivery={delivery} minBlock={job?.minBlock ?? null} />
               {delivery !== null && <DeliveryResult delivery={delivery} />}
             </StepCard>
 

@@ -86,7 +86,7 @@ export function usdcTrim(value: bigint | number | string): string {
 
 export interface BuyArgs {
   datasetId: string;
-  /** 6-dec raw USDC units — exactly what `quote <id>` shows */
+  /** 6-dec raw USDC units · exactly what `quote <id>` shows */
   amountUsdc: number;
 }
 
@@ -161,20 +161,20 @@ export async function resolveDatasetQuote(
   ]);
   const price = firstNonNull(subPrice, rootPrice);
   if (price.failed) {
-    throw new Error(`svc.price is unreachable (${price.failed}) — refusing to buy at a hard-coded price`);
+    throw new Error(`svc.price is unreachable (${price.failed}) · refusing to buy at a hard-coded price`);
   }
   if (price.value === null) {
     throw new Error(
-      `svc.price is not set on ${sub} (nor ${CONFIG.ens}) — refusing to buy at a hard-coded price`,
+      `svc.price is not set on ${sub} (nor ${CONFIG.ens}) · refusing to buy at a hard-coded price`,
     );
   }
   const sla = firstNonNull(subSla, rootSla);
   if (sla.failed) {
-    throw new Error(`svc.sla is unreachable (${sla.failed}) — no freshness window to floor the SLA`);
+    throw new Error(`svc.sla is unreachable (${sla.failed}) · no freshness window to floor the SLA`);
   }
   if (sla.value === null) {
     throw new Error(
-      `svc.sla is not set on ${sub} (nor ${CONFIG.ens}) — no freshness window to floor the SLA`,
+      `svc.sla is not set on ${sub} (nor ${CONFIG.ens}) · no freshness window to floor the SLA`,
     );
   }
   const amountUsdc = parsePriceToAmount6dec(price.value);
@@ -197,15 +197,15 @@ export async function parseBuyArgs(
   readEnsText: EnsTextReader,
 ): Promise<BuyArgs> {
   const id = argv[1];
-  if (!id) throw new Error("usage: buy <dataset> [--amount <usdc>] — try datasets");
+  if (!id) throw new Error("usage: buy <dataset> [--amount <usdc>] · try datasets");
   const dataset = CONFIG.datasets.find((d) => d.id === id);
-  if (!dataset) throw new Error(`unknown dataset: ${id} — try datasets`);
+  if (!dataset) throw new Error(`unknown dataset: ${id} · try datasets`);
   const quote = await resolveDatasetQuote(dataset, readEnsText);
   const raw = flagValue(argv, "--amount");
   if (raw !== undefined) {
     const parsed = Math.round(parseFloat(raw) * 1_000_000);
     if (!Number.isFinite(parsed) || parsed <= 0) {
-      throw new Error(`invalid --amount "${raw}" — a positive USDC number (e.g. 0.10)`);
+      throw new Error(`invalid --amount "${raw}" · a positive USDC number (e.g. 0.10)`);
     }
     return { datasetId: dataset.id, amountUsdc: parsed };
   }
@@ -225,13 +225,13 @@ export function canBuy(input: {
   amount: bigint;
 }): { ok: true } | { ok: false; reason: string } {
   if (input.signer === "none") {
-    return { ok: false, reason: "no signer — connect a wallet or set VITE_DEMO_BUYER_KEY" };
+    return { ok: false, reason: "no signer · connect a wallet or set VITE_DEMO_BUYER_KEY" };
   }
   if (input.balance < input.amount) {
     return {
       ok: false,
       reason:
-        `low USDC balance (${usdc6(input.balance)} < ${usdc6(input.amount)}) — ` +
+        `low USDC balance (${usdc6(input.balance)} < ${usdc6(input.amount)}) · ` +
         "fund the buyer from faucet.circle.com (Arc testnet) and retry",
     };
   }
@@ -267,10 +267,10 @@ export async function resolveSigner(): Promise<{ ok: true; signer: Signer } | { 
     }
     return {
       ok: false,
-      reason: "browser wallet found but no connected account — connect it (Arc testnet) and retry",
+      reason: "browser wallet found but no connected account · connect it (Arc testnet) and retry",
     };
   }
-  return { ok: false, reason: "no signer — connect a wallet or set VITE_DEMO_BUYER_KEY" };
+  return { ok: false, reason: "no signer · connect a wallet or set VITE_DEMO_BUYER_KEY" };
 }
 
 /** Prepare an injected wallet's Arc chain (demo key writes go straight to the RPC). */
@@ -286,7 +286,7 @@ export interface ActJob {
   jobId: string;
   minBlock: number;
   amountUsdc: number;
-  /** expiredAt in unix seconds (read back onchain — the truth) */
+  /** expiredAt in unix seconds (read back onchain · the truth) */
   deadline: bigint;
   payloadHash?: `0x${string}`;
   metaBlock?: number;
@@ -327,7 +327,7 @@ export function clearActJobIfClaimed(active: ActJob | null, claimedJobId: string
 
 const ACT_JOB_STORAGE_KEY = "openbook.actjob.v1";
 
-/** Pure serializer — deadline is bigint, stored as a decimal string. */
+/** Pure serializer · deadline is bigint, stored as a decimal string. */
 export function serializeActJob(job: ActJob): string {
   return JSON.stringify({ version: 1, ...job, deadline: job.deadline.toString() });
 }
@@ -380,7 +380,7 @@ function storage(): Storage | null {
   try {
     return typeof localStorage !== "undefined" ? localStorage : null;
   } catch {
-    return null; // privacy mode / sandboxed iframe — persistence degrades to session-only
+    return null; // privacy mode / sandboxed iframe · persistence degrades to session-only
   }
 }
 
@@ -484,7 +484,7 @@ export function classifyRevert(data: `0x${string}`): string {
     try {
       const body = data.slice(10);
       const offset = parseInt(body.slice(0, 64) || "0", 16); // abi.encode(string) offset word
-      if (offset !== 32) return "Error(string)"; // non-standard encoding — name only
+      if (offset !== 32) return "Error(string)"; // non-standard encoding · name only
       const len = parseInt(body.slice(64, 128) || "0", 16); // length word
       const text = hexToUtf8(body.slice(128, 128 + len * 2)); // data word
       return text === "not agent" ? "onlyAgentOrOwner" : `Error(string): ${text}`;
@@ -564,7 +564,7 @@ const buyCommand: Command = {
     if (!signed.ok) {
       return {
         render: "kv",
-        data: { rows: [...rows, ["signer", `✗ ${signed.reason}`], ["balance", "✗ not read — no signer"]] },
+        data: { rows: [...rows, ["signer", `✗ ${signed.reason}`], ["balance", "✗ not read · no signer"]] },
       };
     }
     const { signer } = signed;
@@ -598,7 +598,7 @@ const buyCommand: Command = {
       return {
         render: "kv",
         data: {
-          rows: [...rows, ["chain head", `✗ ${reason(error)} — no SLA floor, buy refused`]],
+          rows: [...rows, ["chain head", `✗ ${reason(error)} · no SLA floor, buy refused`]],
         },
       };
     }
@@ -635,7 +635,7 @@ const buyCommand: Command = {
     try {
       deadline = (await getJob(ctx.publicClient, jobId)).expiredAt;
     } catch {
-      deadline = 0n; // job created but the read-back raced — deadline unknown
+      deadline = 0n; // job created but the read-back raced · deadline unknown
     }
     const job: ActJob = {
       datasetId: dataset.id,
@@ -654,7 +654,7 @@ const buyCommand: Command = {
           ["job", job.jobId],
           ["deadline", deadline === 0n ? "unknown (read-back raced)" : job.deadline.toString()],
         ],
-        note: `funded — next: deliver ${dataset.id} (captures the payload + _meta), then settle ${dataset.id} (attest + complete)`,
+        note: `funded · next: deliver ${dataset.id} (captures the payload + _meta), then settle ${dataset.id} (attest + complete)`,
       },
     };
   },
@@ -670,14 +670,14 @@ const deliverCommand: Command = {
   run: async (ctx, argv) => {
     const id = argv[1];
     const job = getActJob();
-    if (!job) return { render: "text", data: "deliver: no active job — run buy <dataset> first" };
+    if (!job) return { render: "text", data: "deliver: no active job · run buy <dataset> first" };
     const dataset = CONFIG.datasets.find((d) => d.id === (id ?? job.datasetId));
     if (!dataset) return { render: "text", data: `deliver: unknown dataset ${id ?? job.datasetId}` };
     if (!hasGraphKey) {
       return {
         render: "kv",
         data: {
-          rows: [["dataset", dataset.id], ["gateway", "✗ delivery refused — VITE_GRAPH_GATEWAY_KEY is not set"]],
+          rows: [["dataset", dataset.id], ["gateway", "✗ delivery refused · VITE_GRAPH_GATEWAY_KEY is not set"]],
         },
       };
     }
@@ -695,7 +695,7 @@ const deliverCommand: Command = {
         return {
           render: "kv",
           data: {
-            rows: [...rows, ["delivery", "✗ no _meta in the gateway payload — nothing to attest"]],
+            rows: [...rows, ["delivery", "✗ no _meta in the gateway payload · nothing to attest"]],
           },
         };
       }
@@ -716,7 +716,7 @@ const deliverCommand: Command = {
       const fresh = freshnessRuler(metaBlock, BigInt(job.minBlock), BigInt(head));
       rows.push(["freshness", fresh.ok ? `fresh (metaBlock ≥ floor)` : `stale (metaBlock < floor, delta ${fresh.delta} blocks)`]);
     } catch {
-      rows.push(["freshness", "✗ chain head unreachable — freshness unknown"]);
+      rows.push(["freshness", "✗ chain head unreachable · freshness unknown"]);
     }
 
     const signed = await resolveSigner();
@@ -725,7 +725,7 @@ const deliverCommand: Command = {
       return {
         render: "kv",
         data: {
-          rows: [...rows, ["submit", `✗ ${signed.reason} — hash captured but not submitted onchain`]],
+          rows: [...rows, ["submit", `✗ ${signed.reason} · hash captured but not submitted onchain`]],
           note: "settle needs the submitted hash onchain (SlaHook HashMismatch otherwise); set VITE_DEMO_BUYER_KEY or connect, then rerun deliver",
         },
       };
@@ -748,7 +748,7 @@ const deliverCommand: Command = {
     setActJob({ ...job, payloadHash, metaBlock });
     return {
       render: "kv",
-      data: { rows, note: `payload captured and submitted — next: settle ${dataset.id}` },
+      data: { rows, note: `payload captured and submitted · next: settle ${dataset.id}` },
     };
   },
 };
@@ -761,9 +761,9 @@ const settleCommand: Command = {
   kind: "act",
   run: async (ctx) => {
     const job = getActJob();
-    if (!job) return { render: "text", data: "settle: no active job — run buy <dataset>, then deliver" };
+    if (!job) return { render: "text", data: "settle: no active job · run buy <dataset>, then deliver" };
     if (job.payloadHash === undefined || job.metaBlock === undefined) {
-      return { render: "text", data: "settle: no delivery captured — run deliver <dataset> first" };
+      return { render: "text", data: "settle: no delivery captured · run deliver <dataset> first" };
     }
     const dataset = CONFIG.datasets.find((d) => d.id === job.datasetId);
     if (!dataset) return { render: "text", data: `settle: unknown dataset ${job.datasetId}` };
@@ -802,7 +802,7 @@ const settleCommand: Command = {
             ["attest", `✗ ${formatSendError(error)}`],
           ],
           note:
-            "the SlaHook attester gates attest — T13 provisions the demo key (OPENBOOK_ATTESTER_PK) and calls setAttester; until then this revert is the expected state",
+            "the SlaHook attester gates attest · T13 provisions the demo key (OPENBOOK_ATTESTER_PK) and calls setAttester; until then this revert is the expected state",
         },
       };
     }
@@ -852,24 +852,24 @@ const settleCommand: Command = {
           const split = feeSplitFromReceipt(receipt, terms.feeBP, signer.address);
           // Trimmed 6dp: a 3000-raw treasury fee is 0.003, never "0.00" (usdc6
           // rounds to 2dp and would read as "no fee"); raw units stay visible.
-          rows.push(["split", `seller ${usdcTrim(split.seller)} · treasury ${usdcTrim(split.treasury)} · total ${usdcTrim(split.total)} (fee ${split.feeBP} bp — raw ${split.seller}/${split.treasury}/${split.total})`]);
+          rows.push(["split", `seller ${usdcTrim(split.seller)} · treasury ${usdcTrim(split.treasury)} · total ${usdcTrim(split.total)} (fee ${split.feeBP} bp · raw ${split.seller}/${split.treasury}/${split.total})`]);
         } catch (error) {
           rows.push(["split", `✗ ${reason(error)}`]);
         }
       } else {
-        rows.push(["refund", "client refunded — full amount, no fee row"]);
+        rows.push(["refund", "client refunded · full amount, no fee row"]);
       }
       // Terminal outcome (settled or refunded) — the act job is spent; no
       // recovery affordance needed past this point.
       setActJob(null);
     } else {
-      rows.push(["tx", "none — decision was returned without settlement (no signer given)"]);
+      rows.push(["tx", "none · decision was returned without settlement (no signer given)"]);
     }
     return {
       render: "kv",
       data: {
         rows,
-        note: `verdict is ${result.verdict}: ${result.verdict === "APPROVE" ? "SLA met — the hook allowed complete()" : "stale or invalid — refunded instead"}; split is receipt-derived, never config`,
+        note: `verdict is ${result.verdict}: ${result.verdict === "APPROVE" ? "SLA met · the hook allowed complete()" : "stale or invalid · refunded instead"}; split is receipt-derived, never config`,
       },
     };
   },

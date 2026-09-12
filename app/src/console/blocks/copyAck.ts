@@ -13,7 +13,7 @@ export interface CopyAck {
   entryId: number;
   /** the full value copied to the clipboard */
   hash: string;
-  /** true when the clipboard write failed — the printed note says so */
+  /** true when the clipboard write failed · the printed note says so */
   failed?: boolean;
 }
 
@@ -33,10 +33,10 @@ export function copyAckReducer(_state: CopyAck | null, action: CopyAckAction): C
   }
 }
 
-/** The printed ack line — the pure success/failure decision. */
+/** The printed ack line · the pure success/failure decision. */
 export function copyAckText(ack: CopyAck): string {
   if (ack.failed) {
-    return "copy failed: clipboard write rejected — select the hash and copy manually";
+    return "copy failed: clipboard write rejected · select the hash and copy manually";
   }
-  return `✓ copied ${truncateHash(ack.hash, 8, 6)} — printed`;
+  return `✓ copied ${truncateHash(ack.hash, 8, 6)} · printed`;
 }

@@ -37,13 +37,13 @@ function parseDays(argv: string[]): { days: number } | { error: string } {
   if (raw === undefined) return { days: 30 };
   const days = Number(raw);
   if (!Number.isInteger(days) || days < 1) {
-    return { error: `--days must be a whole number ≥ 1 — got "${raw}"` };
+    return { error: `--days must be a whole number ≥ 1 · got "${raw}"` };
   }
   return { days };
 }
 
 function dayTime(ts: number): string {
-  if (ts === 0) return "—";
+  if (ts === 0) return "n/a";
   return new Date(ts * 1000).toLocaleString(undefined, { month: "short", day: "numeric" });
 }
 
@@ -127,11 +127,11 @@ const helpCommand: Command = {
       return {
         render: "text",
         data: found
-          ? `${found.name}${found.args ? ` ${found.args}` : ""} — ${found.help}`
-          : `unknown command: ${argv[1]} — try help`,
+          ? `${found.name}${found.args ? ` ${found.args}` : ""} · ${found.help}`
+          : `unknown command: ${argv[1]} · try help`,
       };
     }
-    const lines = all.map((c) => `${c.name}${c.args ? ` ${c.args}` : ""} — ${c.help}`);
+    const lines = all.map((c) => `${c.name}${c.args ? ` ${c.args}` : ""} · ${c.help}`);
     return { render: "text", data: lines.join("\n") };
   },
 };
@@ -168,14 +168,14 @@ const statusCommand: Command = {
         [["svc.price", price], ["svc.sla", sla], ["svc.payee", payee]] as const
       ).filter(([, probe]) => probe.ok && probe.value === null);
       if (missing.length > 0) {
-        rows.push(["ens", `✗ hard-fail — not set: ${missing.map(([k]) => k).join(", ")}`]);
+        rows.push(["ens", `✗ hard-fail · not set: ${missing.map(([k]) => k).join(", ")}`]);
       } else if (!price.ok || !sla.ok || !payee.ok) {
         const failed = [price, sla, payee].find((p) => !p.ok);
         rows.push(["ens", `✗ ENS unreachable: ${failed && !failed.ok ? failed.reason : "unknown"}`]);
       } else {
         rows.push([
           "ens",
-          `ok — ${price.value} · sla ${sla.value} · payee ${truncateHash(payee.value ?? "")}`,
+          `ok · ${price.value} · sla ${sla.value} · payee ${truncateHash(payee.value ?? "")}`,
         ]);
       }
     } catch (error) {
@@ -185,18 +185,18 @@ const statusCommand: Command = {
       "gateway key",
       hasGraphKey
         ? "present (VITE_GRAPH_GATEWAY_KEY)"
-        : "missing — set VITE_GRAPH_GATEWAY_KEY (delivery refused until then)",
+        : "missing · set VITE_GRAPH_GATEWAY_KEY (delivery refused until then)",
     ]);
     const actJob = getActJob();
     if (actJob !== null) {
       rows.push([
         isRecoveredActJob() ? "recovered job" : "active job",
-        `${actJob.jobId} — run deliver / settle (or sandbox claim after its deadline)`,
+        `${actJob.jobId} · run deliver / settle (or sandbox claim after its deadline)`,
       ]);
     }
     const demo = demoAddress();
     if (demo === null) {
-      rows.push(["demo wallet", "unset — set VITE_DEMO_BUYER_KEY (act commands then degrade to wallet-connect)"]);
+      rows.push(["demo wallet", "unset · set VITE_DEMO_BUYER_KEY (act commands then degrade to wallet-connect)"]);
     } else {
       try {
         const balance = await ctx.publicClient.readContract({
@@ -205,9 +205,9 @@ const statusCommand: Command = {
           functionName: "balanceOf",
           args: [demo],
         });
-        rows.push(["demo wallet", `${usdc6(balance)} USDC — ${truncateHash(demo)}`]);
+        rows.push(["demo wallet", `${usdc6(balance)} USDC · ${truncateHash(demo)}`]);
       } catch (error) {
-        rows.push(["demo wallet", `✗ balance read failed: ${reason(error)} — ${truncateHash(demo)}`]);
+        rows.push(["demo wallet", `✗ balance read failed: ${reason(error)} · ${truncateHash(demo)}`]);
       }
     }
     return { render: "kv", data: { rows } };
@@ -228,7 +228,7 @@ const ensShowCommand: Command = {
         record: key,
         value: !probe.ok
           ? `✗ ${probe.reason}`
-          : probe.value ?? (HARD_FAIL_KEYS.includes(key) ? "— unset (hard fail)" : "— unset"),
+          : probe.value ?? (HARD_FAIL_KEYS.includes(key) ? "not set (hard fail)" : "not set"),
       };
     });
     return {
@@ -237,7 +237,7 @@ const ensShowCommand: Command = {
         columns: ["record", "value"],
         rows,
         summary:
-          "live reads from sepolia ENSv2 — price/sla/payee unset hard-fails the quote (no hard-coded values)",
+          "live reads from sepolia ENSv2 · price/sla/payee unset hard-fails the quote (no hard-coded values)",
       },
     };
   },
@@ -302,7 +302,7 @@ const datasetsCommand: Command = {
       data: {
         columns: ["id", "schema", "price", "maxBlockLag", "chain"],
         rows,
-        summary: `${CONFIG.datasets.length} datasets — prices and SLA windows are LIVE ENS reads (subname over ${CONFIG.ens}), same resolution as quote <id>`,
+        summary: `${CONFIG.datasets.length} datasets · prices and SLA windows are LIVE ENS reads (subname over ${CONFIG.ens}), same resolution as quote <id>`,
       },
     };
   },
@@ -317,9 +317,9 @@ const quoteCommand: Command = {
   kind: "inspect",
   run: async (_ctx, argv) => {
     const id = argv[1];
-    if (!id) return { render: "text", data: "usage: quote <dataset> — try datasets" };
+    if (!id) return { render: "text", data: "usage: quote <dataset> · try datasets" };
     const dataset = CONFIG.datasets.find((d) => d.id === id);
-    if (!dataset) return { render: "text", data: `unknown dataset: ${id} — try datasets` };
+    if (!dataset) return { render: "text", data: `unknown dataset: ${id} · try datasets` };
 
     const sub = `${dataset.id}.${CONFIG.ens}`;
     const probes = await Promise.all([
@@ -342,7 +342,7 @@ const quoteCommand: Command = {
     } else if (priceProbe.value === null) {
       rows.push([
         "ens price",
-        `✗ svc.price not set on ${sub} (nor ${CONFIG.ens}) — refusing to quote a hard-coded value`,
+        `✗ svc.price not set on ${sub} (nor ${CONFIG.ens}) · refusing to quote a hard-coded value`,
       ]);
     } else {
       let amount: number | null = null;
@@ -351,7 +351,7 @@ const quoteCommand: Command = {
         rows.push(["ens price", priceProbe.value]);
         rows.push(["amount", `${usdc6(amount)} USDC (6dp raw ${amount})`]);
       } catch (error) {
-        rows.push(["ens price", `${priceProbe.value} — ✗ invalid: ${reason(error)}`]);
+        rows.push(["ens price", `${priceProbe.value} · ✗ invalid: ${reason(error)}`]);
       }
     }
 
@@ -359,7 +359,7 @@ const quoteCommand: Command = {
     if (slaProbe.failed) {
       rows.push(["sla", `✗ ENS unreachable: ${slaProbe.failed}`]);
     } else if (slaProbe.value === null) {
-      rows.push(["sla", `✗ svc.sla not set on ${sub} (nor ${CONFIG.ens}) — no freshness floor`]);
+      rows.push(["sla", `✗ svc.sla not set on ${sub} (nor ${CONFIG.ens}) · no freshness floor`]);
     } else {
       try {
         maxBlockLag = parseSlaRecord(slaProbe.value).maxBlockLag;
@@ -381,10 +381,10 @@ const quoteCommand: Command = {
         "sla floor",
         maxBlockLag !== null
           ? `head − maxBlockLag = ${(head - maxBlockLag).toLocaleString("en-US")}`
-          : "unknown — no SLA window to subtract",
+          : "unknown · no SLA window to subtract",
       ]);
     } catch (error) {
-      rows.push(["chain head", `✗ ${reason(error)} — floor unknown, quote refused`]);
+      rows.push(["chain head", `✗ ${reason(error)} · floor unknown, quote refused`]);
     }
 
     return {
@@ -411,7 +411,7 @@ const booksCommand: Command = {
     try {
       jobs = await fetchJobs();
     } catch (error) {
-      return { render: "text", data: `books failed: ${reason(error)} — is the subgraph reachable? (try lag)` };
+      return { render: "text", data: `books failed: ${reason(error)} · is the subgraph reachable? (try lag)` };
     }
     const totals = scopedTotals(jobs);
     const cutoff = Math.floor(Date.now() / 1000) - days.days * 86_400;
@@ -422,7 +422,7 @@ const booksCommand: Command = {
       return {
         render: "text",
         data:
-          "no scoped jobs in the subgraph yet — the ledger is blank, not zero: nothing indexed for our addresses (try lag)",
+          "no scoped jobs in the subgraph yet · the ledger is blank, not zero: nothing indexed for our addresses (try lag)",
       };
     }
     return {
@@ -446,13 +446,13 @@ const jobsCommand: Command = {
   run: async (_ctx, argv) => {
     const stateArg = flagValue(argv, "--state");
     if (stateArg !== undefined && !["settled", "refunded", "open"].includes(stateArg)) {
-      return { render: "text", data: `unknown job state: ${stateArg} — use settled|refunded|open` };
+      return { render: "text", data: `unknown job state: ${stateArg} · use settled|refunded|open` };
     }
     let jobs: Awaited<ReturnType<typeof fetchJobs>>;
     try {
       jobs = await fetchJobs();
     } catch (error) {
-      return { render: "text", data: `jobs failed: ${reason(error)} — is the subgraph reachable? (try lag)` };
+      return { render: "text", data: `jobs failed: ${reason(error)} · is the subgraph reachable? (try lag)` };
     }
     const filtered = stateArg === undefined ? jobs : jobs.filter((j) => j.state === stateArg);
     if (filtered.length === 0) {
@@ -460,7 +460,7 @@ const jobsCommand: Command = {
         render: "text",
         data:
           stateArg === undefined
-            ? "no scoped jobs — nothing indexed for our addresses yet"
+            ? "no scoped jobs · nothing indexed for our addresses yet"
             : `no ${stateArg} jobs for our addresses`,
       };
     }
@@ -484,11 +484,11 @@ const jobCommand: Command = {
   kind: "inspect",
   run: async (_ctx, argv) => {
     const id = argv[1];
-    if (!id) return { render: "text", data: "usage: job <id> — try jobs; replay <id> opens the theater" };
+    if (!id) return { render: "text", data: "usage: job <id> · try jobs; replay <id> opens the theater" };
     try {
       BigInt(id);
     } catch {
-      return { render: "text", data: `job: invalid id "${id}" — a numeric job id` };
+      return { render: "text", data: `job: invalid id "${id}" · a numeric job id` };
     }
     let events: Awaited<ReturnType<typeof fetchJobEvents>>;
     try {
@@ -509,7 +509,7 @@ const jobCommand: Command = {
         ["paid.timestamp", dayTime(p.timestamp)],
       );
     } else {
-      rows.push(["paid", "— no queryPaid indexed for this job"]);
+      rows.push(["paid", "no queryPaid indexed for this job"]);
     }
     if (events.fulfilled) {
       rows.push(
@@ -517,14 +517,14 @@ const jobCommand: Command = {
         ["fulfilled.metaBlock", String(events.fulfilled.metaBlock)],
       );
     } else {
-      rows.push(["fulfilled", "— not delivered yet"]);
+      rows.push(["fulfilled", "not delivered yet"]);
     }
     if (events.settled) {
       rows.push(["settled", `${truncateHash(events.settled.seller)} · ${usdc6(events.settled.amount)} USDC`]);
     } else if (events.refunded) {
       rows.push(["refunded", events.refunded.reason]);
     } else {
-      rows.push(["outcome", "— open: neither settled nor refunded yet"]);
+      rows.push(["outcome", "open: neither settled nor refunded yet"]);
     }
     return {
       render: "kv",
@@ -544,13 +544,13 @@ const lagCommand: Command = {
     try {
       head = await ctx.publicClient.getBlockNumber();
     } catch (error) {
-      return { render: "text", data: `lag failed: arc RPC unreachable — ${reason(error)}` };
+      return { render: "text", data: `lag failed: arc RPC unreachable · ${reason(error)}` };
     }
     let lagv: Awaited<ReturnType<typeof fetchLag>>;
     try {
       lagv = await fetchLag();
     } catch (error) {
-      return { render: "text", data: `lag failed: subgraph unreachable — ${reason(error)}` };
+      return { render: "text", data: `lag failed: subgraph unreachable · ${reason(error)}` };
     }
     const delta = Number(head) - lagv.indexed;
     const note =
@@ -603,7 +603,7 @@ const policyShowCommand: Command = {
       render: "kv",
       data: {
         rows,
-        note: "caps/spend are LIVE contract reads (PolicyWallet 0x4e83…) — the subgraph PolicyConfig entity is empty on our instance and is not used",
+        note: "caps/spend are LIVE contract reads (PolicyWallet 0x4e83…) · the subgraph PolicyConfig entity is empty on our instance and is not used",
       },
     };
   },
@@ -618,7 +618,7 @@ const replayCommand: Command = {
   kind: "replay",
   run: async (ctx, argv) => {
     const jobId = argv[1];
-    if (!jobId) return { render: "text", data: "usage: replay <jobId> — try jobs" };
+    if (!jobId) return { render: "text", data: "usage: replay <jobId> · try jobs" };
     ctx.navigate(`#theater/${jobId}`);
     return { render: "frames", data: { jobId } };
   },

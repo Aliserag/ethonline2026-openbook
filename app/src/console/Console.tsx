@@ -77,13 +77,13 @@ function LiveChip({
       : live.state === "loading"
         ? `${label} …`
         : live.state === "stale"
-          ? `${label} ${live.value ?? "—"} · stale`
+          ? `${label} ${live.value ?? "n/a"} · stale`
           : `${label} · error`;
   const dot =
     live.state === "live" ? "ob-live" : live.state === "stale" ? "ob-live stale" : "ob-live off";
   const title =
     live.state === "live"
-      ? `live — as of ${new Date(live.at).toLocaleTimeString()}`
+      ? `live · as of ${new Date(live.at).toLocaleTimeString()}`
       : (live.reason ?? live.state);
   return (
     <span className={`console__chip console__chip--${live.state}`} title={title}>
@@ -316,7 +316,7 @@ export function Console(): JSX.Element {
   }
 
   return (
-    <section className="console" aria-label="openbook console — the receipt printer">
+    <section className="console" aria-label="openbook console · the receipt printer">
       <header className="console__head">
         <span className="console__title">console</span>
         <span className="console__chips">
@@ -340,7 +340,7 @@ export function Console(): JSX.Element {
           {entries.length === 0 ? (
             <div className="console__empty">
               <p className="console__empty-line">
-                the receipt printer — every command prints a block. try:
+                the receipt printer · every command prints a block. try:
               </p>
               <div className="console__suggest">
                 {SUGGESTIONS.map((s) => (
@@ -422,9 +422,9 @@ export function Console(): JSX.Element {
       </div>
 
       {popover !== null && (
-        <div className="tape__pop" role="listbox" aria-label="tab completion — commands and datasets">
+        <div className="tape__pop" role="listbox" aria-label="tab completion · commands and datasets">
           <div className="tape__pop-head">
-            {popover.candidates.length} match{popover.candidates.length === 1 ? "" : "es"} — tab cycles · click picks
+            {popover.candidates.length} match{popover.candidates.length === 1 ? "" : "es"} · tab cycles · click picks
           </div>
           {popover.candidates.map((candidate) => (
             <div
@@ -457,7 +457,7 @@ export function Console(): JSX.Element {
             setPopover(null);
           }}
           onKeyDown={onKeyDown}
-          placeholder="type a command — help"
+          placeholder="type a command · help"
           aria-label="console command input"
           autoComplete="off"
           autoCapitalize="off"

@@ -159,14 +159,14 @@ describe("verdict stamps", () => {
   });
 
   it("an allowed policy simulation prints no stamp", () => {
-    const kv = { render: "kv", data: { rows: [["pure mirror", "ok — within caps"]] } } as CommandResult;
+    const kv = { render: "kv", data: { rows: [["pure mirror", "ok · within caps"]] } } as CommandResult;
     expect(verdictFor("policy try-overspend 2", kv)).toBeNull();
   });
 
   it("captured staleness evidence is REFUSED", () => {
     const kv = {
       render: "kv",
-      data: { rows: [["simulate complete", "complete() would revert SlaNotMet — the protocol refuses the stale delivery"]] },
+      data: { rows: [["simulate complete", "complete() would revert SlaNotMet · the protocol refuses the stale delivery"]] },
     } as CommandResult;
     expect(verdictFor("sandbox stale", kv)).toBe("REFUSED");
   });
@@ -180,8 +180,8 @@ describe("verdict stamps", () => {
   });
 
   it("guarded buy/deliver refusals stamp REFUSED", () => {
-    const buy = { render: "kv", data: { rows: [["chain head", "✗ unreachable — buy refused"]] } } as CommandResult;
-    const deliver = { render: "kv", data: { rows: [["gateway", "✗ delivery refused — key missing"]] } } as CommandResult;
+    const buy = { render: "kv", data: { rows: [["chain head", "✗ unreachable · buy refused"]] } } as CommandResult;
+    const deliver = { render: "kv", data: { rows: [["gateway", "✗ delivery refused · key missing"]] } } as CommandResult;
     expect(verdictFor("buy aave-v3-arbitrum-lending", buy)).toBe("REFUSED");
     expect(verdictFor("deliver", deliver)).toBe("REFUSED");
   });

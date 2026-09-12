@@ -204,7 +204,7 @@ export function Palette({
               setSel(0);
             }}
             onKeyDown={onKeyDown}
-            placeholder="run a command — fuzzy over the registry + datasets"
+            placeholder="run a command · fuzzy over the registry + datasets"
             aria-label="palette query"
             autoComplete="off"
             autoCapitalize="off"
@@ -212,7 +212,7 @@ export function Palette({
           />
         </div>
         {visible.length === 0 ? (
-          <div className="palette__none">no match — enter still runs the line</div>
+          <div className="palette__none">no match · enter still runs the line</div>
         ) : (
           <ul className="palette__list" role="listbox" aria-activedescendant={`palette-opt-${sel}`}>
             {visible.map((item, i) => (

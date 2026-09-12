@@ -97,7 +97,7 @@ describe("canBuy", () => {
   it("no signer → the exact instructive copy (demo key or wallet-connect)", () => {
     expect(canBuy({ signer: "none", balance: 1_000_000n, amount: 100_000n })).toEqual({
       ok: false,
-      reason: "no signer — connect a wallet or set VITE_DEMO_BUYER_KEY",
+      reason: "no signer · connect a wallet or set VITE_DEMO_BUYER_KEY",
     });
   });
 

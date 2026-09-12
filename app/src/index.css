@@ -873,14 +873,6 @@ textarea {
   inset: 0;
 }
 
-/* inside a step card the ruler is a block, not an overlay */
-.stepcard .ruler {
-  position: relative;
-  inset: auto;
-  height: 58px;
-  margin: 2px 0 12px;
-}
-
 /* the dock/theater/drawer ruler (T16's .tape__ruler-track) must clear the
    12px labels that sit under the needles — 44px is too short */
 .tape__ruler .tape__ruler-track {
@@ -1306,6 +1298,19 @@ a:hover { color: var(--ink); }
   line-height: 1.5;
 }
 .intro a { color: var(--accent); }
+
+/* the single guided entry point: 5-step tour, right under the intro */
+button.tour-entry {
+  font-family: var(--sans);
+  font-size: 14px;
+  font-weight: 600;
+  padding: 7px 14px;
+  margin: 2px 0 10px;
+  border-width: 1.5px;
+  color: var(--accent);
+  border-color: var(--accent);
+  background: transparent;
+}
 
 /* ============ CONSOLE DOCK (wave B1; T16/T17 style the tape later) ======== */
 /* Structure + minimal styling only — every color here is an existing token. */

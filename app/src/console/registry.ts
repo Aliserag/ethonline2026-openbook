@@ -142,7 +142,7 @@ export async function dispatch(line: string, ctx: CommandContext): Promise<Comma
   const argv = parseArgv(line);
   if (argv.length === 0) return { render: "text", data: "" };
   const command = find(line);
-  if (!command) return { render: "text", data: `unknown command: ${argv[0]} — try help` };
+  if (!command) return { render: "text", data: `unknown command: ${argv[0]} · try help` };
   try {
     return await command.run(ctx, argv);
   } catch (error) {

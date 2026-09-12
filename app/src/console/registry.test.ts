@@ -61,12 +61,12 @@ describe("registry", () => {
   it("unknown command returns the exact text result", async () => {
     const result = await dispatch("blorp", ctx());
     expect(result.render).toBe("text");
-    expect(result.data).toBe("unknown command: blorp — try help");
+    expect(result.data).toBe("unknown command: blorp · try help");
   });
 
   it("unknown multi-word command names the first token", async () => {
     const result = await dispatch("ens fetch", ctx());
-    expect(result).toEqual({ render: "text", data: "unknown command: ens — try help" });
+    expect(result).toEqual({ render: "text", data: "unknown command: ens · try help" });
   });
 
   it("register adds a command that help and dispatch see", async () => {

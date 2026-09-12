@@ -45,7 +45,7 @@ export function CountdownBlock({ until }: { until: number }): JSX.Element {
           </div>
         </>
       ) : (
-        <div className="tape__note">claim window closed — rerun sandbox claim to execute the refund</div>
+        <div className="tape__note">claim window closed · rerun sandbox claim to execute the refund</div>
       )}
     </div>
   );
