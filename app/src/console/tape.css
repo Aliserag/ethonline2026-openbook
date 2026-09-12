@@ -1,0 +1,785 @@
+/* ==========================================================================
+   RECEIPT-TAPE CONSOLE DESIGN SYSTEM (T16) — "Thermal Ledger" (spec §5.3c)
+   --------------------------------------------------------------------------
+   The console is a receipt PRINTER, not a dark terminal: paper feed, mono
+   rows, perforated dividers, serial+timestamp+kind header rows, and inked
+   rubber-stamp verdicts. Tokens only (index.css): --paper --sheet --ink
+   --ink-2 --muted --rule --rule-strong --settled(-bg) --refunded(-bg)
+   --stale(-bg) --accent(-soft) --display --sans --mono.
+
+   Motion budget: ≤120ms, on value change only (tape advance, countdown tick,
+   hover states). prefers-reduced-motion zeroes every animation/transition.
+
+   Scoping: overrides for the dock's original classes (.console__*) live
+   under `.console` so non-dock consumers of renderResult (theater, tour,
+   map drawer) keep their own chrome. New tape_* classes are global-unique.
+   ========================================================================== */
+
+.console {
+  background: var(--paper);
+  border-top: 3px double var(--ink);
+  box-shadow: 0 -6px 18px rgba(16, 21, 28, 0.14);
+  color: var(--ink);
+}
+
+/* ---- header strip: chips live OUTSIDE the tape ------------------------ */
+
+.console .console__head {
+  background: var(--paper);
+  color: var(--ink);
+  border-bottom: 1px dashed var(--rule-strong);
+  padding: 7px 14px;
+  font-size: 11px;
+  gap: 10px;
+}
+
+.console .console__title {
+  color: var(--ink);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+}
+
+.console .console__title::before {
+  content: "▤ ";
+  letter-spacing: 0;
+}
+
+.console .console__chip {
+  font-size: 11px;
+  color: var(--ink-2);
+  background: var(--sheet);
+  border: 1px solid var(--rule-strong);
+  border-radius: 999px;
+  padding: 2px 9px 2px 6px;
+  letter-spacing: 0.01em;
+}
+
+.console .console__chip--live { color: var(--settled); border-color: var(--settled); background: var(--settled-bg); }
+.console .console__chip--stale { color: var(--stale); border-color: var(--stale); background: var(--stale-bg); }
+.console .console__chip--error { color: var(--refunded); border-color: var(--refunded); background: var(--refunded-bg); }
+
+.console .console__hints {
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  text-transform: none;
+}
+
+.console .console__close {
+  color: var(--ink-2);
+  background: transparent;
+  border: 1px solid var(--rule-strong);
+  font-size: 13px;
+  padding: 1px 8px 3px;
+  transition: color 120ms ease, border-color 120ms ease;
+}
+
+.console .console__close:hover {
+  border-color: var(--refunded);
+  color: var(--refunded);
+}
+
+/* ---- tape body --------------------------------------------------------- */
+
+.console .console__body {
+  background: var(--sheet);
+  padding: 14px 18px 16px;
+}
+
+.console .console__entries {
+  max-width: 1000px;
+  gap: 0;
+}
+
+.console .console__entry {
+  gap: 0;
+}
+
+/* the echoed command line (on the tape, above its block) */
+.console .console__line {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--ink);
+  padding: 2px 0 4px;
+  word-break: break-word;
+}
+
+.console .console__prompt { color: var(--accent); }
+
+.console .console__result { margin-left: 0; }
+
+.console .console__running {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--muted);
+  font-style: italic;
+}
+
+/* ===== receipt blocks (the block grammar) ============================== */
+
+.tape__block {
+  border: 1px solid var(--rule);
+  border-left: 3px solid var(--accent);
+  border-radius: 2px;
+  background: var(--paper);
+  padding: 8px 12px;
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+.tape__block--error { border-left-color: var(--refunded); }
+.tape__block--tx { border-left-color: var(--settled); }
+.tape__block--log { border-left-color: var(--rule-strong); }
+.tape__block--countdown { border-left-color: var(--stale); }
+
+.tape__text, .tape__log {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--ink-2);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.tape__log--error { color: var(--refunded); }
+
+/* kv rows */
+.tape__kv { display: flex; flex-direction: column; gap: 1px; }
+
+.tape__kvrow {
+  display: flex;
+  gap: 12px;
+  font-family: var(--mono);
+  font-size: 12px;
+  padding: 2px 0;
+  border-bottom: 1px dashed var(--rule);
+}
+
+.tape__kvrow:last-of-type { border-bottom: 0; }
+
+.tape__k {
+  min-width: 17ch;
+  color: var(--muted);
+  text-transform: lowercase;
+  letter-spacing: 0.02em;
+  flex: 0 0 17ch;
+}
+
+.tape__v {
+  color: var(--ink-2);
+  word-break: break-word;
+}
+
+/* table */
+.tape__tablewrap { max-width: 100%; }
+
+.tape__summary {
+  margin-bottom: 6px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--ink);
+  padding-bottom: 5px;
+  border-bottom: 1px dashed var(--rule-strong);
+}
+
+.tape__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--mono);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.tape__table th {
+  text-align: left;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 11px;
+  color: var(--muted);
+  border-bottom: 1px solid var(--rule-strong);
+  padding: 3px 10px 5px 0;
+  white-space: nowrap;
+}
+
+.tape__table td {
+  border-bottom: 1px dashed var(--rule);
+  padding: 4px 10px 4px 0;
+  color: var(--ink-2);
+  white-space: nowrap;
+  max-width: 26ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tape__row--job {
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.tape__row--job:hover td { background: var(--accent-soft); }
+
+/* note / footnote */
+.tape__note {
+  margin-top: 6px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+/* freshness ruler (wraps the shared .ruler primitives) */
+.tape__ruler { display: flex; flex-direction: column; gap: 2px; }
+
+.tape__ruler-track { position: relative; height: 44px; }
+
+/* tx card */
+.tape__txhead {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 6px;
+  margin-bottom: 6px;
+  border-bottom: 1px dashed var(--rule-strong);
+  flex-wrap: wrap;
+}
+
+.tape__tx-stamp {
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: 12px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  border: 2px solid var(--ink);
+  border-radius: 2px;
+  padding: 1px 8px 2px;
+  color: var(--ink);
+  background: var(--paper);
+}
+
+.tape__tx-stamp--settled { color: var(--settled); border-color: var(--settled); background: var(--settled-bg); }
+.tape__tx-stamp--refunded { color: var(--refunded); border-color: var(--refunded); background: var(--refunded-bg); }
+.tape__tx-stamp--stale { color: var(--stale); border-color: var(--stale); background: var(--stale-bg); }
+
+.tape__txlink {
+  font-family: var(--mono);
+  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.tape__txlink a {
+  color: var(--accent);
+  font-weight: 600;
+  text-decoration: underline dashed;
+  text-underline-offset: 3px;
+  transition: color 120ms ease;
+}
+
+.tape__txlink a:hover { color: var(--ink); }
+
+.tape__tx-title {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--ink);
+  margin-bottom: 4px;
+}
+
+/* frames pointer */
+.tape__frames code {
+  background: var(--sheet);
+  padding: 0 4px;
+  border-radius: 2px;
+  border: 1px solid var(--rule);
+}
+
+/* ===== copy chips ======================================================= */
+
+.tape__hash {
+  font-family: var(--mono);
+  color: var(--accent);
+  border-bottom: 1px dashed var(--accent);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 120ms ease, border-bottom-style 120ms ease;
+}
+
+.tape__hash:hover {
+  background: var(--accent-soft);
+  border-bottom-style: solid;
+}
+
+/* ===== countdown bar (sandbox claim) =================================== */
+
+.tape__countdown { display: flex; flex-direction: column; gap: 4px; }
+
+.tape__countdown-track {
+  height: 10px;
+  background: var(--sheet);
+  border: 1px solid var(--rule-strong);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.tape__countdown-fill {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transition: width 120ms linear;
+}
+
+.tape__countdown-nums {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ===== receipt chrome: serial head, verdict stamp, perforation ========== */
+
+.tape__rec-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 2px 0 5px;
+}
+
+.tape__serial {
+  color: var(--ink);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+.tape__at {
+  color: var(--muted);
+  letter-spacing: 0.03em;
+  font-variant-numeric: tabular-nums;
+}
+
+.tape__kind {
+  margin-left: auto;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+  border: 1px solid var(--rule-strong);
+  border-radius: 2px;
+  padding: 1px 6px;
+  background: var(--sheet);
+}
+
+.tape__kind--error { color: var(--refunded); border-color: var(--refunded); background: var(--refunded-bg); }
+.tape__kind--tx { color: var(--settled); border-color: var(--settled); background: var(--settled-bg); }
+.tape__kind--countdown { color: var(--stale); border-color: var(--stale); background: var(--stale-bg); }
+
+/* the inked rubber-stamp verdict (APPROVED / REFUSED / REFUNDED) */
+.tape__stamp {
+  position: absolute;
+  right: 14px;
+  top: 44px;
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  border: 2px solid currentColor;
+  border-radius: 3px;
+  padding: 2px 12px 3px;
+  background: var(--paper);
+  opacity: 0.88;
+  mix-blend-mode: multiply;
+  transform: rotate(-2.5deg);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.tape__stamp--ok { color: var(--settled); }
+.tape__stamp--refund { color: var(--refunded); }
+.tape__stamp--refuse { color: var(--stale); }
+
+/* printed ack for copy-on-click */
+.tape__ack {
+  margin-top: 6px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--settled);
+  animation: tape-ack 120ms ease-out both;
+}
+
+/* perforation divider between receipts */
+.tape__perf {
+  margin: 12px -6px 0;
+  border-top: 1px dashed var(--rule-strong);
+  position: relative;
+  height: 16px;
+}
+
+.tape__perf::after {
+  content: "· · · ·";
+  position: absolute;
+  top: 3px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.5em;
+  padding: 0 6px;
+  color: var(--muted);
+  background: var(--sheet);
+}
+
+/* ===== empty tape: suggestions as clickable chips + shortcut hints ====== */
+
+.console .console__empty {
+  font-size: 13px;
+  color: var(--ink-2);
+  font-family: var(--sans);
+}
+
+.console .console__empty-line { margin: 2px 0 10px; }
+
+.console .console__suggest { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.console .console__suggest-chip {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--accent);
+  background: var(--sheet);
+  border: 1px solid var(--rule-strong);
+  border-radius: 999px;
+  padding: 3px 10px;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+
+.console .console__suggest-chip:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--ink);
+}
+
+.tape__hints {
+  margin-top: 12px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.tape__hints kbd {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-2);
+  border: 1px solid var(--rule-strong);
+  border-radius: 2px;
+  padding: 0 4px;
+  background: var(--sheet);
+}
+
+/* ===== input row: the paper feed ======================================== */
+
+.console .console__inputrow {
+  background: var(--paper);
+  border-top: 1px dashed var(--rule-strong);
+  gap: 10px;
+  padding: 9px 14px;
+}
+
+.console .console__inputrow .console__prompt { font-size: 14px; }
+
+.console .console__input {
+  flex: 1;
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--ink);
+  background: transparent;
+  border: 0;
+  outline: none;
+  caret-color: var(--accent);
+  padding: 2px 0;
+}
+
+.console .console__input::placeholder { color: var(--muted); }
+
+.console .console__input:focus { outline: none; }
+
+.console .console__inputrow:focus-within {
+  box-shadow: inset 0 -1px 0 var(--accent);
+}
+
+.tape__rowhint {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.tape__rowhint kbd {
+  font-family: var(--mono);
+  color: var(--ink-2);
+  border: 1px solid var(--rule-strong);
+  border-radius: 2px;
+  padding: 0 4px;
+  background: var(--sheet);
+}
+
+/* ===== Tab completion popover (commands + dataset ids) ================== */
+
+.tape__pop {
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: 46px;
+  z-index: 65;
+  background: var(--sheet);
+  border: 1px solid var(--rule-strong);
+  border-bottom: 0;
+  border-radius: 3px 3px 0 0;
+  box-shadow: 0 -3px 10px rgba(16, 21, 28, 0.12);
+  max-height: 180px;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+
+.tape__pop-head {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 4px 10px 3px;
+  border-bottom: 1px dashed var(--rule);
+}
+
+.tape__pop-item {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 4px 10px;
+  font-family: var(--mono);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.tape__pop-item--sel {
+  background: var(--accent-soft);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.tape__pop-name { color: var(--ink); font-weight: 600; }
+
+.tape__pop-hint {
+  color: var(--muted);
+  font-size: 11px;
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tape__pop-kind {
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  color: var(--accent);
+}
+
+.tape__pop-item--dataset .tape__pop-kind { color: var(--stale); }
+
+/* ===== launcher (console closed) ======================================== */
+
+.console .console__launcher {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--accent);
+  background: var(--sheet);
+  border: 1px dashed var(--accent);
+  border-radius: 999px;
+  padding: 6px 12px;
+  transition: background 120ms ease, border-style 120ms ease;
+}
+
+.console .console__launcher:hover {
+  border-style: solid;
+  background: var(--accent-soft);
+}
+
+.console .console__launcher kbd {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-2);
+  border: 1px solid var(--rule-strong);
+  border-radius: 2px;
+  padding: 0 4px;
+  background: var(--sheet);
+  margin-left: 4px;
+}
+
+/* ===== ⌘K fuzzy palette ================================================= */
+
+.palette {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 12vh;
+  background: color-mix(in srgb, var(--ink) 38%, transparent);
+}
+
+.palette__panel {
+  width: min(560px, calc(100vw - 32px));
+  background: var(--sheet);
+  border: 1px solid var(--ink);
+  border-radius: 4px;
+  box-shadow: 0 14px 40px rgba(16, 21, 28, 0.28);
+  overflow: hidden;
+}
+
+.palette__inputrow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-bottom: 1px dashed var(--rule-strong);
+}
+
+.palette__kbd {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--sheet);
+  background: var(--ink);
+  border-radius: 3px;
+  padding: 2px 7px;
+  letter-spacing: 0.04em;
+}
+
+.palette__input {
+  flex: 1;
+  font-family: var(--mono);
+  font-size: 14px;
+  color: var(--ink);
+  background: transparent;
+  border: 0;
+  outline: none;
+  caret-color: var(--accent);
+}
+
+.palette__input::placeholder { color: var(--muted); }
+
+.palette__inputrow:focus-within { box-shadow: inset 0 -1px 0 var(--accent); }
+
+.palette__none {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--muted);
+  padding: 14px 12px;
+}
+
+.palette__list {
+  list-style: none;
+  margin: 0;
+  padding: 4px 0;
+  max-height: 46vh;
+  overflow-y: auto;
+}
+
+.palette__opt {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 5px 12px;
+  cursor: pointer;
+  box-shadow: inset 0 0 0 0 var(--accent);
+  transition: background 120ms ease, box-shadow 120ms ease;
+}
+
+.palette__opt--sel {
+  background: var(--accent-soft);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.palette__opt-name {
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  flex: 0 0 auto;
+}
+
+.palette__opt-hint {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.palette__opt-kind {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  color: var(--accent);
+}
+
+.palette__opt--dataset .palette__opt-kind { color: var(--stale); }
+
+.palette__foot {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+  padding: 6px 12px;
+  border-top: 1px dashed var(--rule);
+}
+
+/* ===== motion budget + accessibility ==================================== */
+
+.console :focus-visible,
+.palette :focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.tape__receipt {
+  position: relative;
+  animation: tape-in 120ms ease-out both;
+}
+
+@keyframes tape-in {
+  from { opacity: 0.4; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes tape-ack {
+  from { opacity: 0; transform: translateY(2px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .console *,
+  .palette * {
+    animation: none !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* narrow: hints tuck away, head wraps, receipts keep readable mono */
+@media (max-width: 640px) {
+  .console .console__hints { display: none; }
+  .console .console__head { flex-wrap: wrap; }
+  .tape__rec-head { flex-wrap: wrap; }
+  .tape__kind { margin-left: 0; }
+}
