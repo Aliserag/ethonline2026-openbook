@@ -14,7 +14,7 @@
  * passes its own Sepolia RPC/reader via `listSellers`' optional deps instead
  * of hammering the module's default public RPC.
  */
-import { type JSX } from "react";
+
 import { createDirectoryClient, listSellers, parseMenu, type MenuEntry, type SellerRef } from "../../../mcp/src/directory";
 import {
   createEnsTextReader,
@@ -24,23 +24,15 @@ import {
 import { hostedQueryViaProxy } from "../data/endpoint";
 import type { ProviderStats } from "../../../mcp/src/router";
 import { loadSnapshotProvidersView } from "../pnl";
-import { isRateLimit, readLastGood, writeLastGood } from "../data/cache";
+import { readLastGood, writeLastGood } from "../data/cache";
 import { CONFIG } from "../config";
 import { ADDR } from "../data/addresses";
-import { getPublicClient } from "../data/chain";
-import { platformFee } from "../data/escrow";
-import type { Live, LiveSource, LiveState } from "../data/types";
+import type { LiveSource } from "../data/types";
 import { env } from "../env";
-import { clockTime, truncateHash, usdc6 } from "../format";
-import { useLiveValue } from "../ui/useLiveValue";
+import { truncateHash } from "../format";
 
 /** The storefront every seller row is discovered from (the app's own namespace). */
 export const STOREFRONT = "openbook.eth";
-
-/** Seller/venue poll cadence: the enumeration is RPC-hungry, so it runs at
- *  30s like the system map, with a 90s staleness window. */
-const MARKET_POLL_MS = 30_000;
-const MARKET_STALE_MS = 90_000;
 
 /** W4 market aggregates on the shared Studio endpoint (public, no key). */
 const PROVIDERS_QUERY = `{ providers(orderBy: lastJobAt, orderDirection: desc) { id jobs settled refunded delivered avgLagBlocks lastJobAt } }`;
@@ -222,7 +214,7 @@ async function subnameRow(ref: SellerRef, providers: readonly ProviderStats[]): 
 /** Every seller on the storefront: the parent's own catalog + every ENS
  *  subname seller, each with live records and subgraph stats. Stats degrade
  *  through the last-good cache / build-time snapshot when Studio is walled. */
-async function readSellers(): Promise<MarketView> {
+export async function readSellers(): Promise<MarketView> {
   const [parent, subnames, providers] = await Promise.all([
     readParentRecords(),
     listSellers(STOREFRONT, { readEnsText: marketEnsReader, client: directoryClient }),
@@ -253,163 +245,3 @@ async function fetchProvidersResilient(): Promise<{ stats: ProviderStats[]; sour
   }
 }
 
-// --- render -----------------------------------------------------------------
-
-/** Live/stale/error status chip, the house idiom (live dot + mono label). */
-function MarketStateChip({ state, reason }: { state: LiveState; reason?: string }): JSX.Element {
-  const tone = state === "live" ? "" : state === "stale" ? "stale" : "off";
-  return (
-    <span className={`market__chip market__chip--${state}`} title={reason}>
-      <span className={`ob-live ${tone}`} aria-hidden="true" />
-      {state}
-    </span>
-  );
-}
-
-function SellerBlock({ row, statsSource, statsAt }: { row: MarketSellerRow; statsSource: LiveSource; statsAt: number }): JSX.Element {
-  return (
-    <article className="market__seller">
-      <div className="market__seller-head">
-        <span className="market__seller-name">{row.name}</span>
-        {row.operator !== null && <span className="market__seller-op">{truncateHash(row.operator)}</span>}
-      </div>
-
-      <ul className="market__ds">
-        {row.menu.map((entry) => (
-          <li key={entry.id} className="market__ds-row">
-            <span className="market__ds-id">{entry.id}</span>
-            <span className="market__ds-price">{row.priceByDataset[entry.id] ?? "price not set"}</span>
-          </li>
-        ))}
-      </ul>
-
-      <dl className="market__kv">
-        <div className="market__kvrow">
-          <dt>freshness</dt>
-          <dd>
-            {row.sla !== null
-              ? `within ${row.sla.maxBlockLag} blocks · latency ${row.sla.maxLatencyMs} ms`
-              : "no SLA published"}
-          </dd>
-        </div>
-        {row.stats !== null ? (
-          <>
-            <div className="market__kvrow">
-              <dt>jobs</dt>
-              <dd>
-                {row.stats.jobs} · {row.stats.delivered} delivered
-              </dd>
-            </div>
-            <div className="market__kvrow">
-              <dt>settled</dt>
-              <dd>{usdc6(row.stats.settled)} USDC</dd>
-            </div>
-            <div className="market__kvrow">
-              <dt>refunded</dt>
-              <dd>{usdc6(row.stats.refunded)} USDC</dd>
-            </div>
-            <div className="market__kvrow">
-              <dt>avg lag</dt>
-              <dd>{row.stats.avgLagBlocks.toFixed(1)} blocks</dd>
-            </div>
-            {statsSource !== "live" && (
-              <div className="market__kvrow" title={statsSource === "cache" ? "served from the last successful read because the live read failed" : "served from the build-time snapshot because the live read failed"}>
-                <dt>stats source</dt>
-                <dd className="market__muted">
-                  {statsSource === "cache" ? `as of ${clockTime(statsAt)} · cached` : `snapshot taken ${clockTime(statsAt)}`}
-                </dd>
-              </div>
-            )}
-          </>
-        ) : (
-          <div className="market__kvrow">
-            <dt>stats</dt>
-            <dd className="market__muted">
-              {row.operator === null ? "no operator published" : "no subgraph stats indexed yet"}
-            </dd>
-          </div>
-        )}
-      </dl>
-    </article>
-  );
-}
-
-function VenueRow({ venue }: { venue: Live<{ feeBP: number; treasury: `0x${string}` }> }): JSX.Element {
-  return (
-    <footer className="market__venue">
-      <span className="market__venue-key">venue fee · live from escrow</span>
-      <span className="market__venue-fig">
-        {venue.value === null
-          ? "reading…"
-          : `${venuePercent(venue.value.feeBP)} → ${venueTreasuryLabel(venue.value.treasury)}`}
-      </span>
-      <MarketStateChip state={venue.state} reason={venue.reason} />
-      {venue.state === "error" && venue.value === null && venue.reason !== undefined && (
-        <span className="market__venue-note" title={venue.reason}>
-          {isRateLimit(new Error(venue.reason)) ? "unreachable · hover for the precise reason" : venue.reason}
-        </span>
-      )}
-    </footer>
-  );
-}
-
-export function Market(): JSX.Element {
-  const sellers = useLiveValue(readSellers, {
-    pollMs: MARKET_POLL_MS,
-    staleAfterMs: MARKET_STALE_MS,
-    cacheKey: "market.sellers",
-  });
-  const venue = useLiveValue(() => platformFee(getPublicClient()), {
-    pollMs: MARKET_POLL_MS,
-    staleAfterMs: MARKET_STALE_MS,
-  });
-
-  return (
-    <section className="market" aria-labelledby="market-title">
-      <header className="market__head">
-        <span className="market__title" id="market-title">
-          the market
-        </span>
-        <span className="market__hint">anyone can list · agents compare · the escrow enforces</span>
-        <MarketStateChip state={sellers.state} reason={sellers.reason} />
-      </header>
-
-      <div className="market__body" role="status" aria-live="polite">
-        <p className="market__note">
-          two reference sellers we operate · every figure reads live from ENS, the subgraph and the escrow
-        </p>
-
-        {sellers.state === "error" && sellers.value === null && sellers.reason !== undefined && (
-          <p className="market__error" role="alert" title={sellers.reason}>
-            {isRateLimit(new Error(sellers.reason))
-              ? "the storefront is unreachable right now · hover for the precise reason"
-              : `✗ ${sellers.reason}`}
-          </p>
-        )}
-        {sellers.state === "loading" && sellers.value === null && (
-          <p className="market__muted">reading the storefront…</p>
-        )}
-        {sellers.state !== "live" && sellers.value !== null && sellers.reason !== undefined && (
-          <p className="market__muted" title={sellers.detail}>
-            {sellers.state} · {sellers.reason}
-          </p>
-        )}
-        {sellers.value !== null && (() => {
-          const view = sellers.value;
-          return (
-            <>
-              {view.sellers.length === 0 && (
-                <p className="market__muted">no sellers discovered on {STOREFRONT}</p>
-              )}
-              {view.sellers.map((row) => (
-                <SellerBlock key={row.name} row={row} statsSource={view.statsSource} statsAt={view.statsAt} />
-              ))}
-            </>
-          );
-        })()}
-
-        <VenueRow venue={venue} />
-      </div>
-    </section>
-  );
-}
