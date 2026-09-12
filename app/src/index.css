@@ -772,6 +772,14 @@ textarea {
   letter-spacing: 0.05em;
 }
 
+/* A hash is DATA, not a label: the cap's uppercase transform must not mangle
+ * it (0x4e83…894E read as 0X4E83…894E, EIP-55 case destroyed). Rendered in
+ * the app-wide mono hash convention instead. */
+.running .cap a {
+  text-transform: none;
+  font-family: var(--mono);
+}
+
 .running .fig {
   font-weight: 600;
   font-variant-numeric: tabular-nums;
