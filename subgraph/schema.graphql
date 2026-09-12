@@ -69,6 +69,8 @@ type PolicyConfig @entity(immutable: false) {
 
 type DailyPnL @entity(immutable: false) {
   id: ID!
+  """Unix timestamp of the first event in this block bucket — the UI renders it as the day label."""
+  startedAt: BigInt!
   revenue: BigInt!
   costs: BigInt!
   refunds: BigInt!

@@ -1,7 +1,7 @@
 import { Component, type ReactNode } from "react";
 
 /**
- * A render error must never white-screen the demo: a judge — or the recording —
+ * A render error must never white-screen the demo: a judge , r the recording —
  * gets a readable panel instead, carrying the one link that always explains the
  * system. Nothing onchain is touched by a client-side render failure.
  */

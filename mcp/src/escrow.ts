@@ -98,7 +98,7 @@ export async function verifyDelivery(
   if (minBlock === undefined) {
     if (input.jobId === undefined || clients?.publicClient === undefined) {
       throw new Error(
-        "verify_delivery: minBlock is required — pass it explicitly or provide a live publicClient + jobId to resolve it from the onchain SLA",
+        "verify_delivery: minBlock is required. Pass it explicitly, or provide a live publicClient + jobId to resolve it from the onchain SLA",
       );
     }
     const job = await getJob(clients.publicClient, toBigInt(input.jobId));

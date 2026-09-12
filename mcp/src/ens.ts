@@ -56,7 +56,7 @@ export async function resolveServiceRecords(
   for (const key of ["price", "sla", "payee"] as const) {
     if (records[key] === null) {
       throw new Error(
-        `${ENS_RESOLUTION_FAILED}: svc.${key} is not set on ${name} (sepolia ENSv2) — refusing to quote a hard-coded value`,
+        `${ENS_RESOLUTION_FAILED}: svc.${key} is not set on ${name} (sepolia ENSv2); refusing to quote a hard-coded value`,
       );
     }
   }

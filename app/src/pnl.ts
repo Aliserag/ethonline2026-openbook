@@ -9,6 +9,8 @@ import { CONFIG } from "./config";
 
 export interface PnlRow {
   id: string;
+  /** Unix seconds of the bucket's first event — the human day label. */
+  startedAt: number | null;
   revenue: string;
   costs: string;
   refunds: string;
@@ -37,8 +39,10 @@ export async function fetchPnl(key?: string, fetchImpl?: FetchLike): Promise<Pnl
       for (const entry of dailyRaw) {
         if (typeof entry !== "object" || entry === null) continue;
         const row = entry as Record<string, unknown>;
+        const ts = row["startedAt"];
         rows.push({
           id: typeof row["id"] === "string" ? row["id"] : String(row["id"]),
+          startedAt: typeof ts === "string" ? Number(ts) : typeof ts === "number" ? ts : null,
           revenue: typeof row["revenue"] === "string" ? row["revenue"] : String(row["revenue"]),
           costs: typeof row["costs"] === "string" ? row["costs"] : String(row["costs"]),
           refunds: typeof row["refunds"] === "string" ? row["refunds"] : String(row["refunds"]),

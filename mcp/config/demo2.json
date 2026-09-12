@@ -10,7 +10,7 @@
   },
   "pnl": {
     "endpoint": "https://api.studio.thegraph.com/query/1760032/open-book/version/latest",
-    "query": "{ dailyPnLs { id revenue costs refunds net } refundIssueds(first: 3, orderBy: id, orderDirection: desc) { id jobId reason } _meta { block { number } } }"
+    "query": "{ dailyPnLs { id startedAt revenue costs refunds net } refundIssueds(first: 3, orderBy: id, orderDirection: desc) { id jobId reason } _meta { block { number } } }"
   },
   "datasets": [
     {

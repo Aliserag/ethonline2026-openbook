@@ -180,6 +180,7 @@ describe("handleJobCreated + handleQueryPaid", () => {
     );
 
     // day-1 (23100/21600): revenue == 1000000 exactly once, not 2000000.
+    assert.fieldEquals("DailyPnL", "day-1", "startedAt", "1700000000"); // UI day label
     assert.fieldEquals("DailyPnL", "day-1", "revenue", "1000000");
     assert.fieldEquals("DailyPnL", "day-1", "net", "1000000");
     assert.entityCount("DailyPnL", 1);

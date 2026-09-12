@@ -1,14 +1,14 @@
 /**
- * OpenBook — THE RECEIPT PRINTER (one route, guided ledger).
+ * OpenBook . HE RECEIPT PRINTER (one route, guided ledger).
  *
  * Brand: the agent's settlement book, printed live. `▤ OB` mark. Paper, ink,
- * stamps (SETTLED / REFUNDED / STALE), and THE TAPE — a receipt printer that
+ * stamps (SETTLED / REFUNDED / STALE), and THE TAPE ,  receipt printer that
  * types out every settlement event as it lands.
  *
  * Guided: each step is a card with a plain-language job ("See what's for
  * sale", "Get the price", "Pay", "Watch data arrive", "Settle or refund"),
  * tooltips on every jargon term, and key gates rendered as setup cards with
- * exact 60-second steps — never silent dead ends.
+ * exact 60-second steps , ever silent dead ends.
  *
  * Logic preserved verbatim from the prior revision; only presentation and
  * copy changed (plus aria + status semantics).
@@ -28,7 +28,7 @@ import { defaultChainHeadResolver } from "../../mcp/src/chainhead";
 import { createJobWithSla, ERC8183, setUsdcAddress, usdcAddress, USDC_ABI, type Sla } from "../../agent/escrow";
 import { verifyDelivery } from "../../mcp/src/escrow";
 
-// Chain-specific USDC (VITE_USDC_ADDRESS) — mainnet override for the escrow module.
+// Chain-specific USDC (VITE_USDC_ADDRESS) , ainnet override for the escrow module.
 if (env.usdcAddress !== undefined && /^0x[0-9a-fA-F]{40}$/.test(env.usdcAddress)) {
   setUsdcAddress(env.usdcAddress as `0x${string}`);
 }
@@ -72,7 +72,7 @@ interface SettleState {
 const SERVICE_KEYS = ["svc.menu", "svc.price", "svc.sla", "svc.payee", "svc.operator", "svc.pnl"];
 const HARD_FAIL_KEYS = ["svc.price", "svc.sla", "svc.payee"];
 
-/** The hard-fail keys whose own record is unset — matched BY NAME, never by
+/** The hard-fail keys whose own record is unset , atched BY NAME, never by
  *  position: SERVICE_KEYS and HARD_FAIL_KEYS are different orders and a naive
  *  index filter falsely blames neighbors (F1, adversarial E2E). */
 export function missingHardFailKeys(records: { key: string; value: string | null }[]): string[] {
@@ -171,9 +171,9 @@ async function quoteWithNamespace(
   return quoteFromRecords(dataset, merged);
 }
 
-/** Tooltip — the page's vocabulary for judges with zero context. */
+/** Tooltip , he page's vocabulary for judges with zero context. */
 /**
- * Tooltip — wrap the KEYWORD (`<Tip text="…">SLA</Tip>`): it renders with a
+ * Tooltip , rap the KEYWORD (`<Tip text="…">SLA</Tip>`): it renders with a
  * dashed underline and reveals the note on hover/focus. No "?" badges.
  */
 function Tip({ text, children }: { text: string; children?: ReactNode }): JSX.Element {
@@ -186,7 +186,7 @@ function Tip({ text, children }: { text: string; children?: ReactNode }): JSX.El
 
 type StepStateAttr = "active" | "done" | "failed" | "blocked" | "idle";
 
-/** One step card — the guided spine. */
+/** One step card , he guided spine. */
 function StepCard(props: {
   n: number;
   state: StepStateAttr;
@@ -295,7 +295,7 @@ export default function App() {
     setQueryText(defaultQueryFor(dataset));
   }, [dataset]);
 
-  // P&L ledger: the open-book subgraph via Studio — public endpoint, no key.
+  // P&L ledger: the open-book subgraph via Studio , ublic endpoint, no key.
   useEffect(() => {
     let cancelled = false;
     Promise.all([fetchPnl(env.graphKey), publicClient.getBlockNumber()])
@@ -319,7 +319,7 @@ export default function App() {
   // The brand is a printer, not a screenshot: the ledger refreshes itself every
   // 15s (and immediately when the tab comes back), so rows, block deltas and the
   // "updated" stamp move without a click. Every 2026 winner's live surface does
-  // this — Atlas polls 41 requests, AgentGate shows "updated HH:MM:SS" + ↺.
+  // this . tlas polls 41 requests, AgentGate shows "updated HH:MM:SS" + ↺.
   useEffect(() => {
     const id = setInterval(() => {
       if (document.visibilityState === "visible") setPnlNonce((n) => n + 1);
@@ -336,7 +336,7 @@ export default function App() {
 
   const flowBusy = paying || querying || settling;
 
-  // Switching datasets invalidates the previous quote/delivery/verdict — the pay
+  // Switching datasets invalidates the previous quote/delivery/verdict , he pay
   // button must never fund the previous dataset's price. Refused while a flow is in
   // flight (paying/querying/settling): a funded job or a half-signed tx must never be
   // orphaned by a stray click.
@@ -402,7 +402,7 @@ export default function App() {
       const trace: string[] = [];
       const wallet = arcWalletClient(address, trace);
       // The SLA floor is a block on the DATASET's chain (the data lives on
-      // Arbitrum/Ethereum), never on Arc — the delivery's metaBlock and this
+      // Arbitrum/Ethereum), never on Arc , he delivery's metaBlock and this
       // floor must share a chain or the freshness gate is vacuous.
       let head = 0;
       if (hasAlchemyKey) {
@@ -560,7 +560,7 @@ export default function App() {
   }
 
   // chain-derived lines: refunds the subgraph indexed, so the tape prints events
-  // that happened outside this tab too — and moves on its own once polled.
+  // that happened outside this tab too , nd moves on its own once polled.
   for (const ev of refundEvents.slice(0, 3)) {
     tapeEvents.push({
       text: `REFUNDED job ${ev.jobId} · ${ev.reason} · indexed onchain`,
@@ -591,10 +591,10 @@ export default function App() {
               OpenBook<span className="ledger-no">the agent's settlement ledger</span>
             </h1>
             <p className="tagline">
-              an autonomous agent selling freshness-guaranteed onchain data. Every payment
-              carries an{" "}
-              <Tip text="Service-level agreement: a freshness promise attached to the payment itself. Miss the freshness window and the payment refunds itself onchain, with nobody asked to approve it.">SLA</Tip>
-              , and <span className="accent">every miss refunds itself onchain</span>
+              chargebacks for the agentic economy. OpenBook sells live data to agents. If a
+              delivery is stale, the{" "}
+              <Tip text="The payment sits in escrow until the freshness proof clears. Miss the freshness window and it refunds itself onchain, with nobody asked to approve it.">escrow</Tip>{" "}
+              <span className="accent">refunds the buyer automatically</span>.
             </p>
           </div>
         </div>
@@ -876,15 +876,20 @@ export default function App() {
               </div>
               <button
                 className="primary"
-                disabled={!hasGraphKey || querying}
+                disabled={!hasGraphKey || querying || quote === null}
                 onClick={handleQuery}
-                aria-describedby={!hasGraphKey ? "query-caption" : undefined}
+                aria-describedby={!hasGraphKey || quote === null ? "query-caption" : undefined}
               >
                 {querying ? "querying…" : "Pull fresh data"}
               </button>
               {!hasGraphKey && (
                 <p className="caption" id="query-caption">
                   Needs a Graph key. See the setup card above.
+                </p>
+              )}
+              {hasGraphKey && quote === null && (
+                <p className="caption" id="query-caption">
+                  Quote first (step 2) , he delivery answers your order.
                 </p>
               )}
               {queryError !== null && (
@@ -1075,7 +1080,9 @@ export default function App() {
                     <tbody>
                       {pnl.map((row) => (
                         <tr key={row.id}>
-                          <td className="key">{row.id}</td>
+                          <td className="key" title={row.id}>
+                            {dayLabel(row)}
+                          </td>
                           <td className="val">{usdc6(row.revenue)}</td>
                           <td className="val">{usdc6(row.costs)}</td>
                           <td className="val">{usdc6(row.refunds)}</td>
@@ -1143,12 +1150,6 @@ export default function App() {
       </main>
 
       <footer className="foot">
-        <span>
-          SLA committed onchain at payment · verdict is deterministic open code · timeout defaults
-          to the buyer (
-          <Tip text="claimRefund: if the agent's deadline lapses with no delivery, anyone can trigger the refund, so the buyer never has to chase the agent.">claimRefund</Tip>
-          )
-        </span>
         <a
           href="https://github.com/Aliserag/OpenBook/blob/main/docs/architecture.md"
           target="_blank"
@@ -1159,6 +1160,29 @@ export default function App() {
       </footer>
     </>
   );
+}
+
+/** day-2854 → "Jul 15, 14:32" — the bucket's first-event timestamp, human. */
+function dayLabel(row: PnlRow): string {
+  if (row.startedAt === null) return row.id;
+  const date = new Date(row.startedAt * 1000);
+  return date.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+/** One-line, human description of a GraphQL result: top field + row count. */
+function summarizeResult(result: unknown): string {
+  if (typeof result !== "object" || result === null) return "empty response";
+  const entries = Object.entries(result as Record<string, unknown>);
+  if (entries.length === 0) return "empty response";
+  return entries
+    .slice(0, 2)
+    .map(([key, value]) => (Array.isArray(value) ? `${key}: ${value.length} row${value.length === 1 ? "" : "s"}` : key))
+    .join(" · ");
 }
 
 function sum(rows: PnlRow[], pick: (row: PnlRow) => string): number {
@@ -1222,9 +1246,7 @@ function DeliveryResult({ delivery }: { delivery: DeliveryState }): JSX.Element 
       </span>{" "}
       {status}
       <div className="mono">
-        payloadHash {truncateHash(delivery.payloadHash, 10, 10)} ·{" "}
-        {JSON.stringify(delivery.result).slice(0, 96)}
-        {JSON.stringify(delivery.result).length > 96 ? "…" : ""}
+        payloadHash {truncateHash(delivery.payloadHash, 10, 10)} · {summarizeResult(delivery.result)}
       </div>
     </div>
   );

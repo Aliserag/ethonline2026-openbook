@@ -71,11 +71,12 @@ function dayId(blockNumber: BigInt): string {
   return "day-" + blockNumber.div(DAY_BLOCKS).toString();
 }
 
-function loadOrCreateDay(blockNumber: BigInt): DailyPnL {
+function loadOrCreateDay(blockNumber: BigInt, timestamp: BigInt): DailyPnL {
   let id = dayId(blockNumber);
   let day = DailyPnL.load(id);
   if (day == null) {
     day = new DailyPnL(id);
+    day.startedAt = timestamp; // human-readable day label in the UI
     day.revenue = BigInt.zero();
     day.costs = BigInt.zero();
     day.refunds = BigInt.zero();
@@ -170,7 +171,7 @@ export function handleSettled(event: PaymentReleasedEvent): void {
   settled.amount = event.params.amount;
   settled.save();
 
-  let day = loadOrCreateDay(event.block.number);
+  let day = loadOrCreateDay(event.block.number, event.block.timestamp);
   addRevenue(day, event.params.amount);
   day.save();
 }
@@ -189,7 +190,7 @@ export function handleRefund(event: RefundedEvent): void {
   refund.reason = "client-refund";
   refund.save();
 
-  let day = loadOrCreateDay(event.block.number);
+  let day = loadOrCreateDay(event.block.number, event.block.timestamp);
   addRefund(day, event.params.amount);
   day.save();
 }
@@ -202,7 +203,7 @@ export function handleCostPaid(event: WithdrawalExecutedEvent): void {
   costPaid.amount = event.params.amount;
   costPaid.save();
 
-  let day = loadOrCreateDay(event.block.number);
+  let day = loadOrCreateDay(event.block.number, event.block.timestamp);
   addCost(day, event.params.amount);
   day.save();
 }
