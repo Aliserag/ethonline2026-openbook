@@ -20,24 +20,29 @@
 @import "@fontsource/ibm-plex-mono/600.css";
 
 :root {
-  /* paper & ink */
-  --paper: #eceae2;
-  --sheet: #f7f5ef;
-  --ink: #10151c;
-  --ink-2: #1c2530;
-  --muted: #5e6670;
-  --rule: #c9c6ba;
-  --rule-strong: #8a8578;
-  /* money states — the only colors that carry meaning */
-  --settled: #0e7a4f;
-  --settled-bg: #e3efe8;
-  --refunded: #b3402e;
-  --refunded-bg: #f6e5e1;
-  --stale: #7d5a12;
-  --stale-bg: #f4ecda;
-  /* interactivity only */
-  --accent: #2a4b8f;
-  --accent-soft: #e7ecf6;
+  /* Thermal Ledger palette (design brief 2026-09-12, spec §5.3c).
+     Six palette inks + blueprint-blue (map plate) + flash (live pulses only).
+     The -bg tints and --sheet/--ink-2 are the palette's documented tints
+     (white/paper lift), never new hues. */
+  --paper: #f6f2e7;   /* bindery paper */
+  --sheet: #fbf9f4;   /* paper lifted for card surfaces (tint of paper) */
+  --ink: #16150f;     /* printer's ink */
+  --ink-2: #3e3d36;   /* ink softened for secondary text (tint of ink) */
+  --muted: #6b655a;   /* graphite */
+  --rule: #d8d0be;    /* hairline rule */
+  --rule-strong: #8a8578; /* rule hardened (tint of rule) */
+  /* money states — the only colors that carry meaning; all pass AA on paper */
+  --settled: #1e6b44;
+  --settled-bg: #d6e4dd;
+  --refunded: #a8231b;
+  --refunded-bg: #f1dcdb;
+  --stale: #7d5a12;   /* flash darkened for text (flash itself is pulse-only) */
+  --stale-bg: #ede8de;
+  /* interactivity only: blueprint-blue, the map plate's ink */
+  --accent: #25457f;
+  --accent-soft: #dee3ec;
+  /* live pulses only — never body text (1.65:1 on paper by design) */
+  --flash: #e8b923;
   /* type */
   --display: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
   --sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
@@ -56,11 +61,11 @@ body {
 
 body {
   background:
-    radial-gradient(circle at 18% -10%, rgba(16, 21, 28, 0.035), transparent 42%),
+    radial-gradient(circle at 18% -10%, rgba(22, 21, 15, 0.035), transparent 42%),
     var(--paper);
   color: var(--ink);
   font-family: var(--sans);
-  font-size: 15px;
+  font-size: 16px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
 }
@@ -99,7 +104,7 @@ body {
   background: var(--ink);
   color: var(--sheet);
   font-family: var(--display);
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 600;
   letter-spacing: 0.02em;
   border-radius: 6px;
@@ -111,7 +116,7 @@ body {
   content: "";
   position: absolute;
   inset: 2px;
-  border: 1px dashed rgba(247, 245, 239, 0.4);
+  border: 1px dashed rgba(251, 249, 244, 0.4);
   border-radius: 4px;
   pointer-events: none;
 }
@@ -119,7 +124,7 @@ body {
 .masthead h1 {
   margin: 0;
   font-family: var(--display);
-  font-size: 32px;
+  font-size: 40px;
   font-weight: 700;
   letter-spacing: -0.02em;
   line-height: 1.04;
@@ -137,10 +142,10 @@ body {
 }
 
 .tagline {
-  margin: 6px 0 0;
-  font-size: 13.5px;
+  margin: 8px 0 0;
+  font-size: 16px;
   color: var(--ink-2);
-  max-width: 62ch;
+  max-width: 66ch;
 }
 
 .tagline .accent {
@@ -156,7 +161,7 @@ body {
 
 .chainbadges span {
   font-family: var(--mono);
-  font-size: 10.5px;
+  font-size: 12px;
   letter-spacing: 0.07em;
   text-transform: uppercase;
   border: 1px solid var(--rule-strong);
@@ -172,7 +177,7 @@ body {
   gap: 16px;
   flex-wrap: wrap;
   font-family: var(--mono);
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--muted);
   padding: 10px 2px;
 }
@@ -265,26 +270,26 @@ body {
 .stepcard[data-state="active"] .stepno {
   background: var(--accent);
   border-color: var(--accent);
-  color: #fff;
+  color: var(--sheet);
   box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
 .stepcard[data-state="done"] .stepno {
   background: var(--settled);
   border-color: var(--settled);
-  color: #fff;
+  color: var(--sheet);
 }
 
 .stepcard[data-state="failed"] .stepno {
   background: var(--refunded);
   border-color: var(--refunded);
-  color: #fff;
+  color: var(--sheet);
 }
 
 .stepcard[data-state="blocked"] .stepno {
   background: var(--accent);
   border-color: var(--accent);
-  color: #fff;
+  color: var(--sheet);
 }
 
 .stepcard[data-state="failed"] .stepno::after {
@@ -305,14 +310,14 @@ body {
 .steptitle h2 {
   margin: 0;
   font-family: var(--display);
-  font-size: 16.5px;
+  font-size: 20px;
   font-weight: 600;
   line-height: 1.15;
 }
 
 .steptitle .what {
   margin: 2px 0 0;
-  font-size: 12.5px;
+  font-size: 14px;
   color: var(--muted);
   line-height: 1.4;
 }
@@ -320,7 +325,7 @@ body {
 .stepstate {
   flex: 0 0 auto;
   font-family: var(--mono);
-  font-size: 10.5px;
+  font-size: 12px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   padding: 3px 9px;
@@ -355,7 +360,7 @@ body {
 
 .stepcard .why {
   margin: 0 0 10px;
-  font-size: 13px;
+  font-size: 14px;
   color: var(--ink-2);
 }
 
@@ -388,7 +393,7 @@ body {
   pointer-events: none;
   transition: opacity 120ms ease;
   z-index: 30;
-  box-shadow: 0 4px 14px rgba(16, 21, 28, 0.25);
+  box-shadow: 0 4px 14px rgba(22, 21, 15, 0.25);
   text-align: left;
 }
 
@@ -417,12 +422,12 @@ body {
 .ledger {
   width: 100%;
   border-collapse: collapse;
-  font-size: 13.5px;
+  font-size: 14px;
 }
 
 .ledger th {
   font-family: var(--mono);
-  font-size: 10.5px;
+  font-size: 12px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--muted);
@@ -507,7 +512,7 @@ body {
 
 .ledger td.val {
   font-family: var(--mono);
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 .ledger td.ok {
@@ -522,7 +527,7 @@ body {
 
 button {
   font-family: var(--sans);
-  font-size: 13.5px;
+  font-size: 14px;
   font-weight: 500;
   border: 1px solid var(--rule-strong);
   border-radius: 5px;
@@ -556,14 +561,14 @@ button.primary:hover:not(:disabled) {
 button.danger {
   background: var(--refunded);
   border-color: var(--refunded);
-  color: #fff;
+  color: var(--sheet);
   font-weight: 600;
 }
 
 button.ghost {
   background: transparent;
   font-family: var(--mono);
-  font-size: 11.5px;
+  font-size: 12px;
   padding: 4px 8px;
   color: var(--accent);
   border-color: var(--accent);
@@ -572,10 +577,10 @@ button.ghost {
 select,
 textarea {
   font-family: var(--mono);
-  font-size: 12.5px;
+  font-size: 13px;
   border: 1px solid var(--rule-strong);
   border-radius: 5px;
-  background: #fffdfa;
+  background: var(--sheet);
   color: var(--ink);
   padding: 8px 9px;
   width: 100%;
@@ -594,7 +599,7 @@ textarea {
 .field label {
   display: block;
   font-family: var(--mono);
-  font-size: 10.5px;
+  font-size: 12px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--muted);
@@ -608,7 +613,7 @@ textarea {
   background: var(--paper);
   border-radius: 5px;
   padding: 10px 12px;
-  font-size: 13.5px;
+  font-size: 14px;
   margin: 0 0 12px;
 }
 
@@ -657,14 +662,14 @@ textarea {
   background: var(--accent-soft);
   border-radius: 5px;
   padding: 12px 14px;
-  font-size: 13.5px;
+  font-size: 14px;
   margin: 0 0 12px;
 }
 
 .setupcard .kicker {
   display: block;
   font-family: var(--mono);
-  font-size: 10px;
+  font-size: 12px;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--accent);
@@ -682,7 +687,7 @@ textarea {
 
 .setupcard ol li {
   margin: 4px 0;
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .setupcard code {
@@ -707,7 +712,7 @@ textarea {
 .stamp {
   display: inline-block;
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -786,7 +791,7 @@ textarea {
 
 .statline {
   font-family: var(--mono);
-  font-size: 10.5px;
+  font-size: 12px;
   color: var(--muted);
   margin-top: 10px;
   padding-top: 8px;
@@ -816,7 +821,7 @@ textarea {
   background: var(--ink);
   color: var(--sheet);
   font-family: var(--mono);
-  font-size: 10.5px;
+  font-size: 12px;
   letter-spacing: 0.1em;
   text-transform: uppercase;
 }
@@ -849,53 +854,8 @@ textarea {
 
 .tape__scale {
   position: relative;
-  height: 46px;
-  margin-bottom: 10px;
-}
-
-.tape__ticks {
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 40px;
-  display: flex;
-  justify-content: space-between;
-  font-family: var(--mono);
-  font-size: 9.5px;
-  color: var(--muted);
-  letter-spacing: 0.04em;
-}
-
-.tape__events {
-  font-family: var(--mono);
-  font-size: 12px;
-  line-height: 1.9;
-  min-height: 2.2em;
-}
-
-.tape__events .ev {
-  display: block;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.tape__events .ev.settled {
-  color: var(--settled);
-}
-
-.tape__events .ev.refunded {
-  color: var(--refunded);
-  text-decoration: line-through;
-  text-decoration-thickness: 1.5px;
-}
-
-.tape__events .ev.stale {
-  color: var(--stale);
-}
-
-.tape__events .ev.idle {
-  color: var(--muted);
+  height: 58px;
+  margin-bottom: 12px;
 }
 
 /* freshness ruler (inside the tape + delivery panel) */
@@ -905,11 +865,19 @@ textarea {
   inset: 0;
 }
 
+/* inside a step card the ruler is a block, not an overlay */
+.stepcard .ruler {
+  position: relative;
+  inset: auto;
+  height: 58px;
+  margin: 2px 0 12px;
+}
+
 .ruler .mark {
   position: absolute;
   top: 2px;
   font-family: var(--mono);
-  font-size: 9.5px;
+  font-size: 12px;
   color: var(--muted);
   white-space: nowrap;
 }
@@ -950,12 +918,37 @@ textarea {
 
 .ruler .needle .lbl {
   position: absolute;
-  top: 34px;
+  top: 38px;
   left: -1px;
   transform: translateX(-50%);
   white-space: nowrap;
   font-family: var(--mono);
-  font-size: 10px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.tape__events .ev {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tape__events .ev.settled {
+  color: var(--settled);
+}
+
+.tape__events .ev.refunded {
+  color: var(--refunded);
+  text-decoration: line-through;
+  text-decoration-thickness: 1.5px;
+}
+
+.tape__events .ev.stale {
+  color: var(--stale);
+}
+
+.tape__events .ev.idle {
   color: var(--muted);
 }
 
@@ -971,6 +964,13 @@ textarea {
   color: var(--accent);
 }
 
+.tape__events {
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1.9;
+  min-height: 2.2em;
+}
+
 /* ---- foot ------------------------------------------------------------------ */
 
 .foot {
@@ -983,7 +983,7 @@ textarea {
   padding-top: 12px;
   border-top: 1px solid var(--rule);
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
 }
 
@@ -1011,7 +1011,7 @@ textarea {
   align-items: center;
   gap: 7px;
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: 12px;
   letter-spacing: 0.05em;
   text-transform: uppercase;
   color: var(--muted);
@@ -1023,8 +1023,8 @@ textarea {
 
 .process li::before {
   content: counter(entry, decimal-leading-zero);
-  font-size: 10px;
-  color: var(--rule-strong);
+  font-size: 12px;
+  color: var(--muted);
 }
 
 .process li.done {
@@ -1062,7 +1062,7 @@ textarea {
 .caption {
   margin: 8px 0 0;
   font-family: var(--mono);
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--muted);
   line-height: 1.5;
 }
@@ -1078,7 +1078,7 @@ textarea {
   align-items: center;
   gap: 8px;
   font-family: var(--mono);
-  font-size: 11.5px;
+  font-size: 12px;
 }
 
 .walletblock .addr {
@@ -1192,7 +1192,7 @@ textarea {
 /* hero figures — winners show 5–29 numerals ≥36px; our ledger showed none */
 .running .fig.hero {
   font-family: var(--mono);
-  font-size: clamp(23px, 3vw, 33px);
+  font-size: clamp(22px, 2.5vw, 28px);
   font-weight: 500;
   letter-spacing: -0.01em;
   line-height: 1.15;
@@ -1211,11 +1211,11 @@ button.primary:active:not(:disabled),
 button.ghost:active:not(:disabled) { transform: translateY(0); }
 
 /* "updated HH:MM:SS" + manual refresh (AgentGate ships exactly this pair) */
-.live-stamp { font-family: var(--mono); font-size: 10.5px; color: var(--muted); letter-spacing: 0.02em; }
+.live-stamp { font-family: var(--mono); font-size: 12px; color: var(--muted); letter-spacing: 0.02em; }
 
 button.ob-refresh {
   font-family: var(--mono);
-  font-size: 10.5px;
+  font-size: 12px;
   color: var(--accent);
   background: none;
   border: 0;
@@ -1238,17 +1238,20 @@ button.ob-refresh:hover { color: var(--ink); }
 }
 
 .running li:hover,
-.ledger tbody tr:hover { background: rgba(42, 75, 143, 0.06); }
+.ledger tbody tr:hover { background: rgba(37, 69, 127, 0.08); }
 
 a { transition: color 120ms ease, opacity 120ms ease; }
 a:hover { color: var(--ink); }
 
 /* phones (390px): the signature tape must not truncate and the hero must scale */
 @media (max-width: 600px) {
-  h1 { font-size: clamp(24px, 7.5vw, 32px); }
+  h1 { font-size: clamp(30px, 8vw, 40px); }
   .tape__events .ev { white-space: normal; }
-  .ruler .needle .lbl { font-size: 9px; }
-  .running .fig.hero { font-size: 24px; }
+  /* the ruler's bars carry the story on phones; the delivered/head numbers are
+     in the delivery notice text (and the ruler keeps its aria-label) */
+  .ruler .lbl,
+  .ruler .mark { display: none; }
+  .running .fig.hero { font-size: clamp(22px, 7vw, 28px); }
 
   /* touch targets: 44px minimum for controls, breathing room for inline actions */
   button.primary,
@@ -1285,7 +1288,7 @@ a:hover { color: var(--ink); }
   background: var(--paper);
   border: 1px solid var(--rule);
   border-left: 4px solid var(--accent);
-  font-size: 15px;
+  font-size: 16px;
   line-height: 1.5;
 }
 .intro a { color: var(--accent); }
@@ -1304,7 +1307,7 @@ a:hover { color: var(--ink); }
   height: 300px;
   background: var(--sheet);
   border-top: 2px solid var(--ink);
-  box-shadow: 0 -4px 14px rgba(16, 21, 28, 0.12);
+  box-shadow: 0 -4px 14px rgba(22, 21, 15, 0.12);
 }
 
 .console__head {
@@ -1315,7 +1318,7 @@ a:hover { color: var(--ink); }
   background: var(--ink);
   color: var(--sheet);
   font-family: var(--mono);
-  font-size: 10.5px;
+  font-size: 12px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   border-bottom: 1px solid var(--ink-2);
@@ -1337,7 +1340,7 @@ a:hover { color: var(--ink); }
   align-items: center;
   gap: 5px;
   font-family: var(--mono);
-  font-size: 10.5px;
+  font-size: 12px;
   font-weight: 400;
   text-transform: none;
   letter-spacing: 0;
@@ -1361,7 +1364,7 @@ a:hover { color: var(--ink); }
 
 .console__close {
   font-family: var(--mono);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1;
   color: var(--sheet);
   background: transparent;
@@ -1398,7 +1401,7 @@ a:hover { color: var(--ink); }
 
 .console__line {
   font-family: var(--mono);
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 700;
   color: var(--ink);
   word-break: break-word;
@@ -1415,7 +1418,7 @@ a:hover { color: var(--ink); }
 
 .console__running {
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
   font-style: italic;
 }
@@ -1433,7 +1436,7 @@ a:hover { color: var(--ink); }
 .console__text {
   margin: 0;
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.55;
   color: var(--ink-2);
   white-space: pre-wrap;
@@ -1446,7 +1449,7 @@ a:hover { color: var(--ink); }
   display: flex;
   gap: 12px;
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: 13px;
   padding: 2px 0;
   border-bottom: 1px dashed var(--rule);
 }
@@ -1468,7 +1471,7 @@ a:hover { color: var(--ink); }
 .console__note {
   margin-top: 6px;
   font-family: var(--mono);
-  font-size: 10.5px;
+  font-size: 12px;
   line-height: 1.5;
   color: var(--muted);
 }
@@ -1476,7 +1479,7 @@ a:hover { color: var(--ink); }
 .console__summary {
   margin-bottom: 6px;
   font-family: var(--mono);
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--ink);
   padding-bottom: 5px;
   border-bottom: 1px dashed var(--rule-strong);
@@ -1486,14 +1489,14 @@ a:hover { color: var(--ink); }
   width: 100%;
   border-collapse: collapse;
   font-family: var(--mono);
-  font-size: 11.5px;
+  font-size: 12px;
 }
 
 .console__table th {
   text-align: left;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  font-size: 10px;
+  font-size: 12px;
   color: var(--muted);
   border-bottom: 1px solid var(--rule-strong);
   padding: 3px 8px 4px 0;
@@ -1525,7 +1528,7 @@ a:hover { color: var(--ink); }
   flex-wrap: wrap;
 }
 
-.console__txlink { font-family: var(--mono); font-size: 12.5px; }
+.console__txlink { font-family: var(--mono); font-size: 13px; }
 .console__txlink a { color: var(--accent); font-weight: 600; }
 
 .console__tx-title {
@@ -1548,7 +1551,7 @@ a:hover { color: var(--ink); }
 
 .console__suggest-chip {
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: 12px;
   color: var(--accent);
   background: var(--sheet);
   border: 1px solid var(--rule-strong);
@@ -1589,7 +1592,7 @@ a:hover { color: var(--ink); }
   bottom: 12px;
   z-index: 59;
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: 12px;
   color: var(--accent);
   background: var(--sheet);
   border: 1px dashed var(--accent);
@@ -1602,7 +1605,7 @@ a:hover { color: var(--ink); }
 
 .console__launcher kbd {
   font-family: var(--mono);
-  font-size: 10px;
+  font-size: 12px;
   background: var(--paper);
   border: 1px solid var(--rule-strong);
   border-radius: 3px;
@@ -1624,7 +1627,7 @@ a:hover { color: var(--ink); }
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(16, 21, 28, 0.55);
+  background: rgba(22, 21, 15, 0.55);
   padding: 24px;
 }
 
@@ -1636,7 +1639,7 @@ a:hover { color: var(--ink); }
   background: var(--sheet);
   border: 2px solid var(--ink);
   border-radius: 6px;
-  box-shadow: 0 10px 34px rgba(16, 21, 28, 0.35);
+  box-shadow: 0 10px 34px rgba(22, 21, 15, 0.35);
   overflow: hidden;
 }
 
@@ -1648,7 +1651,7 @@ a:hover { color: var(--ink); }
   background: var(--ink);
   color: var(--sheet);
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: 12px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
@@ -1659,7 +1662,7 @@ a:hover { color: var(--ink); }
 
 .theater__head .stamp {
   margin-left: 4px;
-  font-size: 9.5px;
+  font-size: 12px;
   padding: 1px 7px;
   transform: none;
 }
@@ -1682,7 +1685,7 @@ a:hover { color: var(--ink); }
 .theater__status {
   padding: 26px 18px;
   font-family: var(--mono);
-  font-size: 12.5px;
+  font-size: 13px;
   color: var(--muted);
   display: flex;
   flex-direction: column;
@@ -1706,7 +1709,7 @@ a:hover { color: var(--ink); }
 
 .theater__frame-btn {
   font-family: var(--mono);
-  font-size: 10.5px;
+  font-size: 12px;
   color: var(--muted);
   background: var(--sheet);
   border: 1px solid var(--rule-strong);
@@ -1745,7 +1748,7 @@ a:hover { color: var(--ink); }
 
 .theater__frame-title {
   font-family: var(--display);
-  font-size: 17px;
+  font-size: 20px;
   margin: 0 0 10px;
   display: flex;
   align-items: baseline;
@@ -1760,7 +1763,7 @@ a:hover { color: var(--ink); }
   display: flex;
   gap: 14px;
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: 13px;
   padding: 3px 0;
   border-bottom: 1px dashed var(--rule);
 }
@@ -1780,7 +1783,7 @@ a:hover { color: var(--ink); }
 
 .theater__ruler { margin-top: 12px; }
 
-.theater__tx { margin-top: 10px; font-family: var(--mono); font-size: 12px; }
+.theater__tx { margin-top: 10px; font-family: var(--mono); font-size: 13px; }
 
 .theater__tx a {
   color: var(--accent);
@@ -1790,7 +1793,7 @@ a:hover { color: var(--ink); }
 .theater__note {
   margin-top: 8px;
   font-family: var(--mono);
-  font-size: 10.5px;
+  font-size: 12px;
   line-height: 1.5;
   color: var(--muted);
   border-top: 1px dashed var(--rule);
@@ -1803,7 +1806,7 @@ a:hover { color: var(--ink); }
   padding: 6px 14px;
   border-top: 1px solid var(--rule-strong);
   font-family: var(--mono);
-  font-size: 10px;
+  font-size: 12px;
   letter-spacing: 0.05em;
   text-transform: uppercase;
   color: var(--muted);
@@ -1835,7 +1838,7 @@ a:hover { color: var(--ink); }
   background: var(--ink);
   color: var(--sheet);
   font-family: var(--mono);
-  font-size: 10.5px;
+  font-size: 12px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
@@ -1872,12 +1875,25 @@ a:hover { color: var(--ink); }
 }
 
 @keyframes ob-map-pulse {
-  0% { stroke-opacity: 0.15; stroke-width: 1.5; }
-  40% { stroke-opacity: 1; stroke-width: 3; }
-  100% { stroke-opacity: 1; stroke-width: 1.5; }
+  0% { stroke-opacity: 0.15; stroke-width: 1.5; stroke: var(--rule-strong); }
+  40% { stroke-opacity: 1; stroke-width: 3; stroke: var(--flash); }
+  100% { stroke-opacity: 1; stroke-width: 1.5; stroke: var(--rule-strong); }
 }
 
 .map__node { cursor: pointer; }
+
+.map__node:focus-visible {
+  outline: none;
+}
+
+.map__node:focus-visible .map__node-ring {
+  stroke: var(--accent);
+  stroke-width: 3.5;
+}
+
+.map__node:focus-visible .map__node-name {
+  fill: var(--accent);
+}
 
 .map__node-ring {
   fill: var(--sheet);
@@ -1893,7 +1909,7 @@ a:hover { color: var(--ink); }
 
 .map__node-name {
   font-family: var(--display);
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
   fill: var(--ink);
   text-anchor: middle;
@@ -1903,7 +1919,7 @@ a:hover { color: var(--ink); }
 
 .map__node-chip {
   font-family: var(--mono);
-  font-size: 9.5px;
+  font-size: 12px;
   fill: var(--muted);
   text-anchor: middle;
 }
@@ -1927,7 +1943,7 @@ a:hover { color: var(--ink); }
   padding: 14px 16px;
   background: var(--sheet);
   border-left: 2px solid var(--ink);
-  box-shadow: -6px 0 22px rgba(16, 21, 28, 0.22);
+  box-shadow: -6px 0 22px rgba(22, 21, 15, 0.22);
   overflow-y: auto;
 }
 
@@ -1941,13 +1957,13 @@ a:hover { color: var(--ink); }
 
 .map__drawer-title {
   font-family: var(--display);
-  font-size: 16px;
+  font-size: 20px;
   font-weight: 700;
 }
 
 .map__drawer-state {
   font-family: var(--mono);
-  font-size: 9.5px;
+  font-size: 12px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   border: 1px solid var(--rule-strong);
@@ -1972,7 +1988,7 @@ a:hover { color: var(--ink); }
 
 .map__drawer-source {
   font-family: var(--mono);
-  font-size: 10px;
+  font-size: 12px;
   color: var(--muted);
   border: 1px solid var(--rule);
   border-radius: 3px;
@@ -1982,7 +1998,7 @@ a:hover { color: var(--ink); }
 
 .map__drawer-error {
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: 12px;
   color: var(--refunded);
   margin: 0;
 }
@@ -1993,7 +2009,7 @@ a:hover { color: var(--ink); }
   display: flex;
   gap: 12px;
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: 13px;
   padding: 3px 0;
   border-bottom: 1px dashed var(--rule);
 }
@@ -2013,13 +2029,13 @@ a:hover { color: var(--ink); }
   align-items: center;
   gap: 10px;
   font-family: var(--mono);
-  font-size: 10.5px;
+  font-size: 12px;
   color: var(--muted);
 }
 
 .map__drawer-refresh {
   font-family: var(--mono);
-  font-size: 10.5px;
+  font-size: 12px;
   padding: 3px 9px;
   color: var(--accent);
   border-color: var(--accent);
@@ -2036,7 +2052,7 @@ a:hover { color: var(--ink); }
 
 .map__drawer-cmd {
   font-family: var(--mono);
-  font-size: 10.5px;
+  font-size: 12px;
   color: var(--muted);
 }
 
@@ -2068,7 +2084,7 @@ a:hover { color: var(--ink); }
   background: var(--ink);
   color: var(--sheet);
   font-family: var(--mono);
-  font-size: 10.5px;
+  font-size: 12px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
@@ -2106,7 +2122,7 @@ a:hover { color: var(--ink); }
 .market__note {
   margin: 8px 0 6px;
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
   letter-spacing: 0.02em;
 }
@@ -2115,7 +2131,7 @@ a:hover { color: var(--ink); }
   margin: 10px 0;
   padding: 8px 12px;
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: 13px;
   color: var(--refunded);
   border: 1px solid var(--refunded);
   border-radius: 5px;
@@ -2124,7 +2140,7 @@ a:hover { color: var(--ink); }
 
 .market__muted {
   font-family: var(--mono);
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--muted);
 }
 
@@ -2150,7 +2166,7 @@ a:hover { color: var(--ink); }
 
 .market__seller-op {
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
 }
 
@@ -2169,7 +2185,7 @@ a:hover { color: var(--ink); }
   gap: 10px;
   flex-wrap: wrap;
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .market__ds-id { color: var(--ink-2); }
@@ -2186,7 +2202,7 @@ a:hover { color: var(--ink); }
   flex-direction: column;
   gap: 1px;
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .market__kvrow {
@@ -2219,7 +2235,7 @@ a:hover { color: var(--ink); }
   border-radius: 4px;
   background: var(--paper);
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .market__venue-key { color: var(--muted); }
@@ -2232,7 +2248,7 @@ a:hover { color: var(--ink); }
 
 .market__venue-note {
   color: var(--stale);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 @media (max-width: 860px) {
@@ -2270,7 +2286,7 @@ a:hover { color: var(--ink); }
 
 .tour__title {
   font-weight: 700;
-  font-size: 18px;
+  font-size: 20px;
   white-space: nowrap;
 }
 

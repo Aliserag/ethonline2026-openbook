@@ -660,10 +660,13 @@ export default function App() {
               OpenBook<span className="ledger-no">the agent's settlement ledger</span>
             </h1>
             <p className="tagline">
-              chargebacks for the agentic economy. OpenBook sells live data to agents. If a
-              delivery is stale, the{" "}
-              <Tip text="The payment sits in escrow until the freshness proof clears. Miss the freshness window and it refunds itself onchain, with nobody asked to approve it.">escrow</Tip>{" "}
-              <span className="accent">refunds the buyer automatically</span>.
+              The data marketplace for agents, with{" "}
+              <span className="accent">
+                automatic{" "}
+                <Tip text="A delivery is stale when its data is older than the freshness floor the SLA set at payment time. Missing the floor refunds the buyer automatically, onchain, with nobody asked to approve it.">refunds</Tip>{" "}
+                for every stale delivery
+              </span>
+              .
             </p>
           </div>
         </div>
@@ -1215,7 +1218,7 @@ export default function App() {
           </aside>
         </div>
 
-        <div className="tape" aria-label="settlement tape: freshness scale and printed events">
+        <div className="tape" aria-label="the tape: freshness scale and printed events">
           <div className="tape__head">
             <span className="tape__title">The tape: settlement printer</span>
             <span className="tape__status">
@@ -1244,10 +1247,6 @@ export default function App() {
             {delivery !== null && (
               <div className="tape__scale">
                 <FreshnessRuler delivery={delivery} minBlock={job?.minBlock ?? null} />
-                <div className="tape__ticks">
-                  <span>SLA floor</span>
-                  <span>delivered ▸ chain head</span>
-                </div>
               </div>
             )}
             <div className="tape__events" role="status" aria-live="polite">
