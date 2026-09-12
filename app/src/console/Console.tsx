@@ -25,12 +25,11 @@ import { demoAddress, getPublicClient, pickSigner } from "../data/chain";
 import { fetchLag } from "../data/subgraph";
 import { useLiveValue } from "../ui/useLiveValue";
 import { createEnsTextReader } from "../../../mcp/src/ens";
-import { truncateHash } from "../format";
 import { commands, dispatch, type CommandContext, type CommandResult } from "./registry";
 import { renderResult } from "./renderers";
 import { CountdownBlock } from "./blocks/CountdownBlock";
 import { LogBlock } from "./blocks/LogBlock";
-import { copyAckReducer, type CopyAck } from "./blocks/copyAck";
+import { copyAckReducer, copyAckText, type CopyAck } from "./blocks/copyAck";
 import { verdictFor, type Verdict } from "./blocks/verdict";
 import { completionCandidates, Palette, paletteItems, type CompletionItem } from "./palette";
 import { getSandboxState } from "./commands/sandbox"; // registers the sandbox commands (side effect)
@@ -219,6 +218,10 @@ export function Console(): JSX.Element {
     setCopyAck((prev) => copyAckReducer(prev, { type: "copied", entryId, hash }));
   };
 
+  const handleCopyFailed = (entryId: number, hash: string): void => {
+    setCopyAck((prev) => copyAckReducer(prev, { type: "failed", entryId, hash }));
+  };
+
   const runLine = async (line: string): Promise<void> => {
     if (line.length === 0) return;
     setHistory((h) => [...h, line]);
@@ -386,6 +389,7 @@ export function Console(): JSX.Element {
                             result,
                             (jobId) => ctx.navigate(`#theater/${jobId}`),
                             (hash) => handleCopy(entry.id, hash),
+                            (hash) => handleCopyFailed(entry.id, hash),
                           )}
                         </div>
                       ))
@@ -405,7 +409,9 @@ export function Console(): JSX.Element {
                     </span>
                   )}
                   {copyAck !== null && copyAck.entryId === entry.id && (
-                    <div className="tape__ack">✓ copied {truncateHash(copyAck.hash, 8, 6)} — printed</div>
+                    <div className={`tape__ack${copyAck.failed === true ? " tape__ack--failed" : ""}`}>
+                      {copyAckText(copyAck)}
+                    </div>
                   )}
                   <div className="tape__perf" aria-hidden="true" />
                 </article>

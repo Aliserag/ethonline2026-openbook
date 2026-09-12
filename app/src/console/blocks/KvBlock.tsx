@@ -9,9 +9,11 @@ import { HashChip, splitHex } from "./HashChip";
 export function KvBlock({
   data,
   onCopy,
+  onCopyFailed,
 }: {
   data: KvData;
   onCopy?: (hash: string) => void;
+  onCopyFailed?: (hash: string) => void;
 }): JSX.Element {
   return (
     <div className="tape__kv">
@@ -27,7 +29,7 @@ export function KvBlock({
                   typeof part === "string" ? (
                     <span key={i}>{part}</span>
                   ) : (
-                    <HashChip key={i} hash={part.hash} onCopy={onCopy} />
+                    <HashChip key={i} hash={part.hash} onCopy={onCopy} onCopyFailed={onCopyFailed} />
                   ),
                 )}
               </>

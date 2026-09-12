@@ -57,13 +57,20 @@ export async function copyText(text: string): Promise<boolean> {
 export function HashChip({
   hash,
   onCopy,
+  onCopyFailed,
 }: {
   hash: string;
   onCopy: (hash: string) => void;
+  /** fired only when the clipboard write really failed — the ack must never lie */
+  onCopyFailed?: (hash: string) => void;
 }): JSX.Element {
   const copy = (): void => {
-    void copyText(hash);
-    onCopy(hash);
+    // await the actual write result before printing the ack: a rejected
+    // clipboard must not print "✓ copied".
+    void copyText(hash).then((ok) => {
+      if (ok) onCopy(hash);
+      else onCopyFailed?.(hash);
+    });
   };
   return (
     <span

@@ -9,9 +9,11 @@ import { HashChip, splitHex } from "./HashChip";
 export function HexText({
   text,
   onCopy,
+  onCopyFailed,
 }: {
   text: string;
   onCopy?: (hash: string) => void;
+  onCopyFailed?: (hash: string) => void;
 }): JSX.Element {
   if (onCopy === undefined) return <>{text}</>;
   const parts = splitHex(text);
@@ -22,7 +24,7 @@ export function HexText({
         typeof part === "string" ? (
           <span key={i}>{part}</span>
         ) : (
-          <HashChip key={i} hash={part.hash} onCopy={onCopy} />
+          <HashChip key={i} hash={part.hash} onCopy={onCopy} onCopyFailed={onCopyFailed} />
         ),
       )}
     </>
@@ -33,14 +35,16 @@ export function LogBlock({
   text,
   error = false,
   onCopy,
+  onCopyFailed,
 }: {
   text: string;
   error?: boolean;
   onCopy?: (hash: string) => void;
+  onCopyFailed?: (hash: string) => void;
 }): JSX.Element {
   return (
     <pre className={error ? "tape__log tape__log--error" : "tape__log"}>
-      <HexText text={text} onCopy={onCopy} />
+      <HexText text={text} onCopy={onCopy} onCopyFailed={onCopyFailed} />
     </pre>
   );
 }

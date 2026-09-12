@@ -9,9 +9,10 @@ import {
   fuzzyMatch,
   paletteItems,
   rankPalette,
+  runLineFor,
   type PaletteItem,
 } from "./palette";
-import { copyAckReducer, type CopyAck } from "./blocks/copyAck";
+import { copyAckReducer, copyAckText, type CopyAck } from "./blocks/copyAck";
 import { verdictFor } from "./blocks/verdict";
 import { splitHex } from "./blocks/HashChip";
 import type { CommandResult } from "./registry";
@@ -220,11 +221,32 @@ describe("verdict stamps", () => {
   });
 });
 
+describe("palette run mapping", () => {
+  it("a dataset pick maps to its read-only quote line, never a bare id", () => {
+    expect(runLineFor({ name: "aave-v3-arbitrum-lending", hint: "", kind: "dataset" })).toBe(
+      "quote aave-v3-arbitrum-lending",
+    );
+  });
+
+  it("command picks run unchanged, multi-word names included", () => {
+    expect(runLineFor({ name: "status", hint: "", kind: "command" })).toBe("status");
+    expect(runLineFor({ name: "ens show", hint: "", kind: "command" })).toBe("ens show");
+  });
+});
+
 describe("copy-ack state", () => {
   const hash = `0x${"cd".repeat(32)}`;
 
   it("a copy prints the ack for its receipt", () => {
     expect(copyAckReducer(null, { type: "copied", entryId: 3, hash })).toEqual({ entryId: 3, hash });
+  });
+
+  it("a failed write prints the failure ack (never the ✓)", () => {
+    expect(copyAckReducer(null, { type: "failed", entryId: 3, hash })).toEqual({
+      entryId: 3,
+      hash,
+      failed: true,
+    });
   });
 
   it("the next copy replaces the previous ack", () => {
@@ -235,6 +257,13 @@ describe("copy-ack state", () => {
   it("clear removes the ack (and clearing nothing is a no-op)", () => {
     expect(copyAckReducer({ entryId: 1, hash }, { type: "clear" })).toBeNull();
     expect(copyAckReducer(null, { type: "clear" })).toBeNull();
+  });
+
+  it("the printed text is the honest success/failure decision", () => {
+    expect(copyAckText({ entryId: 1, hash })).toContain("✓ copied");
+    const failed = copyAckText({ entryId: 1, hash, failed: true });
+    expect(failed).toContain("copy failed");
+    expect(failed).not.toContain("✓");
   });
 });
 

@@ -415,6 +415,10 @@
   animation: tape-ack 120ms ease-out both;
 }
 
+.tape__ack--failed {
+  color: var(--refunded);
+}
+
 /* perforation divider between receipts */
 .tape__perf {
   margin: 12px -6px 0;

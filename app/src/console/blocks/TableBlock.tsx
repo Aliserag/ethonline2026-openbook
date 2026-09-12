@@ -10,11 +10,13 @@ export function TableBlock({
   data,
   onOpenJob,
   onCopy,
+  onCopyFailed,
 }: {
   data: TableData;
   /** when set, rows carrying a numeric `job` cell become clickable replay links */
   onOpenJob?: (jobId: string) => void;
   onCopy?: (hash: string) => void;
+  onCopyFailed?: (hash: string) => void;
 }): JSX.Element {
   return (
     <div className="tape__tablewrap">
@@ -43,7 +45,7 @@ export function TableBlock({
                     typeof part === "string" ? (
                       <span key={p}>{part}</span>
                     ) : (
-                      <HashChip key={p} hash={part.hash} onCopy={onCopy} />
+                      <HashChip key={p} hash={part.hash} onCopy={onCopy} onCopyFailed={onCopyFailed} />
                     ),
                   )}
                 </span>

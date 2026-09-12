@@ -80,6 +80,15 @@ export function paletteItems(
 }
 
 /**
+ * The runnable line for a palette pick: a dataset item is a read-only quote
+ * target, never a bare id (dispatch would print "unknown command"); command
+ * items run their own name (multi-word names included, unchanged).
+ */
+export function runLineFor(item: PaletteItem): string {
+  return item.kind === "dataset" ? `quote ${item.name}` : item.name;
+}
+
+/**
  * Tab-completion candidates for the dock: command names by prefix (single
  * or multi-word), and — for the dataset-taking commands (quote, buy) —
  * dataset ids by the partial id token. The value is the complete replacement
@@ -161,7 +170,7 @@ export function Palette({
     if (event.key === "Enter") {
       event.preventDefault();
       const pick = visible[Math.min(sel, visible.length - 1)];
-      if (pick !== undefined) onRun(pick.name);
+      if (pick !== undefined) onRun(runLineFor(pick));
       else if (query.trim().length > 0) onRun(query.trim());
       return;
     }
@@ -214,7 +223,7 @@ export function Palette({
                 aria-selected={i === sel}
                 className={`palette__opt${i === sel ? " palette__opt--sel" : ""}${item.kind === "dataset" ? " palette__opt--dataset" : ""}`}
                 onMouseEnter={() => setSel(i)}
-                onClick={() => onRun(item.name)}
+                onClick={() => onRun(runLineFor(item))}
               >
                 <span className="palette__opt-name">{item.name}</span>
                 <span className="palette__opt-hint">{item.hint}</span>

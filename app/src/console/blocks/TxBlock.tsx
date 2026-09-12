@@ -12,9 +12,11 @@ import { KvBlock } from "./KvBlock";
 export function TxBlock({
   data,
   onCopy,
+  onCopyFailed,
 }: {
   data: TxData;
   onCopy?: (hash: string) => void;
+  onCopyFailed?: (hash: string) => void;
 }): JSX.Element {
   const kindClass = data.kind !== undefined ? ` tape__tx-stamp--${data.kind}` : "";
   const stampText = data.kind !== undefined ? data.kind.toUpperCase() : "TX";
@@ -29,13 +31,13 @@ export function TxBlock({
           {onCopy !== undefined && (
             <>
               {" · "}
-              <HashChip hash={data.hash} onCopy={onCopy} />
+              <HashChip hash={data.hash} onCopy={onCopy} onCopyFailed={onCopyFailed} />
             </>
           )}
         </span>
       </div>
       {data.title !== undefined && <div className="tape__tx-title">{data.title}</div>}
-      {data.rows !== undefined && <KvBlock data={{ rows: data.rows }} onCopy={onCopy} />}
+      {data.rows !== undefined && <KvBlock data={{ rows: data.rows }} onCopy={onCopy} onCopyFailed={onCopyFailed} />}
       {data.note !== undefined && <div className="tape__note">{data.note}</div>}
     </div>
   );

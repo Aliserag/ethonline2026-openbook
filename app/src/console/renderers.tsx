@@ -21,12 +21,14 @@ export function TextBlock({
   text,
   error = false,
   onCopy,
+  onCopyFailed,
 }: {
   text: string;
   error?: boolean;
   onCopy?: (hash: string) => void;
+  onCopyFailed?: (hash: string) => void;
 }): JSX.Element {
-  return <LogBlock text={text} error={error} onCopy={onCopy} />;
+  return <LogBlock text={text} error={error} onCopy={onCopy} onCopyFailed={onCopyFailed} />;
 }
 
 /** Render any CommandResult through its kind's block. */
@@ -34,18 +36,19 @@ export function renderResult(
   result: CommandResult,
   onOpenJob?: (jobId: string) => void,
   onCopy?: (hash: string) => void,
+  onCopyFailed?: (hash: string) => void,
 ): JSX.Element {
   switch (result.render) {
     case "text":
-      return <TextBlock text={result.data} onCopy={onCopy} />;
+      return <TextBlock text={result.data} onCopy={onCopy} onCopyFailed={onCopyFailed} />;
     case "kv":
-      return <KvBlock data={result.data} onCopy={onCopy} />;
+      return <KvBlock data={result.data} onCopy={onCopy} onCopyFailed={onCopyFailed} />;
     case "table":
-      return <TableBlock data={result.data} onOpenJob={onOpenJob} onCopy={onCopy} />;
+      return <TableBlock data={result.data} onOpenJob={onOpenJob} onCopy={onCopy} onCopyFailed={onCopyFailed} />;
     case "ruler":
       return <RulerBlock data={result.data} />;
     case "tx":
-      return <TxBlock data={result.data} onCopy={onCopy} />;
+      return <TxBlock data={result.data} onCopy={onCopy} onCopyFailed={onCopyFailed} />;
     case "frames":
       return <FramesBlock data={result.data} />;
   }
