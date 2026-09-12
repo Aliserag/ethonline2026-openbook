@@ -12,7 +12,7 @@ import { keccak256, toBytes, type Address, type PublicClient, type WalletClient 
 import { privateKeyToAccount } from "viem/accounts";
 import * as path from "node:path";
 import { loadConfigFile, type OpenBookConfig } from "../mcp/src/datasets";
-import { packSla } from "./escrow";
+import { ERC8183, packSla, setEscrowAddress } from "./escrow";
 import { findDatasetForSla, serveFundedJobs, type SellerStats } from "./seller";
 import { defaultQueryFor } from "./src/queries";
 
@@ -314,5 +314,45 @@ describe("serveFundedJobs — provider-scoped tally on the SHARED reference cont
     expect(stats.refunded6dec).toBe(250000n);
     expect(stats.refundCount).toBe(1);
     expect(logLines).toContain("SKIP refund job=200: provider is not " + SELLER + " — foreign job on the shared contract");
+  });
+});
+
+describe("serveFundedJobs — event scans follow the configured escrow", () => {
+  it("targets the market escrow override for all three scans, never the shared reference", async () => {
+    const MARKET_ESCROW: Address = "0x967e005154D0F62C33Eac8E2F44b44d4C4C07Dd5";
+    expect(MARKET_ESCROW.toLowerCase()).not.toBe(ERC8183.toLowerCase()); // meaningful override
+    const scanned: Address[] = [];
+    const publicClient = {
+      getBlockNumber: async (): Promise<bigint> => 1000n,
+      getLogs: async (params: { address: Address }): Promise<unknown[]> => {
+        scanned.push(params.address);
+        return [];
+      },
+      readContract: async (): Promise<unknown> => {
+        throw new Error("unexpected readContract — no funded jobs to resolve");
+      },
+      read: async (): Promise<unknown> => {
+        throw new Error("unexpected eth_call — no tallies to attribute");
+      },
+    } as unknown as PublicClient;
+    const walletClient = {} as WalletClient;
+    setEscrowAddress(MARKET_ESCROW);
+    try {
+      await serveFundedJobs(
+        {
+          config: CONFIG,
+          env: { ARC_TESTNET_PK: TEST_KEY, GRAPH_GATEWAY_KEY: "test-key" },
+          publicClient,
+          walletClient,
+        },
+        { lookback: 100n },
+      );
+      expect(scanned).toHaveLength(3); // JobFunded + PaymentReleased + Refunded
+      for (const addr of scanned) {
+        expect(addr.toLowerCase()).toBe(MARKET_ESCROW.toLowerCase());
+      }
+    } finally {
+      setEscrowAddress(null); // never leak the override into other tests
+    }
   });
 });

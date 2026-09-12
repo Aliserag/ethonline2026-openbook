@@ -44,7 +44,7 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   ARC_RPC_URL,
-  ERC8183,
+  escrowAddress,
   getJob,
   parseSla,
   submitDeliverable,
@@ -183,7 +183,7 @@ export async function serveFundedJobs(
 
   // 1. funded jobs in the window
   const fundedLogs = await publicClient.getLogs({
-    address: ERC8183,
+    address: escrowAddress(),
     event: JOB_FUNDED,
     fromBlock,
     toBlock: head,
@@ -197,13 +197,13 @@ export async function serveFundedJobs(
   const sellerAddress = (walletClient.account?.address ?? privateKeyToAccount(operatorKey).address).toLowerCase();
   const [releasedLogs, refundedLogs] = await Promise.all([
     publicClient.getLogs({
-      address: ERC8183,
+      address: escrowAddress(),
       event: PAYMENT_RELEASED,
       args: { provider: sellerAddress },
       fromBlock,
       toBlock: head,
     }),
-    publicClient.getLogs({ address: ERC8183, event: REFUNDED, fromBlock, toBlock: head }),
+    publicClient.getLogs({ address: escrowAddress(), event: REFUNDED, fromBlock, toBlock: head }),
   ]);
   for (const logEntry of releasedLogs) {
     stats.revenue6dec += logEntry.args.amount ?? 0n;
