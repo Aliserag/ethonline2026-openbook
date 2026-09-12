@@ -1,0 +1,45 @@
+/* OpenBook design tokens.
+   Ground is a cool off-white, ink is a green-black, and only two colours carry
+   meaning: forward (money settled to a seller) and back (money refunded to a
+   buyer). Blue is reserved for interaction. The board is the one dark surface. */
+:root {
+  --ground: #f5f7f6;
+  --surface: #ffffff;
+  --ink: #0f1a17;
+  --ink-2: #41504b;
+  --muted: #6f7d78;
+  --line: #d9e0dd;
+  --line-strong: #b9c4c0;
+  --forward: #0b7a55;
+  --forward-bg: #dcf1e8;
+  --back: #c2321f;
+  --back-bg: #fbe3df;
+  --hold: #8a6d1d;
+  --hold-bg: #f6ecd2;
+  --accent: #1d4ed8;
+  --accent-bg: #e3eafc;
+  --board: #101816;
+  --board-2: #1a2320;
+  --board-text: #e7eeea;
+  --board-muted: #8fa39c;
+  --display: "Bricolage Grotesque Variable", "Bricolage Grotesque", ui-sans-serif, system-ui, sans-serif;
+  --sans: var(--display);
+  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --radius: 12px;
+  --radius-sm: 6px;
+  --shadow-1: 0 1px 2px rgba(15, 26, 23, 0.06), 0 10px 30px rgba(15, 26, 23, 0.07);
+
+  /* aliases consumed by the kept console / theater / map surfaces */
+  --paper: var(--ground);
+  --sheet: var(--surface);
+  --rule: var(--line);
+  --rule-strong: var(--line-strong);
+  --settled: var(--forward);
+  --settled-bg: var(--forward-bg);
+  --refunded: var(--back);
+  --refunded-bg: var(--back-bg);
+  --stale: var(--hold);
+  --stale-bg: var(--hold-bg);
+  --accent-soft: var(--accent-bg);
+  --flash: #e8b923;
+}

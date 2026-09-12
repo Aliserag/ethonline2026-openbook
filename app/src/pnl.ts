@@ -10,7 +10,8 @@
  * scripts/fetch-pnl-snapshot.mjs). Every degraded serve is labeled with its
  * source and the time the payload was taken — never presented as live.
  */
-import { hostedQuery, type FetchLike } from "../../mcp/src/gateway";
+import type { FetchLike } from "../../mcp/src/gateway";
+import { hostedQueryViaProxy } from "./data/endpoint";
 import { readLastGood, writeLastGood } from "./data/cache";
 import { CONFIG } from "./config";
 
@@ -96,9 +97,8 @@ export function parsePnlPayload(data: unknown): PnlResult {
   return { rows, refundEvents, metaBlock: null };
 }
 
-export async function fetchPnl(key?: string, fetchImpl?: FetchLike): Promise<PnlResult> {
-  const endpoint = CONFIG.pnl.endpoint.replace("{GRAPH_GATEWAY_KEY}", key ?? "");
-  const { data, meta } = await hostedQuery({ url: endpoint, query: CONFIG.pnl.query, fetchImpl });
+export async function fetchPnl(_key?: string, fetchImpl?: FetchLike): Promise<PnlResult> {
+  const { data, meta } = await hostedQueryViaProxy(CONFIG.pnl.query, fetchImpl);
   return { ...parsePnlPayload(data), metaBlock: meta.block };
 }
 

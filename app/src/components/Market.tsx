@@ -21,7 +21,7 @@ import {
   parseSlaRecord,
   type SlaRecord,
 } from "../../../mcp/src/ens";
-import { hostedQuery } from "../../../mcp/src/gateway";
+import { hostedQueryViaProxy } from "../data/endpoint";
 import type { ProviderStats } from "../../../mcp/src/router";
 import { loadSnapshotProvidersView } from "../pnl";
 import { isRateLimit, readLastGood, writeLastGood } from "../data/cache";
@@ -238,7 +238,7 @@ const MARKET_PROVIDERS_KEY = "market.providers";
 /** Providers: live → last-good cache → build-time snapshot, labeled serves. */
 async function fetchProvidersResilient(): Promise<{ stats: ProviderStats[]; source: LiveSource; at: number }> {
   try {
-    const { data } = await hostedQuery({ url: CONFIG.pnl.endpoint, query: PROVIDERS_QUERY });
+    const { data } = await hostedQueryViaProxy(PROVIDERS_QUERY);
     const stats = parseProviderRows(data);
     writeLastGood(MARKET_PROVIDERS_KEY, stats);
     return { stats, source: "live", at: Date.now() };

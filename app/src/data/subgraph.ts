@@ -11,9 +11,10 @@
  * semantics; consumers tracking the cost line derive it separately as
  * `jobs.filter(j => oursBuyer(j) && j.state === "settled")`.
  */
-import { hostedQuery, type FetchLike } from "../../../mcp/src/gateway";
+import type { FetchLike } from "../../../mcp/src/gateway";
+import { hostedQueryViaProxy } from "./endpoint";
 import { readLastGood, shared, writeLastGood } from "./cache";
-import { CONFIG } from "../config";
+
 import { OUR_ADDRESSES } from "./addresses";
 import type { JobView } from "./types";
 
@@ -49,10 +50,9 @@ function addr(v: unknown): `0x${string}` {
 }
 
 export function fetchJobs(
-  key?: string,
+  _key?: string,
   fetchImpl?: FetchLike,
 ): Promise<JobView[]> {
-  const endpoint = CONFIG.pnl.endpoint.replace("{GRAPH_GATEWAY_KEY}", key ?? "");
   const ours = OUR_ADDRESSES.length > 0 ? OURS : new Set(["0x0"]);
   const oursList = [...ours].map((a) => JSON.stringify(a)).join(", ");
   // Round 1: the scoped paid rows (the marquee heap — no global windows).
@@ -63,7 +63,7 @@ export function fetchJobs(
   }
   _meta { block { number } }
 }`;
-  return hostedQuery({ url: endpoint, query: paidQuery, fetchImpl }).then(
+  return hostedQueryViaProxy(paidQuery, fetchImpl).then(
     ({ data: paidData }) => {
       const paidRoot = (typeof paidData === "object" && paidData !== null ? paidData : {}) as Record<string, unknown>;
       const paidRows = (Array.isArray(paidRoot["queryPaids"]) ? paidRoot["queryPaids"] : []) as QueryPaidRaw[];
@@ -79,7 +79,7 @@ export function fetchJobs(
   settleds(first: 1000, where: { jobId_in: [${jobIds.join(", ")}] }) { id jobId seller amount }
   refundIssueds(first: 1000, where: { jobId_in: [${jobIds.join(", ")}] }) { id jobId reason }
 }`;
-      return hostedQuery({ url: endpoint, query: eventsQuery, fetchImpl }).then(
+      return hostedQueryViaProxy(eventsQuery, fetchImpl).then(
         ({ data: eventsData }) => {
           const eventsRoot = (typeof eventsData === "object" && eventsData !== null ? eventsData : {}) as Record<string, unknown>;
           const fulfilledRows = (Array.isArray(eventsRoot["fulfilleds"]) ? eventsRoot["fulfilleds"] : []) as FulfilledRaw[];
@@ -150,10 +150,9 @@ export interface JobEventView {
 /** Per-job event views (unscoped — a caller already holding the jobId asks). */
 export async function fetchJobEvents(
   jobId: bigint,
-  key?: string,
+  _key?: string,
   fetchImpl?: FetchLike,
 ): Promise<JobEventView> {
-  const endpoint = CONFIG.pnl.endpoint.replace("{GRAPH_GATEWAY_KEY}", key ?? "");
   const id = jobId.toString();
   const query = `{
   queryPaids(first: 1, where: { jobId: ${id} }) { jobId buyer seller amount minBlock deadline blockNumber timestamp }
@@ -161,7 +160,7 @@ export async function fetchJobEvents(
   settleds(first: 1, where: { jobId: ${id} }) { jobId seller amount }
   refundIssueds(first: 1, where: { jobId: ${id} }) { jobId reason }
 }`;
-  const { data } = await hostedQuery({ url: endpoint, query, fetchImpl });
+  const { data } = await hostedQueryViaProxy(query, fetchImpl);
   const root = (typeof data === "object" && data !== null ? data : {}) as Record<string, unknown>;
   const first = <T>(rows: unknown): T | undefined => {
     const arr = Array.isArray(rows) ? rows : [];
@@ -189,15 +188,14 @@ export async function fetchJobEvents(
  * for "is anything indexed", not an exact total.
  */
 export async function fetchLag(
-  key?: string,
+  _key?: string,
   fetchImpl?: FetchLike,
 ): Promise<{ indexed: number; rows: number }> {
-  const endpoint = CONFIG.pnl.endpoint.replace("{GRAPH_GATEWAY_KEY}", key ?? "");
   const query = `{
   queryPaids(first: 200, orderBy: timestamp, orderDirection: desc) { jobId }
   _meta { block { number } }
 }`;
-  const { data, meta } = await hostedQuery({ url: endpoint, query, fetchImpl });
+  const { data, meta } = await hostedQueryViaProxy(query, fetchImpl);
   const root = (typeof data === "object" && data !== null ? data : {}) as Record<string, unknown>;
   const rows = Array.isArray(root["queryPaids"]) ? root["queryPaids"].length : 0;
   return { indexed: meta.block ?? 0, rows };
@@ -221,14 +219,13 @@ export interface PolicyRefusalView {
  * wallet is global to the book.
  */
 export async function fetchPolicyRefusals(
-  key?: string,
+  _key?: string,
   fetchImpl?: FetchLike,
 ): Promise<PolicyRefusalView[]> {
-  const endpoint = CONFIG.pnl.endpoint.replace("{GRAPH_GATEWAY_KEY}", key ?? "");
   const query = `{
   policyBlockeds(first: 100, orderBy: id, orderDirection: desc) { id reason }
 }`;
-  const { data } = await hostedQuery({ url: endpoint, query, fetchImpl });
+  const { data } = await hostedQueryViaProxy(query, fetchImpl);
   const root = (typeof data === "object" && data !== null ? data : {}) as Record<string, unknown>;
   const rows = (Array.isArray(root["policyBlockeds"]) ? root["policyBlockeds"] : []) as PolicyBlockedRaw[];
   return rows.map((row) => ({ id: str(row["id"]), reason: str(row["reason"]) }));

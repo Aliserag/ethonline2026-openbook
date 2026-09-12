@@ -33,7 +33,7 @@ import { cachedAsOfLabel } from "../data/cache";
 import type { FeeSplit, JobView } from "../data/types";
 import { useLiveValue } from "../ui/useLiveValue";
 import { createEnsTextReader, parseSlaRecord } from "../../../mcp/src/ens";
-import { hostedQuery } from "../../../mcp/src/gateway";
+import { hostedQueryViaProxy } from "../data/endpoint";
 import { explorerUrl, truncateHash } from "../format";
 import { RulerBlock } from "../console/renderers";
 import { buildFrames } from "./replay";
@@ -196,9 +196,8 @@ async function subgraphTerminalTx(
   jobId: bigint,
   entity: "settleds" | "refundIssueds",
 ): Promise<`0x${string}` | null> {
-  const endpoint = CONFIG.pnl.endpoint.replace("{GRAPH_GATEWAY_KEY}", "");
   const query = `{ ${entity}(first: 1, where: { jobId: ${jobId.toString()} }) { id } }`;
-  const { data } = await hostedQuery({ url: endpoint, query });
+  const { data } = await hostedQueryViaProxy(query);
   const root = (typeof data === "object" && data !== null ? data : {}) as Record<string, unknown>;
   const rows = Array.isArray(root[entity]) ? root[entity] : [];
   const id = rows[0] as { id?: unknown } | undefined;
