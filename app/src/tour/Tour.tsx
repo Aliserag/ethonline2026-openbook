@@ -90,10 +90,12 @@ function settledFromResult(result: CommandResult): SettleState | null {
  * The act commands' shared lifecycle as a StepState patch — read fresh from the
  * module state every call, never cached. `delivery` comes ONLY from the
  * current job (a re-buy has no payload yet — an old payload must never show as
- * delivered), and `settle` clears when the job id changes (an old verdict must
- * never stamp a new lifecycle).
+ * delivered), `settle` clears when the job id changes (an old verdict must
+ * never stamp a new lifecycle), and a TERMINAL record (settled/refunded, kept
+ * on record by the settle command) derives BOTH step 4 and step 5 as done —
+ * stable across reloads, no flicker when the walk completes.
  */
-function actJobView(prev: StepState): StepState {
+export function actJobView(prev: StepState): StepState {
   const job = getActJob();
   if (job === null) return { ...prev, job: null, delivery: null };
   const jobDataset = CONFIG.datasets.find((d) => d.id === job.datasetId) ?? null;
@@ -108,12 +110,17 @@ function actJobView(prev: StepState): StepState {
           result: null,
         }
       : null;
+  const terminal = job.outcome !== undefined;
   const freshLifecycle = job.jobId !== prev.job?.jobId;
   return {
     ...prev,
     job: { jobId: job.jobId, minBlock: job.minBlock, hashes: [] },
     delivery,
-    settle: freshLifecycle ? null : prev.settle,
+    settle: terminal
+      ? { verdict: job.outcome === "settled" ? "APPROVE" : "REJECT", minBlock: 0 }
+      : freshLifecycle
+        ? null
+        : prev.settle,
   };
 }
 

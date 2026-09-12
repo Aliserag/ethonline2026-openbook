@@ -15,6 +15,7 @@ import { commands, dispatch } from "./registry";
 import { CONFIG } from "../config";
 import type { EnsTextReader } from "../../../mcp/src/ens";
 import {
+  actJobStatusRow,
   canBuy,
   classifyRevert,
   clearActJobIfClaimed,
@@ -27,6 +28,7 @@ import {
   resolveDatasetRecord,
   serializeActJob,
   setActJob,
+  terminalRefusal,
   usdcTrim,
   walkRevertData,
   type ActJob,
@@ -323,6 +325,107 @@ describe("clearActJobIfClaimed (claim must not strand a different purchase)", ()
     setActJob(null);
     clearActJobIfClaimed(getActJob(), "25");
     expect(getActJob()).toBeNull();
+  });
+
+  it("a TERMINAL act job is never cleared by a claim matching its id (recovery row survives)", () => {
+    setActJob({ ...base, outcome: "settled", txHash: `0x${"c7".repeat(32)}` });
+    clearActJobIfClaimed(getActJob(), "25");
+    expect(getActJob()).not.toBeNull();
+    expect(getActJob()?.outcome).toBe("settled");
+  });
+
+  it("a fresh buy overwrite replaces the terminal record (a new lifecycle starts)", () => {
+    setActJob({ ...base, outcome: "refunded", txHash: `0x${"c7".repeat(32)}` });
+    setActJob({ ...base }); // buy always writes a fresh, non-terminal job
+    expect(getActJob()?.outcome).toBeUndefined();
+    expect(getActJob()?.jobId).toBe("25");
+  });
+});
+
+describe("terminal retention (settle keeps the spent job on record — T12 fix 2/5)", () => {
+  const live: ActJob = {
+    datasetId: "aave-v3-arbitrum-lending",
+    jobId: "19",
+    minBlock: 504_310_000,
+    amountUsdc: 150000,
+    deadline: 1_789_220_000n,
+    payloadHash: `0x${"ab".repeat(32)}`,
+    metaBlock: 504_310_020,
+    createdAt: 1_789_210_000,
+  };
+  const terminal: ActJob = {
+    ...live,
+    outcome: "settled",
+    txHash: `0xc79ea5a3${"1".repeat(56)}` as `0x${string}`,
+  };
+
+  it("serialize → deserialize round-trips the terminal marker (reload keeps it)", () => {
+    expect(deserializeActJob(serializeActJob(terminal))).toEqual(terminal);
+  });
+
+  it("an unknown outcome is dropped, not accepted", () => {
+    const job = deserializeActJob(serializeActJob(live).replace('"createdAt":1789210000', '"createdAt":1789210000,"outcome":"pending"'));
+    expect(job?.outcome).toBeUndefined();
+  });
+
+  it("status's recovery row names the spent job: last job · settled · tx", () => {
+    const row = actJobStatusRow(terminal, false);
+    expect(row.key).toBe("last job");
+    expect(row.value).toContain("19 · settled");
+    expect(row.value).toContain("tx 0xc79ea5a3…");
+    expect(row.value).toContain("run buy <dataset> to start a new one");
+  });
+
+  it("status's recovery row keeps the active-job copy otherwise", () => {
+    expect(actJobStatusRow(live, false)).toEqual({
+      key: "active job",
+      value: "19 · run deliver / settle (or sandbox claim after its deadline)",
+    });
+    expect(actJobStatusRow(live, true).key).toBe("recovered job");
+  });
+
+  it("deliver/settle/sandbox claim refuse honestly on a spent job — nothing left to do", () => {
+    const refusal = terminalRefusal(terminal, "settle");
+    expect(refusal.render).toBe("kv");
+    if (refusal.render !== "kv") return;
+    const values = refusal.data.rows.map(([k, v]) => `${k}=${v}`).join(" | ");
+    expect(values).toContain("job=19");
+    expect(values).toContain("outcome=settled");
+    expect(values).toContain("tx=0xc79ea5a3…");
+    expect(refusal.data.note).toContain("settle: nothing left to do");
+    expect(refusal.data.note).toContain("already settled");
+  });
+
+  it("the registered deliver command REFUSES on a terminal record before any chain I/O", async () => {
+    setActJob(terminal);
+    try {
+      const result = await dispatch("deliver", {
+        publicClient: {} as never,
+        signer: { kind: "none", address: null },
+        config: CONFIG,
+        navigate: () => undefined,
+      });
+      expect(result.render).toBe("kv");
+      if (result.render === "kv") expect(result.data.note).toContain("nothing left to do");
+    } finally {
+      setActJob(null);
+    }
+  });
+
+  it("the registered settle command REFUSES on a terminal record before any chain I/O", async () => {
+    setActJob(terminal);
+    try {
+      const result = await dispatch("settle", {
+        publicClient: {} as never,
+        signer: { kind: "none", address: null },
+        config: CONFIG,
+        navigate: () => undefined,
+      });
+      expect(result.render).toBe("kv");
+      if (result.render === "kv") expect(result.data.note).toContain("nothing left to do");
+    } finally {
+      setActJob(null);
+    }
   });
 });
 

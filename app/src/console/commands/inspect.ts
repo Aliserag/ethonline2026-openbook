@@ -20,7 +20,7 @@ import { truncateHash, usdc6 } from "../../format";
 import { createEnsTextReader, parsePriceToAmount6dec, parseSlaRecord } from "../../../../mcp/src/ens";
 import { defaultChainHeadResolver } from "../../../../mcp/src/chainhead";
 import { commands, find, register, type Command, type KvRow } from "../registry";
-import { getActJob, isRecoveredActJob } from "./act";
+import { actJobStatusRow, getActJob, isRecoveredActJob } from "./act";
 
 function reason(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -191,10 +191,8 @@ const statusCommand: Command = {
     ]);
     const actJob = getActJob();
     if (actJob !== null) {
-      rows.push([
-        isRecoveredActJob() ? "recovered job" : "active job",
-        `${actJob.jobId} · run deliver / settle (or sandbox claim after its deadline)`,
-      ]);
+      const row = actJobStatusRow(actJob, isRecoveredActJob());
+      rows.push([row.key, row.value]);
     }
     const demo = demoAddress();
     if (demo === null) {

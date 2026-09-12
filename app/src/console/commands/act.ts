@@ -45,7 +45,7 @@ import {
   type Sla,
 } from "../../../../agent/escrow";
 import { verifyDelivery, type VerifyDeliveryResult } from "../../../../mcp/src/escrow";
-import { register, type Command, type KvRow } from "../registry";
+import { register, type Command, type CommandResult, type KvRow } from "../registry";
 import type { SignerKind } from "../../data/types";
 
 function reason(error: unknown): string {
@@ -280,6 +280,9 @@ async function ensureChainFor(signer: Signer): Promise<void> {
 
 /* ------------------------------------------------------ shared job state */
 
+/** A spent job's terminal lifecycle outcome — the record REMAINS, not erased. */
+export type ActOutcome = "settled" | "refunded";
+
 /** In-memory lifecycle state: `buy` → `deliver` → `settle` (and the T9 sandbox). */
 export interface ActJob {
   datasetId: string;
@@ -292,6 +295,10 @@ export interface ActJob {
   metaBlock?: number;
   /** unix seconds when the job was funded locally (recovery affordance) */
   createdAt: number;
+  /** set once the job reached a terminal state (settle/refund executed) */
+  outcome?: ActOutcome;
+  /** the terminal tx hash (settle complete or refund), when known */
+  txHash?: `0x${string}`;
 }
 
 let actJob: ActJob | null = null;
@@ -315,12 +322,50 @@ export function isRecoveredActJob(): boolean {
 
 /**
  * Clear the act slot after a terminal claim — ONLY when the claimed job IS
- * the slot's job. A refund of one job (e.g. a sandbox-staged one) must never
- * wipe a different, still-unsettled purchase's in-memory state or its
- * persisted recovery entry.
+ * the slot's job AND the slot is not already terminal. A refund of one job
+ * must never wipe a different, still-unsettled purchase's state or a spent
+ * job's terminal recovery record.
  */
 export function clearActJobIfClaimed(active: ActJob | null, claimedJobId: string): void {
-  if (active?.jobId === claimedJobId) setActJob(null);
+  if (active?.jobId === claimedJobId && active.outcome === undefined) setActJob(null);
+}
+
+/**
+ * A spent job's recovery row — the shared copy for `status` and the
+ * deliver/settle/sandbox-claim refusals: the terminal record stays ON RECORD
+ * ("last job 19 · settled · tx …"), never degraded to a bare "no active job".
+ */
+export function actJobStatusRow(job: ActJob, recovered: boolean): { key: string; value: string } {
+  if (job.outcome !== undefined) {
+    const tx = job.txHash !== undefined ? ` · tx ${job.txHash.slice(0, 10)}…${job.txHash.slice(-8)}` : "";
+    return {
+      key: "last job",
+      value: `${job.jobId} · ${job.outcome}${tx} · run buy <dataset> to start a new one`,
+    };
+  }
+  return {
+    key: recovered ? "recovered job" : "active job",
+    value: `${job.jobId} · run deliver / settle (or sandbox claim after its deadline)`,
+  };
+}
+
+/** Refusal shared by deliver/settle/sandbox claim once the job is spent. */
+export function terminalRefusal(job: ActJob, verb: string): CommandResult {
+  return {
+    render: "kv",
+    data: {
+      rows: [
+        ["job", job.jobId],
+        ["outcome", job.outcome === "settled" ? "settled" : "refunded"],
+        ...(job.txHash !== undefined
+          ? ([["tx", `${job.txHash.slice(0, 10)}…${job.txHash.slice(-8)}`]] as KvRow[])
+          : []),
+      ],
+      note: `${verb}: nothing left to do · the job already ${
+        job.outcome === "settled" ? "settled" : "refunded"
+      } · run buy <dataset> to start a new one`,
+    },
+  };
 }
 
 /* -------------------------------------------- act-job persistence (v1) */
@@ -372,6 +417,12 @@ export function deserializeActJob(raw: string): ActJob | null {
   }
   if (typeof p["metaBlock"] === "number" && Number.isInteger(p["metaBlock"])) {
     job.metaBlock = p["metaBlock"];
+  }
+  if (p["outcome"] === "settled" || p["outcome"] === "refunded") {
+    job.outcome = p["outcome"];
+  }
+  if (typeof p["txHash"] === "string" && /^0x[0-9a-fA-F]{64}$/.test(p["txHash"])) {
+    job.txHash = p["txHash"] as `0x${string}`;
   }
   return job;
 }
@@ -671,6 +722,7 @@ const deliverCommand: Command = {
     const id = argv[1];
     const job = getActJob();
     if (!job) return { render: "text", data: "deliver: no active job · run buy <dataset> first" };
+    if (job.outcome !== undefined) return terminalRefusal(job, "deliver");
     const dataset = CONFIG.datasets.find((d) => d.id === (id ?? job.datasetId));
     if (!dataset) return { render: "text", data: `deliver: unknown dataset ${id ?? job.datasetId}` };
     if (!hasGraphKey) {
@@ -762,6 +814,7 @@ const settleCommand: Command = {
   run: async (ctx) => {
     const job = getActJob();
     if (!job) return { render: "text", data: "settle: no active job · run buy <dataset>, then deliver" };
+    if (job.outcome !== undefined) return terminalRefusal(job, "settle");
     if (job.payloadHash === undefined || job.metaBlock === undefined) {
       return { render: "text", data: "settle: no delivery captured · run deliver <dataset> first" };
     }
@@ -859,9 +912,17 @@ const settleCommand: Command = {
       } else {
         rows.push(["refund", "client refunded · full amount, no fee row"]);
       }
-      // Terminal outcome (settled or refunded) — the act job is spent; no
-      // recovery affordance needed past this point.
-      setActJob(null);
+      // Terminal outcome (settled or refunded) — the job is spent, but the
+      // record REMAINS marked terminal (outcome + tx + amount) so the
+      // recovery row keeps printing "last job 19 · settled · tx …" and the
+      // tour's step chips stay DONE across reloads. A new buy or sandbox
+      // stale replaces it.
+      setActJob({
+        ...job,
+        outcome: result.verdict === "APPROVE" ? "settled" : "refunded",
+        // verdict txHash is a plain string here; the record's field is typed
+        txHash: result.txHash as `0x${string}`,
+      });
     } else {
       rows.push(["tx", "none · decision was returned without settlement (no signer given)"]);
     }

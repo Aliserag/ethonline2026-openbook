@@ -53,6 +53,7 @@ import {
   resolveDatasetQuote,
   resolveSigner,
   setActJob,
+  terminalRefusal,
   walkRevertData,
   type ActJob,
   type DatasetQuote,
@@ -451,6 +452,9 @@ const claimCommand: Command = {
       };
     }
     const job = state.job;
+    // A spent job has nothing left to claim (and its recovery row must not be
+    // cleared by an unrelated poke).
+    if (job.outcome !== undefined) return terminalRefusal(job, "sandbox claim");
     const rows: KvRow[] = [
       ["job", job.jobId],
       ["dataset", job.datasetId],
