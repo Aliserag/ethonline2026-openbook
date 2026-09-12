@@ -10,7 +10,14 @@
 import { describe, expect, it } from "bun:test";
 import { keccak256, toBytes } from "viem";
 import { loadConfigFile, type OpenBookConfig } from "../mcp/src/datasets";
-import { deliverQuery, resolveAttesterPk, runBuyerFlow } from "./buyer-cli";
+import {
+  deliverQuery,
+  isOurProvider,
+  resolveAttesterPk,
+  runBuyerFlow,
+  servingAddressOf,
+  slaFloorBlocks,
+} from "./buyer-cli";
 import { defaultQueryFor } from "./src/queries";
 import * as path from "node:path";
 
@@ -165,6 +172,67 @@ describe("attester override (OPENBOOK_ATTESTER_PK)", () => {
     expect(() => resolveAttesterPk({ OPENBOOK_ATTESTER_PK: "0xshort" }, providerPk)).toThrow(
       /OPENBOOK_ATTESTER_PK must be a 0x \+ 64 hex private key/,
     );
+  });
+});
+
+// --- seller handoff (W2 acceptance: the job's provider is the chosen seller) -----
+
+describe("seller handoff (servingAddressOf + isOurProvider)", () => {
+  const OPERATOR = "0xe09C8F90931E97d0aEE998885b306DDF08CE08Cc";
+  const PAYEE = "0x4e83eB15EE973A49E40D9A79aB2cA89a4Eb4894E";
+
+  it("serving address = svc.operator when set", () => {
+    expect(servingAddressOf(OPERATOR, PAYEE)).toBe(OPERATOR);
+  });
+
+  it("falls back to svc.payee when svc.operator is unset (recorded in the M4 report)", () => {
+    expect(servingAddressOf(null, PAYEE)).toBe(PAYEE);
+  });
+
+  it("treats junk operator/payee records as unset — never fabricates an address", () => {
+    expect(servingAddressOf("not-an-address", "also-not")).toBeNull();
+    expect(servingAddressOf(null, null)).toBeNull();
+  });
+
+  it("isOurProvider matches our own provider address case-insensitively", () => {
+    const ours = "0x64A78b6d5e99274d01D1d0A70B180A73AAEb8d21";
+    expect(isOurProvider(ours, [ours.toUpperCase()])).toBe(true);
+    expect(isOurProvider(ours.toUpperCase(), [ours])).toBe(true);
+  });
+
+  it("isOurProvider is false for the chosen seller's address (hand off, don't self-serve)", () => {
+    expect(isOurProvider(OPERATOR, ["0x64A78b6d5e99274d01D1d0A70B180A73AAEb8d21"])).toBe(false);
+  });
+
+  it("isOurProvider is false on an empty wallet list", () => {
+    expect(isOurProvider(OPERATOR, [])).toBe(false);
+  });
+});
+
+// --- SLA floor from the dataset chain (truthfulness fix: never substitute) -------
+
+describe("SLA freshness floor (slaFloorBlocks)", () => {
+  it("computes the floor from the DATASET chain's head (the chain is passed through)", async () => {
+    const seenChains: string[] = [];
+    const floor = await slaFloorBlocks("arbitrum", 50, async (chain) => {
+      seenChains.push(chain);
+      return 504_333_047; // Arbitrum head, live-shaped
+    });
+    expect(floor).toBe(504_332_997);
+    expect(seenChains).toEqual(["arbitrum"]); // the dataset's chain, never Arc
+  });
+
+  it("refuses to fund when the dataset chain's head cannot be resolved — no substitute head", async () => {
+    await expect(
+      slaFloorBlocks("arbitrum", 50, async () => {
+        throw new Error("rpc down");
+      }),
+    ).rejects.toThrow(/cannot resolve the arbitrum chain head.*refusing to fund/);
+  });
+
+  it("refuses junk heads (NaN/zero) as unresolvable", async () => {
+    await expect(slaFloorBlocks("arbitrum", 50, async () => NaN)).rejects.toThrow(/unresolvable SLA floor/);
+    await expect(slaFloorBlocks("arbitrum", 50, async () => 0)).rejects.toThrow(/unresolvable SLA floor/);
   });
 });
 

@@ -22,7 +22,7 @@ export interface ProviderStats {
   lastJobAt: bigint;
 }
 
-/** One priceable offer for a dataset (frozen W2 shape). */
+/** One priceable offer for a dataset (frozen W2 shape + serving address). */
 export interface SellerQuote {
   /** seller ENS name, e.g. "openbook.eth" or "alpha.openbook.eth" */
   name: string;
@@ -34,6 +34,9 @@ export interface SellerQuote {
   maxBlockLag: number;
   /** payout address from svc.payee */
   payee: Address;
+  /** the address the seller's loop serves as (svc.operator, falling back to
+   * svc.payee) — the job's onchain provider when buying from this seller */
+  operator: Address;
   /** per-provider market stats over the shared escrow (null until queried) */
   stats: ProviderStats | null;
 }

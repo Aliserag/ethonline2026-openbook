@@ -248,8 +248,16 @@ export interface CreateJobParams {
    * the buyer's key. Its attached account is the job's provider. To run
    * single-key (one key plays buyer + provider + evaluator, legal per spec),
    * pass the SAME wallet client for buyer and provider.
+   *
+   * Marketplace mode may pass a bare ADDRESS (the chosen seller's serving
+   * address, `svc.operator`): createJob/fund then carry that provider with no
+   * signature from it, setBudget is SKIPPED (only the provider's own key may
+   * quote the budget) — the job funds with budget 0 and the seller's own loop
+   * signs setBudget/submit. The reference impl verified: fund() with an unset
+   * budget moves no USDC and still emits JobFunded; submit() is valid on a
+   * Funded job with any budget.
    */
-  provider: WalletClient;
+  provider: WalletClient | Address;
   /** Evaluator address — settles via complete/reject; may equal buyer or provider. */
   evaluator: Address;
   sla: Sla;
@@ -283,17 +291,20 @@ export async function createJobWithSla(
   const hook = params.hook ?? ZERO_ADDRESS;
   const expirySeconds = params.expirySeconds ?? 3600;
   requireAccount(buyer); // early validation: the buyer signs createJob/approve/fund
-  const providerAccount = requireAccount(provider);
+  const providerAddress = typeof provider === "string" ? provider : requireAccount(provider).address;
+  const providerSigner = typeof provider === "string" ? null : provider; // who may sign setBudget
 
   const { timestamp } = await publicClient.getBlock();
   const expiredAt = timestamp + BigInt(expirySeconds);
 
-  // 1. BUYER creates the job — description carries the packed SLA
+  // 1. BUYER creates the job — description carries the packed SLA; the
+  // provider is a plain ADDRESS argument (no provider signature needed to
+  // create a job for it — verified in contracts/reference/AgenticCommerce.sol)
   const createHash = await write(publicClient, buyer, {
     address: escrowAddress(),
     abi: ERC8183_ABI,
     functionName: "createJob",
-    args: [providerAccount.address, evaluator, expiredAt, packSla(sla), hook],
+    args: [providerAddress, evaluator, expiredAt, packSla(sla), hook],
   });
   const createReceipt = await publicClient.waitForTransactionReceipt({
     hash: createHash,
@@ -310,13 +321,18 @@ export async function createJobWithSla(
 
   // 2. PROVIDER quotes the budget — provider-only in the reference impl
   //    (sendAndConfirm serializes the legs: fund can NEVER land before budget
-  //    on a different sender — the live failure mode was a raced revert)
-  await sendAndConfirm(publicClient, provider, {
-    address: escrowAddress(),
-    abi: ERC8183_ABI,
-    functionName: "setBudget",
-    args: [jobId, amount6dec, "0x"],
-  });
+  //    on a different sender — the live failure mode was a raced revert).
+  //    When the provider is a bare ADDRESS (marketplace mode, the seller's own
+  //    loop runs elsewhere) the caller cannot sign for it — setBudget is
+  //    skipped and the job funds with budget 0; the seller quotes + submits.
+  if (providerSigner !== null) {
+    await sendAndConfirm(publicClient, providerSigner, {
+      address: escrowAddress(),
+      abi: ERC8183_ABI,
+      functionName: "setBudget",
+      args: [jobId, amount6dec, "0x"],
+    });
+  }
   // 3. BUYER approves USDC — 6 decimals, never 18 (verified Task 0)
   await sendAndConfirm(publicClient, buyer, {
     address: usdcAddress(),

@@ -14,6 +14,7 @@ function offer(overrides: Partial<SellerQuote>): SellerQuote {
     priceUsdc: 120000, // 0.12 USDC
     maxBlockLag: 50,
     payee: "0x4e83eB15EE973A49E40D9A79aB2cA89a4Eb4894E",
+    operator: "0x64A78b6d5e99274d01D1d0A70B180A73AAEb8d21",
     stats: null,
     ...overrides,
   };
@@ -106,5 +107,17 @@ describe("pickSeller", () => {
       "fresh",
     );
     expect(picked.stats).toBe(stats);
+  });
+
+  it("carries the serving operator through untouched (the job's provider)", () => {
+    const operator = "0xe09C8F90931E97d0aEE998885b306DDF08CE08Cc";
+    const picked = pickSeller(
+      [
+        offer({ name: "a.openbook.eth", maxBlockLag: 30, operator }),
+        offer({ name: "b.openbook.eth", maxBlockLag: 60, payee: OTHER_PAYEE }),
+      ],
+      "fresh",
+    );
+    expect(picked).toMatchObject({ name: "a.openbook.eth", operator });
   });
 });

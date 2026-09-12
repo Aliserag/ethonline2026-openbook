@@ -22,7 +22,10 @@
  * offering that schema from the live ENS directory (each with its ENS price
  * and SLA); `--prefer fresh|cheap` (default `fresh`: tighter maxBlockLag
  * wins, price breaks ties) picks one and the flow runs against the chosen
- * seller — listing, quote and charge all read the same ENS records.
+ * seller — listing, quote and charge all read the same ENS records. The job
+ * is funded FOR the chosen seller (onchain provider = their svc.operator):
+ * the CLI never signs setBudget/submit for them; their own loop quotes and
+ * serves, and the CLI polls it (≤120s) before verifying/settling as buyer.
  *
  * --stale routes the delivery query through the stale proxy (default
  * http://127.0.0.1:8787, scripts/stale-proxy.ts) which replays a cached old
@@ -48,6 +51,7 @@ import {
   createPublicClient,
   createWalletClient,
   http,
+  isAddress,
   keccak256,
   parseAbiItem,
   toBytes,
@@ -63,9 +67,10 @@ import { fileURLToPath } from "node:url";
 import {
   ARC_RPC_URL,
   attestDelivery,
-  ERC8183,
   createJobWithSla,
   escrowAddress,
+  getJob,
+  JOB_STATUS,
   setEscrowAddress,
   setUsdcAddress,
   submitDeliverable,
@@ -131,6 +136,9 @@ export interface BuyerFlowResult {
   verify?: { verdict: "APPROVE" | "REJECT"; reason?: string; minBlock: number };
   settleTxHash?: string;
   refunded?: boolean;
+  /** true when the job's provider is another seller and the CLI handed it to
+   * their loop instead of serving — verify/settle only ran if they served */
+  waitingOnSeller?: boolean;
 }
 
 export interface BuyerFlowOptions {
@@ -147,6 +155,14 @@ export interface BuyerFlowOptions {
   onlyQuote?: boolean;
   /** optional SlaHook address — enables onchain SLA adjudication for the job */
   hook?: string;
+  /**
+   * Marketplace mode (W2): the chosen seller's serving address
+   * (`SellerQuote.operator`) — the job's onchain provider. The CLI funds the
+   * job for that seller and does NOT sign setBudget/submit on its behalf;
+   * the seller's own loop quotes and serves. Omit to keep the CLI's own
+   * provider wallet as the job's provider (single-seller demo, unchanged).
+   */
+  providerOverride?: Address;
 }
 
 export interface BuyerDeps {
@@ -262,12 +278,68 @@ export function resolveAttesterPk(
 }
 
 /**
+ * The address a seller's jobs are funded to (their loop's provider identity):
+ * svc.operator, falling back to svc.payee when the operator record is unset.
+ * Null when neither record is a valid address — such a seller cannot receive
+ * a job.
+ */
+export function servingAddressOf(operator: string | null, payee: string | null): Address | null {
+  if (operator !== null && isAddress(operator)) return operator;
+  if (payee !== null && isAddress(payee)) return payee;
+  return null;
+}
+
+/**
+ * Whether the job's onchain provider is one of OUR wallets (the CLI's own
+ * provider key). When it is, the CLI signs setBudget/submit itself (the
+ * single-seller demo); when it is the chosen seller's serving address, the
+ * CLI funds the job for them and their loop serves it. Case-insensitive
+ * (addresses differ in casing across records/signers).
+ */
+export function isOurProvider(providerAddress: Address, ourAddresses: readonly Address[]): boolean {
+  const needle = providerAddress.toLowerCase();
+  return ourAddresses.some((address) => address.toLowerCase() === needle);
+}
+
+/**
+ * The SLA freshness floor: the DATASET chain's head minus the seller's
+ * maxBlockLag. The deliverable's `_meta.block` lives on the dataset chain
+ * (Arbitrum/Ethereum mainnets), so the floor MUST come from that chain's
+ * head — never another chain's (a floor computed from Arc's head is vacuous:
+ * every Arbitrum metaBlock clears it, so the hook would pass stale data).
+ * Refuses loudly when the dataset chain's head cannot be resolved — a buy
+ * with an unresolvable floor is a truthfulness defect, not a fallback.
+ */
+export async function slaFloorBlocks(
+  chain: "arbitrum" | "ethereum",
+  maxBlockLag: number,
+  resolveHead: (chain: "arbitrum" | "ethereum") => Promise<number>,
+): Promise<number> {
+  let head: number;
+  try {
+    head = await resolveHead(chain);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(
+      `buyer-cli: cannot resolve the ${chain} chain head (${message}) — refusing to fund a job with an unresolvable SLA floor`,
+    );
+  }
+  if (!Number.isInteger(head) || head <= 0) {
+    throw new Error(
+      `buyer-cli: cannot resolve the ${chain} chain head (got ${head}) — refusing to fund a job with an unresolvable SLA floor`,
+    );
+  }
+  return Math.max(1, head - maxBlockLag);
+}
+
+/**
  * Marketplace mode (W2): every offer for a schema — the parent storefront's
  * datasets plus every ENS-discovered subname seller advertising the schema —
- * with prices/SLAs/payees resolved through the SAME `resolveDatasetRecords`
- * the quote and the MCP use, so listing == quote == charge. A seller whose
- * namespace is unpriceable today is skipped honestly: the buy path hard-fails
- * on it too, so the comparison lists only purchasable offers.
+ * with prices/SLAs/payees/operators resolved through the SAME
+ * `resolveDatasetRecords` the quote and the MCP use, so listing == quote ==
+ * charge. A seller whose namespace is unpriceable today is skipped honestly:
+ * the buy path hard-fails on it too, so the comparison lists only
+ * purchasable offers.
  */
 export async function offersForSchema(
   config: OpenBookConfig,
@@ -275,6 +347,10 @@ export async function offersForSchema(
   readEnsText: EnsTextReader,
 ): Promise<SellerQuote[]> {
   const offers: SellerQuote[] = [];
+  const parentOperator = servingAddressOf(
+    await readEnsText(config.ens, "svc.operator"),
+    null,
+  );
   for (const dataset of config.datasets) {
     if (dataset.schema !== schema) continue;
     const records = await resolveDatasetRecords(config.ens, dataset.id, readEnsText);
@@ -284,6 +360,7 @@ export async function offersForSchema(
       priceUsdc: parsePriceToAmount6dec(records.price as string),
       maxBlockLag: parseSlaRecord(records.sla as string).maxBlockLag,
       payee: records.payee as Address,
+      operator: parentOperator ?? (records.payee as Address),
       stats: null,
     });
   }
@@ -297,17 +374,58 @@ export async function offersForSchema(
       } catch {
         continue; // no priceable records → the buy path would hard-fail; skip
       }
+      const operator = servingAddressOf(seller.operator, seller.payee);
+      if (operator === null) continue; // no serving address → cannot receive a job
       offers.push({
         name: seller.name,
         datasetId: entry.id,
         priceUsdc: parsePriceToAmount6dec(records.price as string),
         maxBlockLag: parseSlaRecord(records.sla as string).maxBlockLag,
         payee: records.payee as Address,
+        operator,
         stats: null,
       });
     }
   }
   return offers.sort((a, b) => a.name.localeCompare(b.name) || a.datasetId.localeCompare(b.datasetId));
+}
+
+/** How long the CLI waits for the chosen seller's loop to serve a funded job. */
+const SELLER_SERVE_TIMEOUT_MS = 120_000;
+/** Poll spacing while waiting for the seller's loop. */
+const SELLER_SERVE_POLL_MS = 10_000;
+
+/**
+ * Marketplace mode: the job's provider is the chosen seller's loop running in
+ * its own process — the CLI must NOT sign submit for them. Poll the job
+ * (bounded, ≤120s by default) until that loop submits, printing each state
+ * transition. Returns false when the window expires or the job goes Expired —
+ * the caller then hands back with the honest "not served yet" message and the
+ * job stays in escrow until the deadline.
+ */
+export async function waitForSellerSubmission(
+  publicClient: PublicClient,
+  jobId: bigint,
+  log: (line: string) => void,
+  timeoutMs: number = SELLER_SERVE_TIMEOUT_MS,
+): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  let lastStatus = -1;
+  while (Date.now() < deadline) {
+    const job = await getJob(publicClient, jobId);
+    if (job.status !== lastStatus) {
+      log(`poll job=${String(jobId)} status=${JOB_STATUS[job.status] ?? job.status} provider=${job.provider}`);
+      lastStatus = job.status;
+    }
+    if (job.status >= 2) return true; // Submitted / further: the seller served it
+    if (job.status >= 5) return false; // Expired — window closed onchain
+    const waitMs = Math.min(SELLER_SERVE_POLL_MS, Math.max(0, deadline - Date.now()));
+    if (waitMs <= 0) break;
+    const { promise, resolve } = Promise.withResolvers<void>();
+    setTimeout(resolve, waitMs);
+    await promise;
+  }
+  return false;
 }
 
 /**
@@ -380,26 +498,44 @@ export async function runBuyerFlow(
     deps.attesterWallet ?? walletFromKey(resolveAttesterPk(env, providerPk as `0x${string}`), rpcUrl);
 
   const head = await publicClient.getBlockNumber();
+  // SLA freshness floor = head(DATASET chain) − maxBlockLag: the deliverable's
+  // _meta.block lives on the dataset chain (Arbitrum/Ethereum), so the floor
+  // comes from THAT chain — never Arc's (a wrong-chain floor is vacuous and
+  // would let the hook pass stale data). Refuses when unresolvable.
+  const minBlock = await slaFloorBlocks(
+    dataset.chain,
+    slaRecord.maxBlockLag,
+    deps.chainHead ?? defaultChainHeadResolver(env["ALCHEMY_API_KEY"]),
+  );
   const sla: Sla = {
-    minBlock: Number(head) - slaRecord.maxBlockLag, // fresh data must be newer than maxBlockLag blocks
+    minBlock, // fresh data must be newer than maxBlockLag blocks
     schemaHash: keccak256(toBytes(dataset.schema)),
     maxLatencyMs: slaRecord.maxLatencyMs,
   };
+  // Marketplace mode funds the job FOR the chosen seller: the job's provider
+  // is their serving address (not our key), so their loop picks it up. The
+  // single-seller path keeps our own wallet as provider (setBudget signed).
+  const jobProvider = options.providerOverride ?? providerAddress;
+  const servingOurselves = isOurProvider(jobProvider, [providerAddress]);
   const jobId = await createJobWithSla(publicClient, {
     buyer: buyerWallet,
-    provider: providerWallet,
+    provider: options.providerOverride ?? providerWallet,
     evaluator: buyerAddress,
     sla,
     amount6dec: BigInt(amount),
     expirySeconds: options.expirySeconds ?? 3600,
     hook: hookAddress,
   });
-  log(`paid: jobId=${jobId} amount=${quote.amountUsdc} USDC escrow=${escrowAddress()}`);
+  log(
+    servingOurselves
+      ? `paid: jobId=${jobId} amount=${quote.amountUsdc} USDC escrow=${escrowAddress()}`
+      : `paid: jobId=${jobId} amount=${quote.amountUsdc} USDC escrow=${escrowAddress()} provider=${jobProvider} (chosen seller — their loop quotes + serves)`,
+  );
 
   // recover the fund tx hash from the JobFunded log mined after `head`
   let fundHash: string | undefined;
   const fundLogs = await publicClient.getLogs({
-    address: ERC8183,
+    address: escrowAddress(),
     event: JOB_FUNDED,
     args: { jobId },
     fromBlock: head,
@@ -424,8 +560,23 @@ export async function runBuyerFlow(
   if (delivery.freshness === "no-meta" || delivery.metaBlock === null) {
     throw new Error("buyer-cli: delivery carries no _meta — nothing to verify against the SLA");
   }
-  await submitDeliverable(publicClient, providerWallet, jobId, delivery.payloadHash);
-  log(`submitted: jobId=${jobId} payloadHash=${delivery.payloadHash} metaBlock=${delivery.metaBlock}`);
+  if (servingOurselves) {
+    // the job's provider is our key — sign submit as today
+    await submitDeliverable(publicClient, providerWallet, jobId, delivery.payloadHash);
+    log(`submitted: jobId=${jobId} payloadHash=${delivery.payloadHash} metaBlock=${delivery.metaBlock}`);
+  } else {
+    // the job's provider is the chosen seller — never sign submit for them;
+    // give their loop a bounded window to serve (they need to see the
+    // JobFunded log, run the gateway query, and sign submit)
+    const served = await waitForSellerSubmission(publicClient, jobId, log);
+    if (!served) {
+      log(
+        "RESULT: the seller's loop has not served this job yet — re-run deliver/verify later; " +
+          "the funds stay in escrow until the deadline",
+      );
+      return { quote, jobId: String(jobId), fundHash, delivery, waitingOnSeller: true };
+    }
+  }
 
   // Onchain SLA adjudication (optional): when a hook is configured, the
   // operator posts the freshness proof BEFORE settlement. A fresh delivery
@@ -477,6 +628,7 @@ export async function runBuyerFlow(
     },
     settleTxHash: verifyResult.txHash,
     refunded,
+    waitingOnSeller: !servingOurselves,
   };
 }
 
@@ -597,7 +749,8 @@ export async function runMarketplaceFlow(
   const chosen = pickSeller(offers, options.prefer);
   console.log(
     `[buyer] router: prefer=${options.prefer} -> ${chosen.name} (${chosen.datasetId}) ` +
-      `${(chosen.priceUsdc / 1_000_000).toFixed(2)} USDC/query maxBlockLag=${chosen.maxBlockLag}`,
+      `${(chosen.priceUsdc / 1_000_000).toFixed(2)} USDC/query maxBlockLag=${chosen.maxBlockLag} ` +
+      `provider=${chosen.operator}`,
   );
   const sellerConfig: OpenBookConfig = {
     ...config,
@@ -619,6 +772,7 @@ export async function runMarketplaceFlow(
       expirySeconds: options.expirySeconds,
       onlyQuote: options.onlyQuote,
       hook: options.hook,
+      providerOverride: chosen.operator, // the job's onchain provider is the chosen seller
     },
     { env },
   );
