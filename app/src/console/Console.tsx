@@ -252,6 +252,12 @@ export function Console(): JSX.Element {
   // ⌘K (or Ctrl+K) opens the fuzzy palette; ⌘L clears the tape.
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
+      if (paletteOpen && event.key === "Escape") {
+        // wherever focus is, Escape closes the palette (it made the page inert)
+        event.preventDefault();
+        setPaletteOpen(false);
+        return;
+      }
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
         if (paletteOpen) {

@@ -159,6 +159,11 @@ export function Palette({
   const visible = ranked.slice(0, 12);
 
   const onKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>): void => {
+    if (event.key === "Tab") {
+      // the palette is a one-control dialog: focus stays on its input
+      event.preventDefault();
+      return;
+    }
     if (event.key === "ArrowDown") {
       event.preventDefault();
       setSel((s) => Math.min(visible.length - 1, s + 1));
