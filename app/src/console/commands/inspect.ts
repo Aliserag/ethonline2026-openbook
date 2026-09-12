@@ -237,7 +237,7 @@ const ensShowCommand: Command = {
         columns: ["record", "value"],
         rows,
         summary:
-          "live reads from sepiola ENSv2 — price/sla/payee unset hard-fails the quote (no hard-coded values)",
+          "live reads from sepolia ENSv2 — price/sla/payee unset hard-fails the quote (no hard-coded values)",
       },
     };
   },
