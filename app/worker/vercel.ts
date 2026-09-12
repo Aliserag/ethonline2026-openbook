@@ -4,9 +4,9 @@
  * the Cloudflare worker; the subgraph cache is in memory per warm instance.
  */
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { LLM_BASE_DEFAULT, LLM_MODEL_DEFAULT, STUDIO_UPSTREAM, ask, attest, deliver, parseAttestRequest, parseDeliverRequest } from "./shared";
+import { LLM_BASE_DEFAULT, LLM_MODEL_DEFAULT, STUDIO_UPSTREAM, ask, attest, deliver, parseAttestRequest, parseDeliverRequest, sepoliaRpc } from "./shared";
 
-export type Route = "subgraph" | "deliver" | "attest" | "ask";
+export type Route = "subgraph" | "deliver" | "attest" | "ask" | "sepolia";
 
 const FRESH_MS = 20_000;
 const KEEP_MS = 1_800_000;
@@ -103,6 +103,11 @@ export async function handler(route: Route, req: IncomingMessage & { body?: unkn
       const out = await attest(parsed, process.env.OPENBOOK_ATTESTER_PK ?? "");
       if (out.ok) send(res, 200, JSON.stringify(out));
       else send(res, out.status, JSON.stringify({ error: out.error }));
+      return;
+    }
+    if (route === "sepolia") {
+      const out = await sepoliaRpc(body, process.env.SEPOLIA_RPC ?? "");
+      send(res, out.status, out.text);
       return;
     }
     const out = await ask(body, {

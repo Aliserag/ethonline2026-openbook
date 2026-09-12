@@ -269,11 +269,14 @@ export function Console(): JSX.Element {
       }
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
+        // first ⌘K opens the console with its input and mode chip reachable;
+        // a second ⌘K opens the command palette over it; a third closes the palette
         if (paletteOpen) {
           setPaletteOpen(false);
-        } else {
-          paletteOpenedDrawerRef.current = !open;
+        } else if (!open) {
+          paletteOpenedDrawerRef.current = false;
           setOpen(true);
+        } else {
           setPaletteOpen(true);
         }
         return;

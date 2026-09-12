@@ -9,10 +9,11 @@
  *   POST /api/attest     the SlaHook attester (server-held key; onchain checks and
  *                        the deliver signature are required)
  *   POST /api/ask/chat/completions   the console's LLM, key held here
+ *   POST /api/sepolia    JSON-RPC proxy to the configured Sepolia RPC (ENS reads)
  * Everything else is served from the static assets. No secret ever reaches the
  * browser: keys are Pages secrets (wrangler pages secret put).
  */
-import { LLM_BASE_DEFAULT, LLM_MODEL_DEFAULT, STUDIO_UPSTREAM, ask, attest, deliver, parseAttestRequest, parseDeliverRequest } from "./shared";
+import { LLM_BASE_DEFAULT, LLM_MODEL_DEFAULT, STUDIO_UPSTREAM, ask, attest, deliver, parseAttestRequest, parseDeliverRequest, sepoliaRpc } from "./shared";
 
 interface Env {
   ASSETS: { fetch(request: Request): Promise<Response> };
@@ -21,6 +22,7 @@ interface Env {
   LLM_API_KEY?: string;
   LLM_BASE_URL?: string;
   LLM_MODEL?: string;
+  SEPOLIA_RPC?: string;
 }
 
 const FRESH_SECONDS = 20;
@@ -110,6 +112,10 @@ export default {
         if (typeof parsed === "string") return json({ error: parsed }, 400);
         const out = await attest(parsed, env.OPENBOOK_ATTESTER_PK ?? "");
         return out.ok ? json(out, 200) : json({ error: out.error }, out.status);
+      }
+      if (url.pathname === "/api/sepolia") {
+        const out = await sepoliaRpc(await request.text(), env.SEPOLIA_RPC ?? "");
+        return new Response(out.text, { status: out.status, headers: { "content-type": "application/json", ...CORS } });
       }
       if (url.pathname === "/api/ask/chat/completions") {
         const out = await ask(await request.text(), {

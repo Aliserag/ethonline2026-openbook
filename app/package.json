@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build:worker": "bun build worker/cf.ts --target browser --minify --outfile public/_worker.js && bun build worker/entries/subgraph.ts --target node --format esm --minify --outfile public/api/subgraph.mjs && bun build worker/entries/deliver.ts --target node --format esm --minify --outfile public/api/deliver.mjs && bun build worker/entries/attest.ts --target node --format esm --minify --outfile public/api/attest.mjs && bun build worker/entries/ask/chat/completions.ts --target node --format esm --minify --outfile public/api/ask/chat/completions.mjs",
+    "build:worker": "bun build worker/cf.ts --target browser --minify --outfile public/_worker.js && bun build worker/entries/subgraph.ts --target node --format esm --minify --outfile public/api/subgraph.mjs && bun build worker/entries/deliver.ts --target node --format esm --minify --outfile public/api/deliver.mjs && bun build worker/entries/attest.ts --target node --format esm --minify --outfile public/api/attest.mjs && bun build worker/entries/sepolia.ts --target node --format esm --minify --outfile public/api/sepolia.mjs && bun build worker/entries/ask/chat/completions.ts --target node --format esm --minify --outfile public/api/ask/chat/completions.mjs",
     "build": "bun run build:worker && tsc --noEmit && VITE_GRAPH_GATEWAY_KEY= VITE_ALCHEMY_API_KEY= VITE_LLM_API_KEY= vite build",
     "preview": "vite preview"
   },

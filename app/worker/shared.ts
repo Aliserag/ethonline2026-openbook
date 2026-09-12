@@ -251,6 +251,16 @@ function revertData(error: unknown): string | undefined {
   return undefined;
 }
 
+// ---- sepolia (JSON-RPC proxy; the Alchemy URL stays server-side) ---------------
+
+/** Forward one JSON-RPC body to the configured Sepolia RPC. 503 when none is set, so the page falls back to public RPCs. */
+export async function sepoliaRpc(bodyText: string, rpcUrl: string): Promise<{ status: number; text: string }> {
+  if (!rpcUrl) return { status: 503, text: JSON.stringify({ error: "no Sepolia RPC configured on this deployment" }) };
+  if (bodyText.length > 20_000) return { status: 413, text: JSON.stringify({ error: "request too large" }) };
+  const upstream = await fetch(rpcUrl, { method: "POST", headers: { "content-type": "application/json" }, body: bodyText });
+  return { status: upstream.status, text: await upstream.text() };
+}
+
 // ---- ask (the console's LLM, key held here) ------------------------------------
 
 export interface LlmEnv {

@@ -73,7 +73,7 @@ offchain before settling an escrowed job.
 `verify_delivery` is deterministic: `metaBlock >= SLA.minBlock` (parsed from the
 onchain job description) + well-formed hash ⇒ `APPROVE`, else
 `REJECT`/`STALE_DATA`/`INVALID_HASH`. Onchain writes (`complete()` /
-`rejectAndRefund()` on ERC-8183 `0x0747…4583`) only run with `settle: true`.
+`rejectAndRefund()` on the ERC-8183 escrow named in the config, `0x967e…7Dd5` for OpenBook) only run with `settle: true`.
 
 ## Live verification
 

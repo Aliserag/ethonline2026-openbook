@@ -109,10 +109,10 @@ const ALLOWLIST_ABI = [
 const STOREFRONT_KEYS = ["svc.menu", "svc.price", "svc.sla", "svc.payee", "svc.operator", "svc.pnl"] as const;
 const HARD_FAIL_KEYS = ["svc.price", "svc.sla", "svc.payee"];
 
-function jobTableRow(job: { jobId: bigint; state: string; amount: bigint; buyer: string; seller: string; timestamp: number }): Record<string, string> {
+function jobTableRow(job: { jobId: bigint; state: string; amount: bigint; buyer: string; seller: string; timestamp: number; deadline?: bigint }): Record<string, string> {
   return {
     job: job.jobId.toString(),
-    state: job.state,
+    state: job.state === "open" && job.deadline !== undefined && job.deadline > 0n && Number(job.deadline) < Date.now() / 1000 ? "expired · refundable (claimRefund)" : job.state,
     amount: usdc6(job.amount),
     buyer: truncateHash(job.buyer),
     seller: truncateHash(job.seller),

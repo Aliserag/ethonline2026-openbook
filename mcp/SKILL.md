@@ -44,7 +44,7 @@ verified Messari subgraph ids (the loader refuses a drift).
 {
   "name": "my-store",
   "ens": "mystore.eth",
-  "escrow": "0x0747EEf0706327138c69792bF28Cd525089e4583",
+  "escrow": "0x967e005154D0F62C33Eac8E2F44b44d4C4C07Dd5",
   "payee": "0x0000000000000000000000000000000000000000",
   "operatorKey": "OPERATOR_PRIVATE_KEY",
   "datasets": [

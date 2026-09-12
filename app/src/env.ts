@@ -5,8 +5,14 @@
  * a hard-coded value.
  */
 export const env = {
-  /** Optional Sepolia RPC for ENSv2 reads; unset -> viem default public RPC */
-  sepoliaRpc: (import.meta.env.VITE_SEPOLIA_RPC as string | undefined) ?? undefined,
+  /**
+   * Sepolia RPC for ENSv2 reads. Deployed origins use the page's own /api/sepolia
+   * proxy (the Alchemy URL stays server-side); public RPCs are the fallback
+   * either way (mcp/src/ens.ts sepoliaTransport).
+   */
+  sepoliaRpc:
+    (import.meta.env.VITE_SEPOLIA_RPC as string | undefined) ??
+    (typeof location !== "undefined" && !["localhost", "127.0.0.1", "[::1]"].includes(location.hostname) ? `${location.origin}/api/sepolia` : undefined),
   /** Optional Arc testnet RPC; unset -> https://rpc.testnet.arc.io (public) */
   arcRpc: (import.meta.env.VITE_ARC_TESTNET_RPC as string | undefined) ?? undefined,
   /** Arc chain identity — override for mainnet (e.g. 5042) without code edits. */
