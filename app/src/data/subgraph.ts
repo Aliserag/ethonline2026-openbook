@@ -35,6 +35,7 @@ interface QueryPaidRaw {
 interface FulfilledRaw { id?: unknown; jobId?: unknown; payloadHash?: unknown; metaBlock?: unknown }
 interface SettledRaw { id?: unknown; jobId?: unknown; seller?: unknown; amount?: unknown }
 interface RefundRaw { id?: unknown; jobId?: unknown; reason?: unknown }
+interface PolicyBlockedRaw { id?: unknown; reason?: unknown }
 
 function str(v: unknown): string {
   return typeof v === "string" ? v : v === null || v === undefined ? "" : String(v);
@@ -199,6 +200,37 @@ export async function fetchLag(
   const root = (typeof data === "object" && data !== null ? data : {}) as Record<string, unknown>;
   const rows = Array.isArray(root["queryPaids"]) ? root["queryPaids"].length : 0;
   return { indexed: meta.block ?? 0, rows };
+}
+
+export interface PolicyRefusalView {
+  /** PolicyBlocked reason string, e.g. PER_TX_CAP / DAILY_CAP / NOT_ALLOWLISTED */
+  reason: string;
+  /**
+   * Entity id = txHash||logIndex (the subgraph's logIndexId) — the refusal
+   * tx hash is its first 66 chars (0x + 64 hex).
+   */
+  id: string;
+}
+
+/**
+ * PolicyBlocked rows — the policy wallet's refusal evidence (PolicyWallet.sol
+ * emits PolicyBlocked instead of reverting on cap/allowlist violations, so
+ * these rows are the truth for `policy refusals`; the subgraph's PolicyConfig
+ * entity is empty on our instance and is never read). Unscoped: the policy
+ * wallet is global to the book.
+ */
+export async function fetchPolicyRefusals(
+  key?: string,
+  fetchImpl?: FetchLike,
+): Promise<PolicyRefusalView[]> {
+  const endpoint = CONFIG.pnl.endpoint.replace("{GRAPH_GATEWAY_KEY}", key ?? "");
+  const query = `{
+  policyBlockeds(first: 100, orderBy: id, orderDirection: desc) { id reason }
+}`;
+  const { data } = await hostedQuery({ url: endpoint, query, fetchImpl });
+  const root = (typeof data === "object" && data !== null ? data : {}) as Record<string, unknown>;
+  const rows = (Array.isArray(root["policyBlockeds"]) ? root["policyBlockeds"] : []) as PolicyBlockedRaw[];
+  return rows.map((row) => ({ id: str(row["id"]), reason: str(row["reason"]) }));
 }
 
 /**
