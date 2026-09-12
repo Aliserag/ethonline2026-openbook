@@ -79,6 +79,10 @@ are organs, not stickers:
   reverts `SlaNotMet`, the refund path stays open). Wired through the shipped
   CLI: `--hook <addr>` + `OPENBOOK_ESCROW`/`OPENBOOK_HOOK`, a hooked job's
   settlement is enforced onchain, end to end, with the stock binary.
+  **Sustainable by construction:** a configurable platform fee (2% on our
+  escrow instance) routes every settlement's cut to the policy-gated treasury —
+  verified onchain: the settlement receipt splits 0.0020 USDC to the
+  PolicyWallet and 0.0980 to the seller (tx `0xb4fbc894…`).
 - **The Graph (the product):** `sla-subgraph-mcp`, a generic MCP server with a
   packaged, node-runnable bin (npm publishing is the one-line post-freeze step)
   that turns any subgraph into a paid, freshness-gated product; OpenBook is the reference
