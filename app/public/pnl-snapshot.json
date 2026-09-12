@@ -1,5 +1,5 @@
 {
-  "takenAt": "2026-09-12T19:05:31.120Z",
+  "takenAt": "2026-09-12T19:12:44.100Z",
   "dailyPnLs": [
     {
       "id": "day-2838",
@@ -88,6 +88,14 @@
       "costs": "0",
       "refunds": "150000",
       "net": "7000"
+    },
+    {
+      "id": "day-2860",
+      "startedAt": "1789240301",
+      "revenue": "98000",
+      "costs": "0",
+      "refunds": "0",
+      "net": "98000"
     }
   ],
   "refundIssueds": [
@@ -109,6 +117,24 @@
   ],
   "providers": [
     {
+      "id": "0xe4aaee76c53e9f3f16fca969c31e18f8522b41ef",
+      "jobs": 36,
+      "settled": "1274000",
+      "refunded": "600000",
+      "delivered": 26,
+      "avgLagBlocks": "34.53846153846153846153846153846155",
+      "lastJobAt": "1789240270"
+    },
+    {
+      "id": "0xb152c3b6436318ad340153f1d30c9bbb8634681a",
+      "jobs": 28,
+      "settled": "28000000",
+      "refunded": "0",
+      "delivered": 28,
+      "avgLagBlocks": "28.46428571428571428571428571428571",
+      "lastJobAt": "1789240065"
+    },
+    {
       "id": "0x64a78b6d5e99274d01d1d0a70b180a73aaeb8d21",
       "jobs": 92,
       "settled": "1583000",
@@ -116,24 +142,6 @@
       "delivered": 81,
       "avgLagBlocks": "37.81481481481481481481481481481481",
       "lastJobAt": "1789239879"
-    },
-    {
-      "id": "0xe4aaee76c53e9f3f16fca969c31e18f8522b41ef",
-      "jobs": 35,
-      "settled": "1176000",
-      "refunded": "600000",
-      "delivered": 25,
-      "avgLagBlocks": "34.28000000000000000000000000000001",
-      "lastJobAt": "1789238917"
-    },
-    {
-      "id": "0xb152c3b6436318ad340153f1d30c9bbb8634681a",
-      "jobs": 27,
-      "settled": "27000000",
-      "refunded": "0",
-      "delivered": 27,
-      "avgLagBlocks": "28.77777777777777777777777777777777",
-      "lastJobAt": "1789237072"
     },
     {
       "id": "0xfbe4e6d717adbd06431871182d666890b9d83c8d",
