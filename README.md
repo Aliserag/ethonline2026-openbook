@@ -315,7 +315,7 @@ Full tool reference + the one-command live-data path:
 | Escrow rail | OpenBook market escrow (ERC-8183 instance, 2% fee, SlaHook whitelisted) `0x967e005154D0F62C33Eac8E2F44b44d4C4C07Dd5` on Arc testnet (chain 5042002); the shared reference deployment `0x0747EEf0…4583` carries the early history |
 | Policy treasury | `PolicyWallet` `0x4e83eB15EE973A49E40D9A79aB2cA89a4Eb4894E` (Arc testnet) |
 | Agent identity | ERC-8004 **agentId 894065** on Arc testnet |
-| Audited books | `open-book` subgraph, `https://api.studio.thegraph.com/query/1760032/open-book/v0.0.8` (public; the page reads it through a cached same-origin proxy) |
+| Audited books | `open-book` subgraph, `https://api.studio.thegraph.com/query/1760032/open-book/v0.0.8` (v0.0.9 is the same code, deployed twice because Studio rate-limits per deployment and the page's proxy fails over; public; the page reads it through a cached same-origin proxy) |
 
 ## What's proven, and what isn't
 
