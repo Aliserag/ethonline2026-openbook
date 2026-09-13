@@ -5,16 +5,19 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build:worker": "bun build worker/cf.ts --target browser --minify --outfile public/_worker.js && bun build worker/entries/subgraph.ts --target node --format esm --minify --outfile public/api/subgraph.mjs && bun build worker/entries/deliver.ts --target node --format esm --minify --outfile public/api/deliver.mjs && bun build worker/entries/attest.ts --target node --format esm --minify --outfile public/api/attest.mjs && bun build worker/entries/sepolia.ts --target node --format esm --minify --outfile public/api/sepolia.mjs && bun build worker/entries/circle/status.ts --target node --format esm --minify --outfile public/api/circle/status.mjs && bun build worker/entries/circle/job.ts --target node --format esm --minify --outfile public/api/circle/job.mjs && bun build worker/entries/circle/submit.ts --target node --format esm --minify --outfile public/api/circle/submit.mjs && bun build worker/entries/ask/chat/completions.ts --target node --format esm --minify --outfile public/api/ask/chat/completions.mjs",
+    "build:worker": "bun build worker/cf.ts --target browser --minify --outfile public/_worker.js && bun build worker/entries/subgraph.ts --target node --format esm --minify --outfile public/api/subgraph.mjs && bun build worker/entries/deliver.ts --target node --format esm --minify --outfile public/api/deliver.mjs && bun build worker/entries/attest.ts --target node --format esm --minify --outfile public/api/attest.mjs && bun build worker/entries/sepolia.ts --target node --format esm --minify --outfile public/api/sepolia.mjs && bun build worker/entries/circle/status.ts --target node --format esm --minify --outfile public/api/circle/status.mjs && bun build worker/entries/circle/job.ts --target node --format esm --minify --outfile public/api/circle/job.mjs && bun build worker/entries/circle/submit.ts --target node --format esm --minify --outfile public/api/circle/submit.mjs && bun build worker/entries/x402/query.ts --target node --format esm --minify --outfile public/api/x402/query.mjs && bun build worker/entries/x402/status.ts --target node --format esm --minify --outfile public/api/x402/status.mjs && bun build worker/entries/ask/chat/completions.ts --target node --format esm --minify --outfile public/api/ask/chat/completions.mjs",
     "build": "bun run build:worker && tsc --noEmit && VITE_GRAPH_GATEWAY_KEY= VITE_ALCHEMY_API_KEY= VITE_LLM_API_KEY= vite build",
     "preview": "vite preview"
   },
   "dependencies": {
+    "@circle-fin/x402-batching": "3.4.0",
     "@fontsource-variable/bricolage-grotesque": "^5.3.0",
     "@fontsource/ibm-plex-mono": "^5.3.0",
     "@fontsource/ibm-plex-sans": "^5.3.0",
     "@fontsource/space-grotesk": "^5.3.0",
     "@tanstack/react-query": "^5.102.8",
+    "@x402/core": "^2.25.0",
+    "@x402/evm": "^2.25.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "viem": "^2.56.3",
