@@ -1,6 +1,6 @@
 /** Operator address → ENS seller name, from the live market directory. The
- *  demo wallet plays both sides of a keyless run (single-key operation), so
- *  its jobs are labeled as such rather than shown as a bare address. */
+ *  demo wallet played both sides of the keyless runs before Sep 13 (single-key
+ *  operation); since then the page's Circle buyer and seller wallets are labeled. */
 import type { MarketView } from "../components/Market";
 import { demoAddress } from "./chain";
 

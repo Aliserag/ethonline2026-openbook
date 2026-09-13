@@ -69,6 +69,10 @@ export async function handler(route: Route, req: IncomingMessage & { body?: unkn
       let upstream: Response;
       try {
         upstream = await fetch(STUDIO_UPSTREAM, { method: "POST", headers: { "content-type": "application/json" }, body });
+        if (upstream.status === 429) {
+          await new Promise((r) => setTimeout(r, 900));
+          upstream = await fetch(STUDIO_UPSTREAM, { method: "POST", headers: { "content-type": "application/json" }, body });
+        }
       } catch (error) {
         if (hit && now - hit.at < KEEP_MS) send(res, 200, hit.text, { "x-openbook-cache": "STALE" });
         else send(res, 424, JSON.stringify({ error: `upstream unreachable: ${String(error)}` }), { "x-openbook-cache": "MISS" });

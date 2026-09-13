@@ -17,7 +17,8 @@
 Payment is the last mile of agent autonomy. Agents can hold keys and sign transactions, but
 counterparties can't trust them: no service guarantees, no refunds, no recourse when the data
 is stale. Everyone is building payment rails; nobody is building the control layer — a marketplace
-fixes that: **anyone can list** (a seller is an ENS subname with four text records), **agents
+fixes that: **sellers are ENS names** (a seller is an ENSv2 subname with four text records that
+price and reprice themselves), **agents
 compare**, **the escrow enforces** the SLA committed at payment time, and **the venue takes
 2%** — of everyone's settlements.
 
@@ -298,7 +299,7 @@ The script generates a buyer key, walks you through the free Arc faucet drip
 the address it prints), and runs the full loop: ENS quote → escrowed payment →
 freshness-checked delivery → settle. With only your key the CLI signs both
 sides (single-key mode, legal per ERC-8183, the escrow/refund machinery is
-fully exercised on the live contract). Missed SLA? The escrowed USDC is
+fully exercised on the live contract; the page instead uses two Circle wallets, see above). Missed SLA? The escrowed USDC is
 claimable back after the job deadline, the auto-refund is the product.
 
 Full tool reference + the one-command live-data path:
