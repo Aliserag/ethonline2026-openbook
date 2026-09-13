@@ -107,7 +107,8 @@ export function fetchJobs(
             const seller = addr(row["seller"]);
             if (!isOurs(buyer) && !isOurs(seller)) continue; // belt-and-suspenders scope
             const fulfilled = fulfilledByJob.get(key);
-            // the attested dataset-chain block wins over the Arc submit block
+            // only the attested dataset-chain block is a delivered block; the Fulfilled row's
+            // metaBlock is the Arc block of the submit tx and must never be compared with a floor
             const attestedBlock = row["deliveredBlock"] !== null && row["deliveredBlock"] !== undefined ? Number(big(row["deliveredBlock"])) : undefined;
             const state: JobView["state"] = refundReason.has(key)
               ? "refunded"
@@ -125,7 +126,7 @@ export function fetchJobs(
               timestamp: Number(big(row["timestamp"])),
               state,
               payloadHash: fulfilled?.payloadHash,
-              metaBlock: attestedBlock ?? fulfilled?.metaBlock,
+              metaBlock: attestedBlock,
               refundReason: refundReason.get(key),
             });
           }

@@ -148,7 +148,7 @@ export function buildFrames(
       id: "verdict",
       title: "verdict",
       rows: [
-        ["metaBlock ≥ minBlock", `${job.metaBlock ?? "·"} ≥ ${job.minBlock.toString()}`],
+        ["metaBlock ≥ minBlock", job.metaBlock !== undefined ? `${job.metaBlock} ≥ ${job.minBlock.toString()}` : `delivered block not indexed yet ≥ ${job.minBlock.toString()} (the hook's Attested event lands about a minute after settlement)`],
         ["verdict", verdictLabel(job, verdict)],
         ["subgraph indexed", heads.subgraph.toString()],
         ["arc head", heads.arc.toString()],
