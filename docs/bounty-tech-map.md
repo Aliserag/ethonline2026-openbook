@@ -15,7 +15,7 @@ Sources: the ETHGlobal prize pages for Arc, The Graph and ENS, read on 2026-09-1
 | App Kit Bridge (CCTP v2) | treasury funds the buyer from another chain (a treasury operation, not the purchase path) | Live | Arbitrum Sepolia burn `0x49ea8d62…`, forwarder mint on Arc `0xe54af84c…` (`scripts/circle/fund-buyer.ts`) |
 | Gateway (Unified Balance) | treasury deposits once on another chain, spends on Arc | Live | deposit on Arbitrum Sepolia `0x577395fb…`, spend on Arc `0xa956aabe…` (1 USDC to the buyer wallet, about ten minutes after the deposit) |
 | Paymaster | not needed: Gas Station sponsors the SCA wallets | Not used | Arc's own docs: gas is USDC; the EIP-3009 relayer path is for plain transfers |
-| Agent Stack (CLI wallet), Nanopayments, x402 | a pay-per-call lane for agents that want no recourse | Not used | the product is a refundable purchase, which x402 cannot express; Agent Stack CLI needs an email login |
+| Agent Stack (CLI Agent Wallet), Nanopayments, x402 | the pay-per-call lane: `/api/x402/query` priced from ENS, settled by Circle's Gateway facilitator; the buyer is a Circle Agent Wallet | Live | agent wallet `0xe94b…6f1c` paid $0.10 and $0.15 over `GatewayWalletBatched` on Arc testnet (2026-09-13); `app/worker/x402.ts` |
 | StableFX, Swap Kit | no fit (single-currency venue) | Not used | |
 | ERC-8004 identity | the venue's agent identity | Live | agent 894065, `agent-registration` ENS record |
 
@@ -29,7 +29,8 @@ Prize label: DeFi/Onchain Finance. The Agentic prize brief centres on the Agent 
 | Gateway subgraphs with a Studio key | the datasets sold (Messari standardized schemas + ENS + Overtime) | Live | `/api/deliver` returns data, `_meta` block and an EIP-191 proof |
 | Subgraph `_meta` as the settlement fact | the block the hook enforces | Live | `SlaNotMet(attested, floor)` reverts on every fail run |
 | MCP server (AI tooling) | `sla-subgraph-mcp`, seven tools, keyless quickstart | Live | `bun mcp/src/server.ts`; 62 tests |
-| Reasoning over data | `choose_seller`: live ENS terms + index lag → decision with rationale; console ask lane (LLM proposes, registry executes) | Live | MCP tests; ask lane on the page |
+| Decisions and NL interface | `choose_seller`: live ENS terms + index lag → a pick with written reasons; console ask lane: natural-language command routing (the LLM proposes a command, the registry executes it, the LLM never produces a number) | Live | MCP tests; ask lane on the page |
+| x402 pay-per-query | agents can pay per query with x402 (the Graph prize page names it) | Live | same lane as above, delivery signed by the attester |
 | Subgraph MCP (official) | `discover_datasets` searches the catalog through it and returns paste-ready config entries | Live | `mcp/src/subgraph-mcp.ts`; MCP tests |
 | Substreams, one-prompt challenge | not attempted | Not used | |
 | Messari standardized subgraphs | three of five datasets share the standard schema | Live | `mcp/config/openbook.json` |

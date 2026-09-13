@@ -210,6 +210,15 @@ the page recovers the signer and checks it against the hook's `attester()`), and
 proof, asks the escrow whether `complete()` would pass, then sends `complete()` or
 `reject()` in the same request. No wallet in this flow can refund itself.
 
+**Pay-per-call lane (Circle Nanopayments, x402).** The same delivery is also sold per
+call with no recourse, for agents that want it cheap and instant: `POST /api/x402/query`
+answers 402 with the dataset's live ENS price, Circle's Gateway facilitator verifies and
+settles the payment gaslessly, and the seller is the same Circle wallet the escrow lane pays.
+Proven with a Circle Agent Wallet (Agent Stack CLI) on Arc testnet:
+`circle services pay https://ethonline2026-openbook.vercel.app/api/x402/query -X POST -d '{"datasetId":"aave-v3-arbitrum-lending","query":"{ markets(first: 1) { name } }"}' --address <agent wallet> --chain ARC-TESTNET --max-amount 0.15`
+returned the rows with the attester's signature; `POST /api/x402/status` lists the terms.
+The buyer chooses the lane: x402 for speed, the escrow for a refund if the data is stale.
+
 **Treasury funding across chains (Circle App Kit).** The buyer wallet is topped up from the
 treasury's USDC on Arbitrum Sepolia with App Kit's Bridge (CCTP v2) and Circle's Forwarding
 Service, so no destination gas is needed:

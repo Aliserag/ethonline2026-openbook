@@ -2,7 +2,7 @@
  * Cloudflare Pages advanced-mode worker (bundled to app/public/_worker.js by
  * `bun run build:worker`). Routes:
  *   POST /api/subgraph   cached proxy to the open-book Studio endpoint (20 s fresh,
- *                        last good copy served on 429 for up to 30 min)
+ *                        last good copy served on 429 for up to 6 h)
  *   POST /api/deliver    a dataset query on the Gateway with the server-held key;
  *                        returns the payload, its hash, the indexed block and the
  *                        server's signature over that observation
@@ -36,7 +36,7 @@ interface Env {
 }
 
 const FRESH_SECONDS = 20;
-const KEEP_SECONDS = 1800;
+const KEEP_SECONDS = 21600; // 6 h: Studio rate-limits in bursts; the last good copy outlives them
 
 const CORS = {
   "access-control-allow-origin": "*",

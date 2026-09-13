@@ -82,7 +82,7 @@ on the parent's `svc.price` (node not granted). The resolver is `PermissionedRes
 | `svc.payee` | `0x4e83eB15EE973A49E40D9A79aB2cA89a4Eb4894E` (PolicyWallet, live) | Revenue recipient; Task 5/6 payouts; **hard-fail when missing** |
 | `svc.operator` | `0x64A78b6d5e99274d01D1d0A70B180A73AAEb8d21` (live) | Operator / agent address |
 | `svc.pnl` | `https://api.studio.thegraph.com/query/1760032/open-book/v0.0.8` (live) | Task 4 Studio subgraph endpoint (`get_pnl`, Task 7 dashboard) |
-| `svc.attester` | `0x09d4f665E86358A80e4bF0614117B259bAA45d6B` (live, [tx](https://sepolia.etherscan.io/tx/0x9815a98f9ab757a8339db2333a100adf3d209f78dd6bb2e11b91d799f9a47466)) | the SlaHook attester and page evaluator: recover the signer of a `/api/deliver` proof and compare with this record or with `SlaHook.attester()` |
+| `svc.attester` | `0x8D71610fa6E1c95e28Bd465f0236b5c31010C587` (live, [tx](https://sepolia.etherscan.io/tx/0x461cd15b6094f094d510fcd7491e0cc5f2908b0e6cfc9e297658176b9950253a)) | the SlaHook attester and page evaluator: recover the signer of a `/api/deliver` proof and compare with this record or with `SlaHook.attester()` |
 | `agent-context` | `OpenBook: …ERC-8004 agent 894065 on Arc.` *(ENSIP-26, live)* | Agent self-description for any AI client |
 | `agent-endpoint[mcp]` | `https://github.com/Aliserag/OpenBook/tree/main/mcp` *(live)* | MCP endpoint (`sse`/streamable) |
 | `agent-endpoint[web]` | `https://openbook.litai.ca` *(live)* | Buyer frontend |
