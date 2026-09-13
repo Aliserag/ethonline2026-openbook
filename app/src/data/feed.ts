@@ -184,7 +184,7 @@ const FeedContext = createContext<FeedLive | null>(null);
 
 export function FeedProvider({ children }: { children: ReactNode }): JSX.Element {
   const live = useLiveValue(fetchFeed, {
-    pollMs: 20_000,
+    pollMs: 45_000,
     staleAfterMs: 60_000,
     cacheKey: "feed.v1",
     gateKey: STUDIO_GATE,

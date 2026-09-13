@@ -16,7 +16,7 @@
  * Everything else is served from the static assets. No secret ever reaches the
  * browser: keys are Pages secrets (wrangler pages secret put).
  */
-import { LLM_BASE_DEFAULT, LLM_MODEL_DEFAULT, STUDIO_UPSTREAM, ask, attest, deliver, parseAttestRequest, parseDeliverRequest, sepoliaRpc } from "./shared";
+import { LLM_BASE_DEFAULT, LLM_MODEL_DEFAULT, ask, attest, deliver, fetchStudio, parseAttestRequest, parseDeliverRequest, sepoliaRpc } from "./shared";
 import { circleCreateJob, circleEnvFrom, circleStatus, circleSubmit, parseCircleJobRequest, parseCircleSubmitRequest } from "./circle";
 
 interface Env {
@@ -35,7 +35,7 @@ interface Env {
   CIRCLE_SELLER_WALLET_ADDRESS?: string;
 }
 
-const FRESH_SECONDS = 20;
+const FRESH_SECONDS = 45;
 const KEEP_SECONDS = 21600; // 6 h: Studio rate-limits in bursts; the last good copy outlives them
 
 const CORS = {
@@ -73,12 +73,7 @@ async function subgraph(request: Request, ctx: { waitUntil(p: Promise<unknown>):
   }
   let upstream: Response;
   try {
-    upstream = await fetch(STUDIO_UPSTREAM, { method: "POST", headers: { "content-type": "application/json" }, body });
-    // Studio rate-limits in short bursts: one more try after a beat before giving up
-    if (upstream.status === 429) {
-      await new Promise((r) => setTimeout(r, 900));
-      upstream = await fetch(STUDIO_UPSTREAM, { method: "POST", headers: { "content-type": "application/json" }, body });
-    }
+    upstream = (await fetchStudio(body)).response;
   } catch (error) {
     if (cached) return clientResponse(cached, "STALE");
     return json({ error: `upstream unreachable: ${String(error)}` }, 424);

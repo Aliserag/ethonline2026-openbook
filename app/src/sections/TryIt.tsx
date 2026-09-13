@@ -174,7 +174,7 @@ export function TryIt({ armed, onArmedConsumed }: { armed: "fresh" | "fail" | nu
         <div className="try__run">
           {events.length === 0 ? (
             <>
-              <p className="small try__idle">What happens when you buy, step by step. Each row turns green as its transaction lands on Arc; a run takes about twenty seconds.</p>
+              <p className="small try__idle">What happens when you buy, step by step. Each row turns green as its transaction lands on Arc; a run takes about thirty seconds.</p>
               <Stepper events={[]} mode="fresh" />
             </>
           ) : (

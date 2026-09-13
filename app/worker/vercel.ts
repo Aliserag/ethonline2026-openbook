@@ -4,12 +4,12 @@
  * the Cloudflare worker; the subgraph cache is in memory per warm instance.
  */
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { LLM_BASE_DEFAULT, LLM_MODEL_DEFAULT, STUDIO_UPSTREAM, ask, attest, deliver, parseAttestRequest, parseDeliverRequest, sepoliaRpc } from "./shared";
+import { LLM_BASE_DEFAULT, LLM_MODEL_DEFAULT, ask, attest, deliver, fetchStudio, parseAttestRequest, parseDeliverRequest, sepoliaRpc } from "./shared";
 import { circleCreateJob, circleEnvFrom, circleStatus, circleSubmit, parseCircleJobRequest, parseCircleSubmitRequest } from "./circle";
 
 export type Route = "subgraph" | "deliver" | "attest" | "ask" | "sepolia" | "circle-status" | "circle-job" | "circle-submit";
 
-const FRESH_MS = 20_000;
+const FRESH_MS = 45_000;
 const KEEP_MS = 21_600_000; // 6 h, same as the Cloudflare worker
 const cache = new Map<string, { at: number; text: string }>();
 
@@ -63,16 +63,12 @@ export async function handler(route: Route, req: IncomingMessage & { body?: unkn
       const now = Date.now();
       const hit = cache.get(body);
       if (hit && now - hit.at < FRESH_MS) {
-        send(res, 200, hit.text, { "x-openbook-cache": "HIT", "cache-control": "public, max-age=20" });
+        send(res, 200, hit.text, { "x-openbook-cache": "HIT", "cache-control": "public, max-age=45" });
         return;
       }
       let upstream: Response;
       try {
-        upstream = await fetch(STUDIO_UPSTREAM, { method: "POST", headers: { "content-type": "application/json" }, body });
-        if (upstream.status === 429) {
-          await new Promise((r) => setTimeout(r, 900));
-          upstream = await fetch(STUDIO_UPSTREAM, { method: "POST", headers: { "content-type": "application/json" }, body });
-        }
+        upstream = (await fetchStudio(body)).response;
       } catch (error) {
         if (hit && now - hit.at < KEEP_MS) send(res, 200, hit.text, { "x-openbook-cache": "STALE" });
         else send(res, 424, JSON.stringify({ error: `upstream unreachable: ${String(error)}` }), { "x-openbook-cache": "MISS" });
@@ -85,7 +81,7 @@ export async function handler(route: Route, req: IncomingMessage & { body?: unkn
         return;
       }
       cache.set(body, { at: now, text });
-      send(res, 200, text, { "x-openbook-cache": "MISS", "cache-control": "public, max-age=20" });
+      send(res, 200, text, { "x-openbook-cache": "MISS", "cache-control": "public, max-age=45" });
       return;
     }
     if (route === "deliver") {
