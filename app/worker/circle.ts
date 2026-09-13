@@ -13,6 +13,7 @@
 import { createPublicClient, http, keccak256, parseAbi, recoverMessageAddress, toBytes, type Hex } from "viem";
 import { ARC_RPC, ESCROW, HOOK, USDC, arcTestnet, proofMessage } from "./shared";
 import { createEnsTextReader, parsePriceToAmount6dec } from "../../mcp/src/ens";
+import { defaultChainHeadResolver, type DatasetChain } from "../../mcp/src/chainhead";
 import openbook from "../../mcp/config/openbook.json";
 
 export interface CircleEnv {
@@ -166,7 +167,7 @@ export interface CircleJobResult {
   txs: { createJob: Hex; setBudget: Hex; approve?: Hex; fund: Hex };
 }
 
-const DATASETS = (openbook as { ens: string; datasets: { id: string }[] }).datasets;
+const DATASETS = (openbook as { ens: string; datasets: { id: string; chain: DatasetChain }[] }).datasets;
 const STOREFRONT = (openbook as { ens: string }).ens;
 
 export interface SellerTerms {
@@ -211,6 +212,13 @@ export async function circleCreateJob(env: CircleEnv, req: CircleJobRequest): Pr
   }
   if (BigInt(req.amount) !== BigInt(terms.amount6dec)) {
     throw new Error(`the quoted amount ${req.amount} is not the live ENS price of ${terms.name} (${terms.amount6dec})`);
+  }
+  // the floor must be a block on the dataset's own chain, near its head: a floor from the
+  // wrong chain would make the freshness gate meaningless for this job
+  const dataset = DATASETS.find((d) => d.id === req.datasetId)!;
+  const head = await defaultChainHeadResolver(undefined)(dataset.chain);
+  if (req.minBlock > head + 50 || req.minBlock < head - 20_000) {
+    throw new Error(`the freshness floor ${req.minBlock} is not near the ${dataset.chain} head ${head}: refusing to open a job whose gate could not be checked`);
   }
   const pub = createPublicClient({ chain: arcTestnet, transport: http(ARC_RPC) });
   const evaluator = await pub.readContract({ address: HOOK, abi: HOOK_ABI, functionName: "attester" });
